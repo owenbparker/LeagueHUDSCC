@@ -47,6 +47,9 @@ DEFAULTS = {
     # chosen in the control panel (stored in media/), and its playback speed.
     "bg_video": "",
     "bg_speed": 1.0,
+    # Tint the video with the team colours, blending left to right like the
+    # static lines (off: the video's own colours).
+    "bg_tint": True,
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).
     "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when

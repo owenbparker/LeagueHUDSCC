@@ -201,18 +201,27 @@ function build(p, id) {
       }
       case "video": {
         // A looping background video, cut to the shape of its mask image.
+        // Optionally tinted like the static lines: the video in greyscale with
+        // a left-team-to-right-team gradient multiplied over it, so dark stays
+        // dark and the bright parts take the team colours.
         const fo = el("foreignObject", { x: e.x, y: e.y, width: e.w, height: e.h }, stage);
-        const v = document.createElement("video");
-        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
-        Object.assign(v.style, { width: "100%", height: "100%", objectFit: e.fit || "cover", display: "none",
-                                 opacity: e.opacity ?? 1 });
+        const wrap = document.createElement("div");
+        Object.assign(wrap.style, { position: "relative", width: "100%", height: "100%", display: "none",
+                                    isolation: "isolate", opacity: e.opacity ?? 1 });
         if (e.mask) {
           const m = `url("${assetUrl(e.mask)}")`;
-          Object.assign(v.style, { maskImage: m, webkitMaskImage: m, maskSize: "100% 100%", webkitMaskSize: "100% 100%" });
+          Object.assign(wrap.style, { maskImage: m, webkitMaskImage: m, maskSize: "100% 100%", webkitMaskSize: "100% 100%" });
         }
+        const v = document.createElement("video");
+        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+        Object.assign(v.style, { display: "block", width: "100%", height: "100%", objectFit: e.fit || "cover" });
+        const tint = document.createElement("div");
+        Object.assign(tint.style, { position: "absolute", inset: "0", mixBlendMode: "multiply" });
         v.addEventListener("error", () => { v.dataset.failed = "1"; showVideo(); });
         v.addEventListener("playing", showVideo);
-        fo.appendChild(v);
+        wrap.append(v, tint);
+        fo.appendChild(wrap);
+        v.tint = tint;
         videos.push(v);
         node = fo;
         break;
@@ -278,6 +287,8 @@ function applyColors(left, right) {
       if (t.type === "tab") { t.top.setAttribute("stop-color", lighten(c, .3)); t.bottom.setAttribute("stop-color", c); }
     }
   }
+  const l = lighten(left, .35), r = lighten(right, .35);
+  for (const v of videos) v.tint.style.background = `linear-gradient(to right, ${l} 0%, ${l} 30%, ${r} 70%, ${r} 100%)`;
   for (const p of Object.values(pips)) p.g.dataset.key = "";  // redraw in the new colour
 }
 
@@ -366,8 +377,10 @@ function drawTimers(f, enabled) {
 // Background video: plays the file chosen in the control panel at the chosen
 // speed. Until there is one (or if it won't play), elements marked
 // hideWithVideo (the static lines) stand in for it.
-function setVideo(src, speed) {
+function setVideo(src, speed, tinted) {
   for (const v of videos) {
+    v.tint.style.display = tinted ? "" : "none";
+    v.style.filter = tinted ? "grayscale(1) brightness(1.6)" : "";
     const url = src ? "/" + src.split("/").map(encodeURIComponent).join("/") : "";
     if (v.dataset.src !== url) {
       v.dataset.src = url;
@@ -382,7 +395,7 @@ function setVideo(src, speed) {
 
 function showVideo() {
   const active = videos.some(v => v.dataset.src && !v.dataset.failed);
-  for (const v of videos) v.style.display = v.dataset.src && !v.dataset.failed ? "block" : "none";
+  for (const v of videos) v.parentElement.style.display = v.dataset.src && !v.dataset.failed ? "block" : "none";
   for (const n of videoStandIns) n.style.display = active ? "none" : "";
 }
 
@@ -409,7 +422,7 @@ function render(s) {
     drawDrakes(side, s.detail.dragons[side] || []);
   }
   drawTimers(f, cfg.objective_timers || {});
-  setVideo(cfg.bg_video, cfg.bg_speed);
+  setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false);
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.
   const t = s.detail.game_time;
