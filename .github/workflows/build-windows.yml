@@ -46,9 +46,9 @@ jobs:
           Remove-Item "$app\smoke-test.txt", "$app\config.json" -ErrorAction SilentlyContinue
           Remove-Item "$app\output" -Recurse -ErrorAction SilentlyContinue
 
-      - name: Add installer and readme
+      - name: Add readme
         shell: pwsh
-        run: Copy-Item install.bat, install.ps1, README.md dist\LeagueHUD\
+        run: Copy-Item README.md dist\LeagueHUD\
 
       - uses: actions/upload-artifact@v4
         with:

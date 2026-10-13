@@ -27,12 +27,12 @@ It also has a control panel for team names, logos, series score and sides.
 
 The field names match your PSD layer names (`KILLS LEFT`, `GOLD LEFT`, `TRI-CODE LEFT`, `TIMER`, `VOID GRUB LEFT`…), so if you build the GT title from the PSD the names already line up.
 
-## Install on Windows (desktop app)
+## Windows desktop app
 
 1. Download **LeagueHUD-windows**. On GitHub, open the **Actions** tab and the latest **Build Windows app** run, and download it under **Artifacts**. Tagged versions are also on the **Releases** page.
-2. Extract the zip (right-click -> Extract All), then double-click **`install.bat`**.
+2. Extract the zip wherever you want the app to live (e.g. `C:\LeagueHUD\LeagueHUD`) and run **`LeagueHUD.exe`**. Right-click it -> **Send to -> Desktop (create shortcut)** for a desktop shortcut.
 
-It copies the app to `C:\LeagueHUD\LeagueHUD` and puts a **League HUD** shortcut on your desktop. No Python needed. Run a newer download's `install.bat` to update; your settings, logos and output files are kept.
+No install or Python needed. To update, close the app and extract a newer download over the same folder: your settings, logos and output files aren't in the zip, so they're kept.
 
 The app opens in a 1280x720 window with everything that used to be in the command window built in:
 
@@ -46,7 +46,7 @@ Settings (`config.json`), uploaded logos (`logos\`) and output files (`output\`)
 
 ### Running from source instead
 
-Download the source zip, extract it, and double-click `install.bat`: it copies it to `C:\LeagueHUD\LeagueHUD`, checks for Python, and adds **League HUD** / **League HUD (Demo)** shortcuts that run it in a command window with the control panel in your browser. For the desktop window from source: `pip install pywebview`, then `python -m lolhud.gui`.
+With Python installed, `start-hud.bat` / `start-demo.bat` run it in a command window with the control panel in your browser. For the desktop window from source: `pip install pywebview`, then `python -m lolhud.gui`.
 
 ## Setup
 
@@ -109,7 +109,7 @@ Settings are saved to `config.json` and survive restarts.
 
 League's game client doesn't share other players' gold (LCS gets it from Riot's private esports feed). The HUD offers three options:
 
-- **Estimate** (default): works out earned gold from game time, CS, kills, assists, turrets and barons, and never goes below the value of the items a team holds. Usually within about 10%. If it runs high or low against the in-game scoreboard, change **Estimate adjustment** (e.g. 1.05).
+- **Estimate** (default): works out earned gold from game time, CS, kills, assists, turrets and barons, and never goes below the value of the items a team holds. Usually within about 10%. If it runs high or low against the in-game scoreboard, change **Estimate adjustment** (e.g. 1.05). Passive gold is counted from 0:35 (`passive_gold_start` in `config.json`), matching the 2026 season.
 - **Items:** the value of items held. Always a little low, since it ignores unspent gold.
 - **Manual:** type the numbers in.
 
@@ -139,5 +139,6 @@ web/fonts/         Heathergreen, Inter
 design/            the original PSD
 tests/             python -m unittest discover -s tests
 LeagueHUD.py       desktop app entry point; LeagueHUD.spec builds the .exe (pyinstaller --noconfirm LeagueHUD.spec)
+packaging/         app icon (icon.ico / icon.png)
 .github/workflows/ builds the .exe on Windows for every push
 ```

@@ -21,7 +21,7 @@ DDRAGON = "https://ddragon.leagueoflegends.com"
 # Rough per-unit gold values used by the estimate.
 START_GOLD = 500
 PASSIVE_PER_SEC = 2.04
-PASSIVE_START = 65
+PASSIVE_START = 35  # 2026 season (was 1:05); see passive_gold_start in config
 GOLD_PER_CS = 21
 GOLD_PER_KILL = 300
 GOLD_PER_ASSIST = 75
@@ -88,20 +88,21 @@ def item_value(player, ddragon=None):
     return total
 
 
-def estimate_player(player, game_time):
+def estimate_player(player, game_time, passive_start=PASSIVE_START):
     s = player.get("scores") or {}
     return (START_GOLD
-            + PASSIVE_PER_SEC * max(0.0, game_time - PASSIVE_START)
+            + PASSIVE_PER_SEC * max(0.0, game_time - passive_start)
             + GOLD_PER_CS * (s.get("creepScore") or 0)
             + GOLD_PER_KILL * (s.get("kills") or 0)
             + GOLD_PER_ASSIST * (s.get("assists") or 0))
 
 
-def team_gold(players, game_time, mode, turrets=0, barons=0, ddragon=None, scale=1.0):
+def team_gold(players, game_time, mode, turrets=0, barons=0, ddragon=None, scale=1.0,
+              passive_start=PASSIVE_START):
     held = sum(item_value(p, ddragon) for p in players)
     if mode == "items":
         return held
-    per_player = sum(max(estimate_player(p, game_time), item_value(p, ddragon)) for p in players)
+    per_player = sum(max(estimate_player(p, game_time, passive_start), item_value(p, ddragon)) for p in players)
     team_bonus = TEAM_GOLD_PER_TURRET * turrets + TEAM_GOLD_PER_BARON * barons
     return max(held, (per_player + team_bonus) * scale)
 

@@ -49,6 +49,9 @@ DEFAULTS = {
     "manual_gold": {"left": 0, "right": 0},
     # Multiplies the estimate if you find it runs consistently high or low.
     "gold_estimate_scale": 1.0,
+    # When passive gold starts (seconds). Earlier since the 2026 season (was
+    # 1:05); 0:35 matches the spectator top bar at 1:46 in a real game.
+    "passive_gold_start": 35,
     # 31.0K style. Set decimal_separator to "," for 31,0K.
     "gold_decimals": 1,
     "decimal_separator": ".",

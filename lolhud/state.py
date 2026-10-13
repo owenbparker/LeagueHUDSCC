@@ -176,7 +176,8 @@ def build_state(raw, cfg, ddragon=None):
             gold_raw[side] = float(cfg["manual_gold"].get(side) or 0)
         else:
             gold_raw[side] = goldlib.team_gold(tp, game_time, cfg["gold_mode"], o["turrets"], o["barons"],
-                                               ddragon, cfg.get("gold_estimate_scale", 1.0))
+                                               ddragon, cfg.get("gold_estimate_scale", 1.0),
+                                               cfg.get("passive_gold_start", goldlib.PASSIVE_START))
         team_cfg = cfg[side]
         S = side.upper()
         f[f"TRI-CODE {S}"] = team_cfg["tricode"]

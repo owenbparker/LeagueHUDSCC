@@ -115,6 +115,19 @@ class StateTests(unittest.TestCase):
         self.assertEqual(f["TIMER"], "00:00")
 
 
+class GoldTests(unittest.TestCase):
+    def test_early_game_matches_2026_passive_gold(self):
+        # Spectator top bar read 3.2k for a team at 1:46 with no CS or kills.
+        raw = load()
+        raw["gameData"]["gameTime"] = 106.0
+        raw["events"]["Events"] = []
+        for p in raw["allPlayers"]:
+            p["scores"] = {"kills": 0, "deaths": 0, "assists": 0, "creepScore": 0}
+            p["items"] = []
+        f = build_state(raw, cfg())["fields"]
+        self.assertEqual(f["GOLD LEFT"], "3.2K")
+
+
 class OutputTests(unittest.TestCase):
     def test_csv_round_trip(self):
         f = build_state(load(), cfg())["fields"]

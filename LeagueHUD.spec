@@ -9,7 +9,7 @@ import os
 import sys
 
 root = SPECPATH
-icon = os.path.join(root, "web", "assets", "logos", "scc.png")
+icon = os.path.join(root, "packaging", "icon.ico")
 hidden = []
 if sys.platform == "win32":
     # pywebview's Windows window (Edge WebView2) is loaded at runtime.

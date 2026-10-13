@@ -135,7 +135,7 @@ class DemoSource:
         self._t += 1.0
         t, rng = self._t, self.rng
         for i, p in enumerate(self._players):
-            if t > 65:
+            if t > 30:
                 self._gold[i] += 2.04
             if p["isDead"]:
                 p["respawnTimer"] = max(0.0, p["respawnTimer"] - 1)
