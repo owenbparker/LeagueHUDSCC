@@ -12,10 +12,10 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from . import outputs
-from .config import DATA_DIR, LOGO_DIR, WEB_DIR, web_file
+from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from .log import log, since
 from .ocr import ScreenGold
@@ -26,6 +26,9 @@ from .state import build_state
 
 mimetypes.add_type("font/otf", ".otf")
 mimetypes.add_type("font/ttf", ".ttf")
+mimetypes.add_type("video/mp4", ".mp4")
+mimetypes.add_type("video/mp4", ".m4v")
+mimetypes.add_type("video/webm", ".webm")
 
 # Bundled logos (shipped with the app) plus ones you've uploaded.
 BUNDLED_LOGO_DIR = os.path.join(WEB_DIR, "assets", "logos")
@@ -160,6 +163,25 @@ class HudApp:
         log(f"Logo uploaded for the {side} team: {name}")
         return f"assets/logos/{name}"
 
+    def save_media(self, filename, stream, length):
+        name = re.sub(r"[^A-Za-z0-9._ -]", "_", os.path.basename(filename or "background.mp4")).strip() or "background.mp4"
+        if os.path.splitext(name)[1].lower() not in (".mp4", ".webm", ".m4v"):
+            raise ValueError("Background video must be an .mp4 or .webm file")
+        if not 0 < length <= 1024 ** 3:
+            raise ValueError("Background video must be under 1 GB")
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        tmp = os.path.join(MEDIA_DIR, name + ".part")
+        with open(tmp, "wb") as f:
+            left = length
+            while left > 0:
+                chunk = stream.read(min(1024 * 1024, left))
+                if not chunk:
+                    raise ValueError("Upload was cut short")
+                f.write(chunk)
+                left -= len(chunk)
+        os.replace(tmp, os.path.join(MEDIA_DIR, name))
+        return f"media/{name}"
+
     def list_logos(self):
         names = set()
         for folder in (BUNDLED_LOGO_DIR, LOGO_DIR):
@@ -185,6 +207,19 @@ class HudApp:
             os.startfile(path)  # noqa: only exists on Windows
         else:
             subprocess.Popen(["xdg-open" if sys.platform != "darwin" else "open", path])
+
+
+def parse_range(header, size):
+    """'bytes=100-' -> (100, size - 1); None if absent or unusable."""
+    m = re.fullmatch(r"bytes=(\d*)-(\d*)", (header or "").strip())
+    if not m or size <= 0 or (not m.group(1) and not m.group(2)):
+        return None
+    if m.group(1):
+        start = int(m.group(1))
+        end = min(int(m.group(2)), size - 1) if m.group(2) else size - 1
+    else:  # last N bytes
+        start, end = max(0, size - int(m.group(2))), size - 1
+    return (start, end) if start <= end < size else None
 
 
 def lan_ip():
@@ -218,12 +253,38 @@ def make_handler(app):
             self.wfile.write(body)
 
         def _static(self, rel):
-            path = web_file(rel)
+            path = web_file(unquote(rel))
             if not path:
                 return self._send('{"error":"not found"}', status=404)
-            with open(path, "rb") as f:
-                body = f.read()
-            self._send(body, mimetypes.guess_type(path)[0] or "application/octet-stream")
+            ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+            size = os.path.getsize(path)
+            span = parse_range(self.headers.get("Range"), size)
+            if span is None and size < 8 * 1024 * 1024:
+                with open(path, "rb") as f:
+                    return self._send(f.read(), ctype)
+            # Big files (background videos) are streamed, with byte ranges so
+            # the browser can seek and loop.
+            start, end = span or (0, size - 1)
+            self.send_response(206 if span else 200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            if span:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                with open(path, "rb") as f:
+                    f.seek(start)
+                    left = end - start + 1
+                    while left > 0:
+                        chunk = f.read(min(256 * 1024, left))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        left -= len(chunk)
+            except (ConnectionError, OSError):
+                pass  # the browser stopped reading (normal while seeking)
 
         def do_GET(self):
             url = urlparse(self.path)
@@ -262,8 +323,20 @@ def make_handler(app):
             # change it.
             if not _is_local(self.client_address[0]):
                 return self._send('{"error":"Changes can only be made on the HUD PC"}', status=403)
-            path = urlparse(self.path).path
+            url = urlparse(self.path)
+            path = url.path
             length = int(self.headers.get("Content-Length") or 0)
+            if path == "/api/media":
+                # A background video, sent as raw bytes (too big for JSON).
+                try:
+                    name = (parse_qs(url.query).get("filename") or [""])[0]
+                    saved = app.save_media(name, self.rfile, length)
+                    app.config.update({"bg_video": saved})
+                    log(f"Background video set: {os.path.basename(saved)} ({length / 1e6:.1f} MB)")
+                    app.refresh(fetch=False)
+                    return self._send(json.dumps(app.snapshot()))
+                except ValueError as e:
+                    return self._send(json.dumps({"error": str(e)}), status=400)
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if path == "/api/config":

@@ -20,6 +20,7 @@ DATA_DIR = os.path.dirname(os.path.abspath(sys.executable)) if FROZEN else ROOT
 WEB_DIR = os.path.join(RESOURCE_DIR, "web")
 LOGO_DIR = os.path.join(DATA_DIR, "logos")
 PROFILE_DIR = os.path.join(DATA_DIR, "profiles")  # imported HUD profiles
+MEDIA_DIR = os.path.join(DATA_DIR, "media")        # background videos
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 DEFAULTS = {
@@ -42,6 +43,10 @@ DEFAULTS = {
     "best_of": 3,
     # Which HUD design the overlay draws (see the HUD profile section).
     "profile": "scc-2026",
+    # Background loop for profiles that have one (e.g. "SCC 2026"): a video
+    # chosen in the control panel (stored in media/), and its playback speed.
+    "bg_video": "",
+    "bg_speed": 1.0,
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).
     "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when
@@ -150,6 +155,8 @@ def web_file(rel):
         candidates.append((LOGO_DIR, rel[len("assets/logos/"):]))
     if rel.startswith("profiles/"):
         candidates.append((PROFILE_DIR, rel[len("profiles/"):]))
+    if rel.startswith("media/"):
+        candidates.append((MEDIA_DIR, rel[len("media/"):]))
     candidates.append((WEB_DIR, rel))
     for base, sub in candidates:
         path = os.path.normpath(os.path.join(base, sub))

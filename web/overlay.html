@@ -106,6 +106,7 @@ function lighten(hex, amount) {
 
 let profile = null, profileKey = "", base = "";
 let texts = [], logos = {}, pips = {}, diffs = {}, drakes = {}, objectiveEls = [], tints = {}, timers = null;
+let videos = [], videoStandIns = [];
 
 function assetUrl(src) { return src.startsWith("/") || src.startsWith("data:") ? src : base + src; }
 
@@ -120,6 +121,7 @@ function build(p, id) {
   profile = p;
   base = `/profiles/${id}/`;
   texts = []; logos = {}; pips = {}; diffs = {}; drakes = {}; objectiveEls = []; tints = {}; timers = null;
+  videos = []; videoStandIns = [];
   loadFonts(p.fonts);
   const stage = $("stage");
   stage.replaceChildren();
@@ -197,6 +199,24 @@ function build(p, id) {
         node = tab;
         break;
       }
+      case "video": {
+        // A looping background video, cut to the shape of its mask image.
+        const fo = el("foreignObject", { x: e.x, y: e.y, width: e.w, height: e.h }, stage);
+        const v = document.createElement("video");
+        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+        Object.assign(v.style, { width: "100%", height: "100%", objectFit: e.fit || "cover", display: "none",
+                                 opacity: e.opacity ?? 1 });
+        if (e.mask) {
+          const m = `url("${assetUrl(e.mask)}")`;
+          Object.assign(v.style, { maskImage: m, webkitMaskImage: m, maskSize: "100% 100%", webkitMaskSize: "100% 100%" });
+        }
+        v.addEventListener("error", () => { v.dataset.failed = "1"; showVideo(); });
+        v.addEventListener("playing", showVideo);
+        fo.appendChild(v);
+        videos.push(v);
+        node = fo;
+        break;
+      }
       case "drake-dots":
         drakes[e.side] = { g: el("g", {}, stage), e };
         node = drakes[e.side].g;
@@ -207,6 +227,7 @@ function build(p, id) {
         break;
     }
     if (node && e.objective) objectiveEls.push({ node, key: e.objective });
+    if (node && e.hideWithVideo) videoStandIns.push(node);
   });
   colorKey = "";
   document.fonts.ready.then(refit);
@@ -342,6 +363,29 @@ function drawTimers(f, enabled) {
   }
 }
 
+// Background video: plays the file chosen in the control panel at the chosen
+// speed. Until there is one (or if it won't play), elements marked
+// hideWithVideo (the static lines) stand in for it.
+function setVideo(src, speed) {
+  for (const v of videos) {
+    const url = src ? "/" + src.split("/").map(encodeURIComponent).join("/") : "";
+    if (v.dataset.src !== url) {
+      v.dataset.src = url;
+      delete v.dataset.failed;
+      if (url) { v.src = url; v.play().catch(() => {}); } else { v.removeAttribute("src"); v.load(); }
+    }
+    const rate = Math.min(4, Math.max(0.0625, Number(speed) || 1));
+    if (v.playbackRate !== rate) v.playbackRate = rate;
+  }
+  showVideo();
+}
+
+function showVideo() {
+  const active = videos.some(v => v.dataset.src && !v.dataset.failed);
+  for (const v of videos) v.style.display = v.dataset.src && !v.dataset.failed ? "block" : "none";
+  for (const n of videoStandIns) n.style.display = active ? "none" : "";
+}
+
 // Smooth the clock between polls, but stop if the game is paused.
 let clock = { base: 0, at: 0, running: false };
 
@@ -365,6 +409,7 @@ function render(s) {
     drawDrakes(side, s.detail.dragons[side] || []);
   }
   drawTimers(f, cfg.objective_timers || {});
+  setVideo(cfg.bg_video, cfg.bg_speed);
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.
   const t = s.detail.game_time;

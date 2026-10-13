@@ -72,6 +72,7 @@ def listing():
         except (OSError, ValueError):
             continue
         out.append({"id": pid, "name": data.get("name", pid), "builtin": builtin,
+                    "background_video": any(e.get("type") == "video" for e in data.get("elements", [])),
                     "missing_fonts": data.get("missing_fonts", []), "report": data.get("import_report")})
     return out
 

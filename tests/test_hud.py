@@ -263,6 +263,27 @@ class ProfileTests(unittest.TestCase):
             if "src" in e:
                 self.assertIsNotNone(web_file(e["src"].lstrip("/")), e["src"])
 
+    def test_dynamic_and_static_scc(self):
+        from lolhud import profiles
+        listed = {p["id"]: p for p in profiles.listing()}
+        self.assertEqual(listed["scc-2026"]["name"], "SCC 2026")
+        self.assertTrue(listed["scc-2026"]["background_video"])
+        self.assertEqual(listed["scc-2026-static"]["name"], "SCC 2026 - Static")
+        self.assertFalse(listed["scc-2026-static"]["background_video"])
+        dynamic = profiles.load("scc-2026")["elements"]
+        kinds = [e["type"] for e in dynamic]
+        # The video sits above the bar background and below the panels and icons.
+        self.assertLess(kinds.index("video"), kinds.index("team-panel"))
+        self.assertTrue(any(e.get("hideWithVideo") for e in dynamic))
+
+    def test_byte_ranges(self):
+        from lolhud.app import parse_range
+        self.assertEqual(parse_range("bytes=0-", 1000), (0, 999))
+        self.assertEqual(parse_range("bytes=100-199", 1000), (100, 199))
+        self.assertEqual(parse_range("bytes=-50", 1000), (950, 999))
+        self.assertIsNone(parse_range("bytes=2000-", 1000))
+        self.assertIsNone(parse_range(None, 1000))
+
     def test_profile_ids_are_safe(self):
         from lolhud import profiles
         self.assertIsNone(profiles.folder("../../etc"))

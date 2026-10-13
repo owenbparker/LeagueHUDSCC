@@ -86,6 +86,8 @@
   .report .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .report .chips span { background: #252a2f; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
   details ul { margin: 6px 0 0; padding-left: 18px; }
+  .bg-video { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .bg-video label span { color: var(--text); float: right; }
   details li { margin-bottom: 4px; }
   @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } }
 </style>
@@ -116,6 +118,16 @@
       <button type="button" id="profile-delete" style="flex:0 0 auto" hidden>Delete</button>
       <input type="file" id="psd-file" accept=".psd,.psb" hidden>
       <input type="file" id="font-file" accept=".ttf,.otf,.woff,.woff2" hidden>
+    </div>
+    <div id="bg-video" class="bg-video" hidden>
+      <div class="row">
+        <div><label>Background video</label><div id="bg-name" class="note" style="margin:0"></div></div>
+        <button type="button" id="bg-choose" style="flex:0 0 auto">Choose video…</button>
+        <button type="button" id="bg-remove" style="flex:0 0 auto" hidden>Remove</button>
+        <input type="file" id="bg-file" accept="video/mp4,video/webm,.mp4,.webm,.m4v" hidden>
+      </div>
+      <label>Playback speed <span id="bg-speed-val">1.00×</span></label>
+      <input type="range" id="bg-speed" min="0.1" max="3" step="0.05">
     </div>
     <div id="profile-report" class="report" hidden></div>
     <details class="note" style="margin-top:8px">
@@ -322,6 +334,7 @@ async function loadProfiles(current) {
 function showProfile(id) {
   const p = profileList.find(x => x.id === id);
   $("profile-delete").hidden = !p || p.builtin;
+  $("bg-video").hidden = !p || !p.background_video;
   const box = $("profile-report");
   if (!p || !p.report) { box.hidden = true; return; }
   const r = p.report, chips = list => `<div class="chips">${list.map(x => `<span>${x}</span>`).join("")}</div>`;
@@ -336,6 +349,28 @@ function showProfile(id) {
   const add = $("add-font");
   if (add) add.onclick = () => $("font-file").click();
 }
+// Background video (profiles with a video area, like SCC 2026).
+$("bg-choose").onclick = () => $("bg-file").click();
+$("bg-remove").onclick = () => post("/api/config", { bg_video: "" });
+$("bg-file").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  // Sent as raw bytes with progress (a background loop can be 50+ MB).
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `/api/media?filename=${encodeURIComponent(file.name)}`);
+  xhr.upload.onprogress = ev => { if (ev.lengthComputable) $("bg-name").textContent = `Copying ${file.name}… ${Math.round(ev.loaded * 100 / ev.total)}%`; };
+  xhr.onload = () => { const d = JSON.parse(xhr.responseText); if (d.error) alert(d.error); else apply(d); };
+  xhr.onerror = () => alert("Couldn't copy the video");
+  xhr.send(file);
+});
+let speedTimer = null;
+$("bg-speed").addEventListener("input", e => {
+  $("bg-speed-val").textContent = Number(e.target.value).toFixed(2) + "×";
+  clearTimeout(speedTimer);
+  speedTimer = setTimeout(() => post("/api/config", { bg_speed: Number(e.target.value) }), 100);
+});
+
 $("profile").onchange = e => { post("/api/config", { profile: e.target.value }); showProfile(e.target.value); };
 $("profile-import").onclick = () => $("psd-file").click();
 $("profile-delete").onclick = () => {
@@ -426,6 +461,13 @@ function apply(s) {
   $("swap-sides").checked = cfg.swap_sides;
   $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
   $("counters").querySelectorAll("input").forEach(box => box.checked = (cfg.strip_counters || {})[box.dataset.counter] !== false);
+  if (!$("bg-name").textContent.startsWith("Copying"))
+    $("bg-name").textContent = cfg.bg_video ? cfg.bg_video.split("/").pop() : "None chosen: showing the static lines";
+  $("bg-remove").hidden = !cfg.bg_video;
+  if (document.activeElement !== $("bg-speed")) {
+    $("bg-speed").value = cfg.bg_speed ?? 1;
+    $("bg-speed-val").textContent = Number(cfg.bg_speed ?? 1).toFixed(2) + "×";
+  }
   if (s.profiles_version !== profilesVersion) { profilesVersion = s.profiles_version; loadProfiles(cfg.profile); }
   else if (document.activeElement !== $("profile") && $("profile").value !== cfg.profile && profileList.length) { $("profile").value = cfg.profile; showProfile(cfg.profile); }
   $("best-of").value = cfg.best_of;

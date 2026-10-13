@@ -8,6 +8,8 @@ the lines with each team's colour:
     web/assets/hud_base.png   the bar with the lines removed
     web/assets/hud_lines.png  the lines alone, white, strength in the alpha
     web/assets/grub_*.png     the void grub icons from the lower strip
+    web/assets/hud_bg.png, hud_icons.png, hud_video_mask.png
+                              the bar split for the background video
 
 Run from the project folder:  python tools/split_bar.py   (needs Pillow)
 """
@@ -64,6 +66,41 @@ def main():
         icon.save(os.path.join(ASSETS, f"grub_{side}.png"))
     base.save(os.path.join(ASSETS, "hud_base.png"))
     lines.save(os.path.join(ASSETS, "hud_lines.png"))
+    split_for_video(base)
+
+
+def split_for_video(base):
+    """For the dynamic profile, the video plays between the bar's background
+    and its icons, so split those apart, plus a mask of the bar's top section
+    (above the lower strip) for the video's shape."""
+    W, H = base.size
+    px = base.load()
+    mask = Image.new("L", base.size, 0)
+    mp = mask.load()
+    for y in range(H):
+        for x in range(W):
+            r, g, b, a = px[x, y]
+            if a > 0 and min(r, g, b) >= 150:
+                mp[x, y] = 255
+    mp = mask.filter(ImageFilter.MaxFilter(5)).load()
+    icons = Image.new("RGBA", base.size, (255, 255, 255, 0))
+    bg = base.copy()
+    ip, bp = icons.load(), bg.load()
+    top_alpha = [max(px[x, y][3] for x in range(200, 700)) for y in range(H)]
+    for y in range(H):
+        for x in range(W):
+            if mp[x, y]:
+                r, g, b, a = px[x, y]
+                ip[x, y] = (255, 255, 255, round(min(r, g, b) * a / 255))
+                bp[x, y] = (0, 0, 0, a if y >= 70 else top_alpha[y])
+    icons.save(os.path.join(ASSETS, "hud_icons.png"))
+    bg.save(os.path.join(ASSETS, "hud_bg.png"))
+    video = Image.new("RGBA", (W, 70), (255, 255, 255, 0))
+    vp = video.load()
+    for y in range(70):
+        for x in range(W):
+            vp[x, y] = (255, 255, 255, px[x, y][3])
+    video.save(os.path.join(ASSETS, "hud_video_mask.png"))
 
 
 if __name__ == "__main__":
