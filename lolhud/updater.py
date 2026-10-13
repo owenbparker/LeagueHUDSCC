@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -52,6 +53,7 @@ class Updater:
         # Only the packaged app can replace itself.
         self.can_install = FROZEN and sys.platform == "win32"
         self.on_exit = None       # set by the window, to close it for the restart
+        self.work_dir = UPDATE_DIR
         self._lock = threading.Lock()
 
     def info(self):
@@ -113,17 +115,22 @@ class Updater:
             script = self._write_script(new_dir)
             log(f"Installing {self.latest} - League HUD will restart")
             # Hidden console, own process group so it outlives the app.
-            subprocess.Popen(["cmd", "/c", script], cwd=UPDATE_DIR,
+            subprocess.Popen(["cmd", "/c", script], cwd=os.path.dirname(os.path.abspath(sys.executable)),
                              creationflags=0x08000000 | 0x00000200)
             (self.on_exit or (lambda: os._exit(0)))()
         except Exception as e:
-            self.status, self.error = "error", str(e)
-            log(f"Update failed: {e}", "error")
+            self.status, self.error = "error", f"{type(e).__name__}: {e}"
+            log(f"Update failed: {self.error}", "error")
 
     def _download(self):
-        shutil.rmtree(UPDATE_DIR, ignore_errors=True)
-        os.makedirs(UPDATE_DIR)
-        path = os.path.join(UPDATE_DIR, ASSET_NAME)
+        # A fresh folder per attempt: a previous update's files can still be in
+        # use (or locked) for a while, and must never block this one.
+        os.makedirs(UPDATE_DIR, exist_ok=True)
+        for old in os.listdir(UPDATE_DIR):
+            shutil.rmtree(os.path.join(UPDATE_DIR, old), ignore_errors=True)
+        self.work_dir = os.path.join(UPDATE_DIR, f"{self.latest}-{int(time.time())}")
+        os.makedirs(self.work_dir)
+        path = os.path.join(self.work_dir, ASSET_NAME)
         total = self.asset.get("size") or 0
         digest = hashlib.sha256()
         request = urllib.request.Request(self.asset["browser_download_url"],
@@ -146,7 +153,7 @@ class Updater:
         return path
 
     def _unpack(self, zip_path):
-        new_dir = os.path.join(UPDATE_DIR, "new")
+        new_dir = os.path.join(self.work_dir, "new")
         with zipfile.ZipFile(zip_path) as z:
             for name in z.namelist():  # refuse paths that climb out of the folder
                 target = os.path.normpath(os.path.join(new_dir, name))
@@ -159,7 +166,7 @@ class Updater:
 
     def _write_script(self, new_dir):
         app_dir = os.path.dirname(os.path.abspath(sys.executable))
-        script = os.path.join(UPDATE_DIR, "apply-update.bat")
+        script = os.path.join(self.work_dir, "apply-update.bat")
         with open(script, "w", encoding="utf-8") as f:
             f.write(f"""@echo off
 rem League HUD updater: waits for the app to close, copies in the new
@@ -174,6 +181,10 @@ start "" "{app_dir}\\LeagueHUD.exe"
 
 
 def clean_up_old_update():
-    """Remove the previous update's download once the new version is running."""
-    if FROZEN and os.path.isdir(UPDATE_DIR):
+    """Remove the previous update's download once the new version is running.
+    Waits a bit first: the script that just installed us may still be finishing."""
+    def clean():
+        time.sleep(30)
         shutil.rmtree(UPDATE_DIR, ignore_errors=True)
+    if FROZEN and os.path.isdir(UPDATE_DIR):
+        threading.Thread(target=clean, daemon=True).start()

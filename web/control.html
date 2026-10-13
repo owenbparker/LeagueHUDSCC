@@ -392,7 +392,8 @@ function showUpdate(u) {
 $("update").onclick = () => {
   const u = state.app.update;
   const notes = u.notes ? `\n\nWhat's new:\n${u.notes.slice(0, 600)}` : "";
-  if (confirm(`Install League HUD ${u.latest} now?\n\nThe app will close and reopen (about 10 seconds); the overlay and data feed pause while it restarts. Your settings, logos and output files are kept.${notes}`))
+  const failed = u.status === "error" ? `The last attempt failed: ${u.error}\n\n` : "";
+  if (confirm(`${failed}Install League HUD ${u.latest} now?\n\nThe app will close and reopen (about 10 seconds); the overlay and data feed pause while it restarts. Your settings, logos and output files are kept.${notes}`))
     post("/api/update/install", {});
 };
 $("version").onclick = async () => {
