@@ -25,12 +25,14 @@ from .log import log
 # They scale with the window's height and stay centred, like the top bar.
 REF_HEIGHT = 1080
 DEFAULT_BOXES = {"blue": [804, 16, 54, 24], "red": [1106, 16, 54, 24]}
-# The objective counters next to their icons (room for two digits).
+# The objective and tower counters next to their icons (room for two digits).
 COUNTER_BOXES = {
-    "blue": {"dragons": [517, 16, 26, 24], "heralds": [592, 16, 26, 24], "grubs": [662, 16, 26, 24]},
-    "red": {"grubs": [1250, 16, 26, 24], "heralds": [1328, 16, 26, 24], "dragons": [1407, 16, 26, 24]},
+    "blue": {"dragons": [517, 16, 26, 24], "heralds": [592, 16, 26, 24], "grubs": [662, 16, 26, 24],
+                 "towers": [742, 16, 26, 24]},
+    "red": {"towers": [1185, 16, 26, 24], "grubs": [1250, 16, 26, 24], "heralds": [1328, 16, 26, 24],
+                "dragons": [1407, 16, 26, 24]},
 }
-COUNTERS = ("dragons", "heralds", "grubs")
+COUNTERS = ("dragons", "heralds", "grubs", "towers")
 WINDOW_TITLE = "League of Legends (TM) Client"
 WINDOW_CLASS = "RiotWindowClass"
 
@@ -525,9 +527,9 @@ class ScreenGold:
 def main(argv):
     """Read a saved screenshot (the top of a spectator screen):
 
-    python -m lolhud.ocr IMAGE [--height 1079] [--gold 8000 8900] [--counts 0,0,0 0,0,3]
+    python -m lolhud.ocr IMAGE [--height 1079] [--gold 8000 8900] [--counts 0,0,0,0 0,0,3,0]
 
-    --counts gives dragons,heralds,grubs for blue then red. Exits 1 on a mismatch.
+    --counts gives dragons,heralds,grubs,towers for blue then red. Exits 1 on a mismatch.
     """
     import argparse
     from PIL import Image

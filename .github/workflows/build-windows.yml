@@ -35,11 +35,11 @@ jobs:
 
       - name: Read the top bar from real spectator screenshots (Windows text recognition)
         # Top 60px of a 1920x1080 frame: 8.0k / 8.9k gold, all objectives 0;
-        # then the same frame with red on 3 grubs. --counts is dragons,heralds,grubs.
+        # then the same frame with red on 3 grubs. --counts is dragons,heralds,grubs,towers.
         run: |
-          python -m lolhud.ocr tests/fixtures/spectator_topbar.png --height 1079 --gold 8000 8900 --counts 0,0,0 0,0,0
+          python -m lolhud.ocr tests/fixtures/spectator_topbar.png --height 1079 --gold 8000 8900 --counts 0,0,0,0 0,0,0,0
           if ($LASTEXITCODE) { exit 1 }
-          python -m lolhud.ocr tests/fixtures/spectator_topbar_grubs3.png --height 1079 --gold 8000 8900 --counts 0,0,0 0,0,3
+          python -m lolhud.ocr tests/fixtures/spectator_topbar_grubs3.png --height 1079 --gold 8000 8900 --counts 0,0,0,0 0,0,3,0
           if ($LASTEXITCODE) { exit 1 }
 
       - name: Stamp the version

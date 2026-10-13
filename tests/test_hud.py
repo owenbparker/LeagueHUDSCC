@@ -151,6 +151,18 @@ class ScreenGoldTests(unittest.TestCase):
         f = build_state(load(), cfg(), screen_counts=counts)["fields"]
         self.assertEqual(f["VOID GRUB RIGHT"], 1)
 
+    def test_screen_towers_override_events(self):
+        counts = {"blue": {"towers": 1}, "red": {"towers": 0}}
+        state = build_state(load(), cfg(), screen_counts=counts)
+        self.assertEqual((state["fields"]["TURRETS LEFT"], state["fields"]["TURRETS RIGHT"]), (1, 0))
+        self.assertEqual(state["detail"]["tower_check"], {"blue": (1, 1), "red": (1, 0)})
+
+    def test_repeated_events_count_once(self):
+        raw = load()
+        raw["events"]["Events"] += [dict(e) for e in raw["events"]["Events"] if e["EventName"] == "TurretKilled"]
+        f = build_state(raw, cfg())["fields"]
+        self.assertEqual((f["TURRETS LEFT"], f["TURRETS RIGHT"]), (1, 1))
+
     def test_screen_counters_end_timers(self):
         raw = load()
         raw["events"]["Events"] = raw["events"]["Events"][:2]   # no grub/herald events at all

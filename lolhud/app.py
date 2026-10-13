@@ -87,6 +87,7 @@ class HudApp:
         connected = state["detail"]["connected"]
         if connected != self._was_connected and not connected:
             self.screen_gold.reset()  # next game starts from scratch
+            self._tower_warned = False
         if connected != self._was_connected:
             if connected:
                 log(f"Game connected ({state['fields']['TIMER']})")
@@ -97,6 +98,13 @@ class HudApp:
         if error and error != self._last_error:
             log(error, "warn")
         self._last_error = error
+        detail = state["detail"]
+        mismatch = {t: v for t, v in detail.get("tower_check", {}).items() if v[0] != v[1]}
+        if mismatch and not getattr(self, "_tower_warned", False):
+            self._tower_warned = True
+            log("Tower events disagree with the top bar (using the top bar): "
+                + ", ".join(f"{t} events {e} vs bar {b}" for t, (e, b) in mismatch.items())
+                + f". Tower events seen: {detail.get('turret_events')}", "warn")
         events = {e.get("EventName"): e for e in ((self.raw or {}).get("events") or {}).get("Events") or []}
         for name in state["detail"]["unknown_events"]:
             if name not in self._seen_unknown:

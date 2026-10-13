@@ -368,7 +368,7 @@ $("screen-test").onclick = async () => {
   box.innerHTML = '<span class="note">Reading…</span>';
   const r = await (await fetch("/api/screen-gold/test", { method: "POST", body: "{}" })).json();
   if (!r.blue) { box.innerHTML = `<span class="warn">${r.error}</span>`; return; }
-  const counts = c => c ? ["dragons", "heralds", "grubs"].map(n =>
+  const counts = c => c ? ["dragons", "heralds", "grubs", "towers"].map(n =>
     `${n} <b>${c.values[n] ?? '<span class="warn">?</span>'}</b>`).join(" · ") : "";
   box.innerHTML = ["blue", "red"].map(t => `<figure><img src="${r[t].image}" alt="">
     <figcaption>${t} gold: read <b>${r[t].text || "nothing"}</b> → ${r[t].value != null ? (r[t].value / 1000).toFixed(1) + "k" : '<span class="warn">not a gold value</span>'}</figcaption>

@@ -74,7 +74,13 @@ def tally_events(events, names):
     last_team = {"baron": None, "elder": None}
     unknown = set()
 
+    seen_ids = set()
     for ev in events:
+        # The same event can be sent more than once; count it once.
+        if ev.get("EventID") is not None:
+            if ev["EventID"] in seen_ids:
+                continue
+            seen_ids.add(ev["EventID"])
         kind = ev.get("EventName", "")
         low = kind.lower()
         t = ev.get("EventTime") or 0.0
@@ -186,6 +192,9 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
                 obj[team]["heralds"] = seen["heralds"]
             if seen.get("dragons") is not None:
                 dragon_count[team] = seen["dragons"]
+            if seen.get("towers") is not None:
+                obj[team]["turrets_events"] = obj[team]["turrets"]
+                obj[team]["turrets"] = seen["towers"]
         # Objectives the events missed still end their timers.
         grubs_seen = sum(obj[t]["grubs"] for t in obj)
         last["grubs"] = last["grubs"] + [game_time] * max(0, grubs_seen - len(last["grubs"]))
@@ -293,6 +302,10 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
         "side_team": side_team,
         "dragons": {side: obj[side_team[side]]["dragons"] for side in SIDES},
         "unknown_events": sorted(unknown),
+        # Tower events vs the top bar, so a mismatch can be logged with its cause.
+        "tower_check": {SCREEN_TEAM[t]: (obj[t].get("turrets_events"), obj[t]["turrets"]) for t in obj
+                        if obj[t].get("turrets_events") is not None},
+        "turret_events": [e.get("TurretKilled") for e in events if e.get("EventName") == "TurretKilled"],
         "gold_source": ("screen" if cfg["gold_mode"] == "screen" and screen_gold and connected
                         else "estimate" if cfg["gold_mode"] == "screen" else cfg["gold_mode"]),
     }
