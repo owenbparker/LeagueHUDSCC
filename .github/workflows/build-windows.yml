@@ -41,6 +41,9 @@ jobs:
           if ($LASTEXITCODE) { exit 1 }
           python -m lolhud.ocr tests/fixtures/spectator_topbar_grubs3.png --height 1079 --gold 8000 8900 --counts 0,0,0,0 0,0,3,0
           if ($LASTEXITCODE) { exit 1 }
+          # Objective bounties showing: red's counters move up 9px with bounty text below.
+          python -m lolhud.ocr tests/fixtures/spectator_topbar_bounties.png --height 1079 --gold 8000 8900 --counts 0,0,0,0 0,0,3,0
+          if ($LASTEXITCODE) { exit 1 }
 
       - name: Stamp the version
         shell: pwsh

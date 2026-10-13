@@ -242,7 +242,7 @@ def read_image(image, ocr, height=None, boxes=None):
     boxes = boxes or DEFAULT_BOXES
     out = {}
     for team, box in boxes.items():
-        crop = image.crop(scaled_box(box, image.width, height))
+        crop = image.crop(locate(image, scaled_box(box, image.width, height), team, height))
         for variant in range(len(VARIANTS)):
             ready = prepare(crop, variant)
             text = ocr.read(ready)
@@ -298,27 +298,62 @@ def _suffix(height):
     return img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.LANCZOS)
 
 
-def _text_only(img):
-    """Keep the coloured (blue/red) text, blank the grey/beige icons and bar."""
-    from PIL import Image, ImageChops, ImageFilter
+def _team_mask(img, team, strength):
+    """White where a pixel is clearly the team's text colour (blue or red).
+    Beige bounty text, grey icons and the teal bar are left out."""
+    from PIL import ImageChops
+    r, g, b = img.convert("RGB").split()
+    if team == "blue":
+        diff = ImageChops.subtract(b, ImageChops.lighter(r, g))
+    else:
+        diff = ImageChops.subtract(r, ImageChops.lighter(g, b))
+    return diff.point(lambda v: 255 if v > strength else 0)
+
+
+def _text_only(img, team):
+    """Keep the team-coloured text, blank everything else."""
+    from PIL import Image, ImageFilter
     rgb = img.convert("RGB")
-    r, g, b = rgb.split()
-    hi = ImageChops.lighter(ImageChops.lighter(r, g), b)
-    lo = ImageChops.darker(ImageChops.darker(r, g), b)
-    colourful = ImageChops.subtract(hi, lo).point(lambda v: 255 if v > 70 else 0)
-    colourful = colourful.filter(ImageFilter.MaxFilter(3))  # keep the soft edges of each digit
-    return Image.composite(rgb, Image.new("RGB", rgb.size), colourful)
+    # Red digits are ~160 redder than green/blue, beige bounty text only ~40.
+    mask = _team_mask(rgb, team, 30 if team == "blue" else 80)
+    mask = mask.filter(ImageFilter.MaxFilter(3))  # keep the soft edges of each digit
+    return Image.composite(rgb, Image.new("RGB", rgb.size), mask)
 
 
-def counter_image(crop, height):
+def locate(image, box, team, height):
+    """Find where the text in this box actually is this frame.
+
+    When objective bounties show, League moves that side's counters up
+    (about 9px at 1080p) and prints the bounty underneath; this finds the
+    team-coloured digits within a taller band and returns the box moved to
+    them, or the box unchanged if nothing is found."""
+    s = height / REF_HEIGHT
+    x0, y0, x1, y1 = box
+    top, bottom = max(0, y0 - round(14 * s)), min(image.height, y1 + round(6 * s))
+    mask = _team_mask(image.crop((x0, top, x1, bottom)), team, 30 if team == "blue" else 80)
+    rows = [any(mask.crop((0, y, mask.width, y + 1)).getextrema()[1:]) for y in range(mask.height)]
+    run, start = 0, None
+    for y, hit in enumerate(rows):
+        run = run + 1 if hit else 0
+        if run >= max(4, round(5 * s)):
+            start = y - run + 1
+            break
+    if start is None:
+        return box
+    text_top = top + start
+    dy = text_top - (y0 + round(6 * s))  # normally the digits start 6px into the box
+    return (x0, y0 + dy, x1, y1 + dy)
+
+
+def counter_image(crop, height, team):
     """The counter's digit(s) followed by ".0k", or None if there's no digit."""
     from PIL import Image
-    text = _text_only(crop)
+    text = _text_only(crop, team)
     box = text.convert("L").point(lambda v: 255 if v > 60 else 0).getbbox()
     if not box:
         return None
     digits = text.crop((0, 0, box[2], text.height))
-    suffix = _text_only(_suffix(height))
+    suffix = _text_only(_suffix(height), "blue")  # cut from blue's gold
     gap = max(1, round(height / 1080))
     out = Image.new("RGB", (digits.width + gap + suffix.width, max(digits.height, suffix.height)))
     out.paste(digits, (0, 0))
@@ -334,7 +369,8 @@ def read_counters(image, ocr, height=None, boxes=None):
     for team, slots in boxes.items():
         values, texts, shown = {}, [], []
         for name, box in slots.items():
-            combined = counter_image(image.crop(scaled_box(box, image.width, height)), height)
+            where = locate(image, scaled_box(box, image.width, height), team, height)
+            combined = counter_image(image.crop(where), height, team)
             value, text = None, ""
             if combined is not None:
                 for variant in range(len(VARIANTS)):

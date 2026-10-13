@@ -171,6 +171,22 @@ class ScreenGoldTests(unittest.TestCase):
         f = build_state(raw, cfg(), screen_counts=counts)["fields"]
         self.assertEqual((f["NEXT GRUBS"], f["NEXT HERALD"]), ("", ""))
 
+    def test_finds_counters_moved_up_by_bounties(self):
+        from PIL import Image
+        from lolhud.ocr import COUNTER_BOXES, DEFAULT_BOXES, locate, scaled_box
+        here = os.path.dirname(__file__)
+        image = Image.open(os.path.join(here, "fixtures", "spectator_topbar_bounties.png")).convert("RGB")
+
+        def shift(team, box):
+            placed = scaled_box(box, image.width, 1079)
+            return locate(image, placed, team, 1079)[1] - placed[1]
+
+        for name, box in COUNTER_BOXES["red"].items():
+            self.assertTrue(-11 <= shift("red", box) <= -7, name)   # raised ~9px
+        for name, box in COUNTER_BOXES["blue"].items():
+            self.assertTrue(-2 <= shift("blue", box) <= 2, name)    # blue has no bounties
+        self.assertTrue(-2 <= shift("red", DEFAULT_BOXES["red"]) <= 2)  # gold doesn't move
+
     def test_parse_count(self):
         from lolhud.ocr import parse_count
         for text, value in {"3": 3, "O": 0, "o": 0, "l": 1, "11": 11, "": None, "abc": None}.items():
