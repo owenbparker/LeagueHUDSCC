@@ -170,6 +170,7 @@ def build_state(raw, cfg, ddragon=None):
         f[f"TRI-CODE {S}"] = team_cfg["tricode"]
         f[f"TEAM NAME {S}"] = team_cfg["name"]
         f[f"LOGO {S}"] = asset_path(team_cfg["logo"])
+        f[f"COLOR {S}"] = team_cfg["color"]
         f[f"KILLS {S}"] = sum((p.get("scores") or {}).get("kills", 0) for p in tp)
         f[f"TURRETS {S}"] = o["turrets"]
         f[f"GOLD {S}"] = goldlib.format_gold(gold_raw[side], cfg["gold_decimals"], cfg["decimal_separator"])

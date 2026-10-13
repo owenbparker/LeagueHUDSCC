@@ -22,6 +22,7 @@
   label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
   input, select { width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
   input[type=checkbox] { width: auto; }
+  input.swatch { flex: 0 0 64px; height: 38px; padding: 3px; cursor: pointer; }
   button { padding: 8px 12px; background: #252a2f; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
   button:hover { border-color: var(--muted); }
   .row { display: flex; gap: 8px; align-items: center; }
@@ -114,6 +115,9 @@ function teamForm(side) {
     <div class="row"><select data-k="logo" id="${side}-logo"></select>
       <button type="button" onclick="document.getElementById('${side}-upload').click()" style="flex:0 0 auto">Upload…</button>
       <input type="file" id="${side}-upload" accept="image/*" hidden></div>
+    <label>Team colour</label>
+    <div class="row"><input type="color" class="swatch" id="${side}-color">
+      <input id="${side}-hex" maxlength="7" spellcheck="false" placeholder="#0a6d4c"></div>
     <label>Series wins</label>
     <div class="wins"><button data-w="-1">−</button><b id="${side}-wins">0</b><button data-w="1">+</button></div>`;
 }
@@ -133,6 +137,20 @@ for (const el of document.querySelectorAll(".team")) {
     const wins = Math.max(0, state.config[side].wins + Number(b.dataset.w));
     post("/api/config", { [side]: { wins } });
   }));
+  // Colour: the picker updates the overlay live while you drag; the hex box
+  // takes a typed or pasted #rrggbb.
+  let colorTimer = null;
+  $(`${side}-color`).addEventListener("input", e => {
+    $(`${side}-hex`).value = e.target.value;
+    clearTimeout(colorTimer);
+    colorTimer = setTimeout(() => post("/api/config", { [side]: { color: e.target.value } }), 120);
+  });
+  $(`${side}-hex`).addEventListener("change", e => {
+    let v = e.target.value.trim();
+    if (!v.startsWith("#")) v = "#" + v;
+    if (/^#[0-9a-f]{6}$/i.test(v)) post("/api/config", { [side]: { color: v.toLowerCase() } });
+    else e.target.value = state.config[side].color;
+  });
   $(`${side}-upload`).addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -174,6 +192,9 @@ function apply(s) {
     const el = document.querySelector(`.team.${side}`);
     el.querySelectorAll("input[data-k]").forEach(i => setIfIdle(i, cfg[side][i.dataset.k]));
     $(`${side}-wins`).textContent = cfg[side].wins;
+    setIfIdle($(`${side}-color`), cfg[side].color);
+    setIfIdle($(`${side}-hex`), cfg[side].color);
+    el.style.borderTopColor = cfg[side].color;
     $(`${side}-logo-img`).src = cfg[side].logo;
     setIfIdle($(`manual-${side}`), cfg.manual_gold[side] || "");
   }

@@ -21,8 +21,8 @@ DEFAULTS = {
     "http_port": 8777,
     "output_dir": "output",
 
-    "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0},
-    "right": {"name": "Team Right", "tricode": "SCC", "logo": "assets/logo_right.png", "wins": 0},
+    "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0, "color": "#0a6d4c"},
+    "right": {"name": "Team Right", "tricode": "SCC", "logo": "assets/logo_right.png", "wins": 0, "color": "#bd1313"},
     "best_of": 3,
     # By default the left of the HUD is blue side (ORDER). Turn this on when
     # the left-hand team is playing red side.

@@ -37,8 +37,9 @@
   .diff-tab .shine { opacity: 0; }
   .diff-tab.show .shine { animation: shine .9s .35s ease-out; }
   @keyframes shine { 0% { opacity: .9; transform: translateX(-40px); } 100% { opacity: 0; transform: translateX(40px); } }
-  .pop { animation: pop .45s ease-out; transform-box: fill-box; transform-origin: center; }
-  @keyframes pop { 0% { transform: scale(1); } 35% { transform: scale(1.28); } 100% { transform: scale(1); } }
+  /* Series pips: dark when not yet won, bright team colour when won. */
+  .pip { fill: rgba(0,0,0,.62); stroke: rgba(255,255,255,.22); stroke-width: 1; }
+  .pip.won { stroke: rgba(255,255,255,.85); }
   /* Objective timers, top left (as in the reference broadcast). */
   #timers .box { fill: rgba(0,0,0,.82); }
   #timers text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 17px; text-anchor: start; }
@@ -48,9 +49,23 @@
 </head>
 <body>
 <svg id="hud" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
-  <image href="assets/hud_bar.png" x="511" y="1" width="902" height="105"/>
-  <image href="assets/team_left.png" x="511" y="1" width="196" height="70"/>
-  <image href="assets/team_right.png" x="1216" y="1" width="197" height="70"/>
+  <defs>
+    <!-- Team colours. Set from the control panel; see applyColors(). -->
+    <filter id="tint-left" color-interpolation-filters="sRGB">
+      <feFlood id="flood-left" flood-color="#0a6d4c"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+    <filter id="tint-right" color-interpolation-filters="sRGB">
+      <feFlood id="flood-right" flood-color="#bd1313"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+    <!-- The bar's contour lines, blending from the left team's colour to the right's. -->
+    <mask id="lines-mask" maskUnits="userSpaceOnUse" x="511" y="1" width="902" height="105">
+      <image href="assets/hud_lines.png" x="511" y="1" width="902" height="105"/></mask>
+    <linearGradient id="lines-grad" gradientUnits="userSpaceOnUse" x1="511" y1="0" x2="1413" y2="0">
+      <stop id="lines-l1" offset="0"/><stop id="lines-l2" offset=".3"/>
+      <stop id="lines-r1" offset=".7"/><stop id="lines-r2" offset="1"/></linearGradient>
+  </defs>
+  <image href="assets/hud_base.png" x="511" y="1" width="902" height="105"/>
+  <rect x="511" y="1" width="902" height="105" fill="url(#lines-grad)" mask="url(#lines-mask)"/>
+  <image href="assets/team_left.png" x="511" y="1" width="196" height="70" filter="url(#tint-left)"/>
+  <image href="assets/team_right.png" x="1216" y="1" width="197" height="70" filter="url(#tint-right)"/>
 
   <image id="logo-left" x="534" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/>
   <image id="logo-right" x="1346" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/>
@@ -71,9 +86,9 @@
   <defs>
     <clipPath id="diff-clip"><rect x="511" y="71" width="902" height="35"/></clipPath>
     <linearGradient id="tab-left" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#31c392"/><stop offset="1" stop-color="#0f7a55"/></linearGradient>
+      <stop id="tab-left-top" offset="0"/><stop id="tab-left-bottom" offset="1"/></linearGradient>
     <linearGradient id="tab-right" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fb5a5a"/><stop offset="1" stop-color="#a51518"/></linearGradient>
+      <stop id="tab-right-top" offset="0"/><stop id="tab-right-bottom" offset="1"/></linearGradient>
     <linearGradient id="tab-shine" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/>
       <stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
@@ -122,10 +137,31 @@ function setText(id, value) {
   const el = $(id);
   value = String(value ?? "");
   if (el.textContent === value) return;
-  const animate = el.textContent !== "" && /kills|turrets|grubs/.test(id);
   el.textContent = value;
   fit(el);
-  if (animate) { el.classList.remove("pop"); void el.getBBox(); el.classList.add("pop"); }
+}
+
+// Mix a #rrggbb colour with white (amount 0..1).
+function lighten(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = shift => Math.round(((n >> shift) & 255) + (255 - ((n >> shift) & 255)) * amount);
+  return "#" + [16, 8, 0].map(sh => ch(sh).toString(16).padStart(2, "0")).join("");
+}
+
+let colorKey = "";
+function applyColors(left, right) {
+  if (colorKey === left + right) return;
+  colorKey = left + right;
+  const stop = (id, c) => $(id).setAttribute("stop-color", c);
+  for (const [side, c] of [["left", left], ["right", right]]) {
+    $(`flood-${side}`).setAttribute("flood-color", c);
+    stop(`tab-${side}-top`, lighten(c, .3));
+    stop(`tab-${side}-bottom`, c);
+  }
+  // Lines are lightened so dark team colours still show on the black bar.
+  stop("lines-l1", lighten(left, .35)); stop("lines-l2", lighten(left, .35));
+  stop("lines-r1", lighten(right, .35)); stop("lines-r2", lighten(right, .35));
+  for (const g of [$("pips-left"), $("pips-right")]) g.dataset.key = "";  // redraw in new colour
 }
 
 // Numbers grow away from their icons (anchored on the edge of the PSD's
@@ -161,7 +197,7 @@ function setDiff(side, value) {
   }
 }
 
-function drawPips(side, bestOf, wins) {
+function drawPips(side, bestOf, wins, color) {
   const g = $("pips-" + side), p = PIPS[side], needed = Math.floor(bestOf / 2) + 1;
   const key = bestOf + ":" + wins;
   if (g.dataset.key === key) return;
@@ -172,13 +208,14 @@ function drawPips(side, bestOf, wins) {
   const top = p.y[0], bottom = p.y[1] + p.h[1], gap = 3;
   const h = (bottom - top - gap * (needed - 1)) / needed;
   for (let i = 0; i < needed; i++) {
-    const img = document.createElementNS(SVGNS, "image");
-    img.setAttribute("href", `assets/pip_${side}${i < wins ? "_win" : ""}.png`);
-    img.setAttribute("x", p.x); img.setAttribute("width", p.w);
-    img.setAttribute("y", needed === 2 ? p.y[i] : top + i * (h + gap));
-    img.setAttribute("height", needed === 2 ? p.h[i] : h);
-    img.setAttribute("preserveAspectRatio", "none");
-    g.appendChild(img);
+    const pip = document.createElementNS(SVGNS, "rect");
+    pip.setAttribute("class", i < wins ? "pip won" : "pip");
+    if (i < wins) pip.style.fill = lighten(color, .55);
+    pip.setAttribute("x", p.x + .5); pip.setAttribute("width", p.w - 1);
+    pip.setAttribute("y", (needed === 2 ? p.y[i] : top + i * (h + gap)) + .5);
+    pip.setAttribute("height", (needed === 2 ? p.h[i] : h) - 1);
+    pip.setAttribute("rx", 1.5);
+    g.appendChild(pip);
   }
 }
 
@@ -204,6 +241,7 @@ let clock = { base: 0, at: 0, running: false };
 function render(s) {
   const f = s.fields, cfg = s.config;
   $("hud").classList.toggle("hidden", !SHOW.idle && !s.detail.connected);
+  applyColors(cfg.left.color, cfg.right.color);
   for (const side of ["left", "right"]) {
     const S = side.toUpperCase();
     setText(`tri-${side}`, String(f[`TRI-CODE ${S}`]).toUpperCase());
@@ -214,7 +252,7 @@ function render(s) {
     setDiff(side, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
     const logo = cfg[side].logo;
     if ($(`logo-${side}`).getAttribute("href") !== logo) $(`logo-${side}`).setAttribute("href", logo);
-    drawPips(side, cfg.best_of, cfg[side].wins);
+    drawPips(side, cfg.best_of, cfg[side].wins, cfg[side].color);
     drawDrakes(side, s.detail.dragons[side] || []);
   }
   for (const [id, key] of [["next-baron", "NEXT BARON"], ["next-dragon", "NEXT DRAGON"]]) {

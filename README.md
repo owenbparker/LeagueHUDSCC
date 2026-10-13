@@ -13,7 +13,7 @@ It also has a control panel for team names, logos, series score and sides.
 
 | On the bar | Field name(s) |
 |---|---|
-| Team tricode, logo | `TRI-CODE LEFT`, `LOGO LEFT` (and `RIGHT`) |
+| Team tricode, logo, colour | `TRI-CODE LEFT`, `LOGO LEFT`, `COLOR LEFT` (hex, e.g. #0a6d4c) (and `RIGHT`) |
 | Turrets destroyed | `TURRETS LEFT` |
 | Team gold, and the lead | `GOLD LEFT` (31.0K), `GOLD RAW LEFT` (31012), `GOLD DIFF LEFT` (+2.9K, only on the leading side) |
 | Kills | `KILLS LEFT` |
@@ -63,7 +63,7 @@ Optional switches on the end of the URL:
 | `?dragons=1` | show each team's dragons as coloured dots in the lower strip |
 | `?idle=0` | hide the bar when no game is running |
 
-Combine them with `&`, e.g. `/overlay?timers=0&dragons=1`. Kill, turret and grub counts pop when they change. The clock ticks smoothly and freezes if the game is paused.
+Combine them with `&`, e.g. `/overlay?timers=0&dragons=1`. The team panels, the bar's background lines (blending from one team's colour to the other) and the series pips all follow the team colours set in the control panel. The clock ticks smoothly and freezes if the game is paused.
 
 ## Option B: GT Title Designer + vMix Data Sources
 
@@ -80,7 +80,7 @@ If vMix runs on a different PC, start the HUD with `--host 0.0.0.0` and use `htt
 
 ## The control panel
 
-- **Teams:** tricode, name, logo (upload or pick), series wins (+/−).
+- **Teams:** tricode, name, logo (upload or pick), team colour (colour picker, or type a hex code), series wins (+/−).
 - **Swap teams left/right:** swaps names, logos and scores.
 - **Left team is on red side:** by default the left of the bar is blue side. Tick this when the left team plays red.
 - **Series:** Bo1 / Bo3 / Bo5 (pips follow).
@@ -115,7 +115,8 @@ lolhud/          the app (Python, standard library only)
   app.py           web server, control panel API
 web/overlay.html   the broadcast overlay
 web/control.html   the control panel
-web/assets/        images exported from the PSD (bar, team panels, logos, pips)
+web/assets/        images exported from the PSD (bar, its background lines, team panels, logos, pips)
+tools/split_bar.py rebuilds the bar and line images from design/hud_bar.png
 web/fonts/         Heathergreen, Inter
 design/            the original PSD
 tests/             python -m unittest discover -s tests
