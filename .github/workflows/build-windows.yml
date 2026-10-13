@@ -1,6 +1,8 @@
 # Builds the League HUD desktop app (LeagueHUD.exe) on Windows and publishes
 # it as a GitHub release (v1.0.<run number>) with LeagueHUD-windows.zip.
 # The app checks the latest release on launch and offers to update itself.
+# Each release also gets SCC-LoL-HUD-Setup.exe, an installer that downloads
+# the latest release from GitHub when it runs.
 #
 # Every run also leaves the zip on the run's summary page (Actions tab).
 name: Build Windows app
@@ -87,5 +89,30 @@ jobs:
           $notes = git log -1 --format=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' }
           $notes = ($notes -join "`n").Trim()
           gh release create "$env:VERSION" LeagueHUD-windows.zip --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Null }
+          & $iscc "/DAppVersion=$($env:VERSION.TrimStart('v'))" installer\SCC-LoL-HUD.iss
+          if ($LASTEXITCODE) { exit 1 }
+
+      - name: Test the installer (silent; installs the release just published)
+        shell: pwsh
+        run: |
+          $dir = "$env:RUNNER_TEMP\SCC LoL HUD test"
+          $installArgs = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"", '/MERGETASKS="!desktopicon"', '/LOG=install.log'
+          $p = Start-Process dist\SCC-LoL-HUD-Setup.exe -ArgumentList $installArgs -PassThru -Wait
+          Get-Content install.log -Tail 25
+          if ($p.ExitCode -ne 0) { throw "Installer failed (exit code $($p.ExitCode))" }
+          if (-not (Test-Path "$dir\LeagueHUD.exe")) { throw "LeagueHUD.exe wasn't installed" }
+          if (-not (Test-Path "$dir\_internal")) { throw "_internal wasn't installed" }
+          Write-Host "Installed OK to $dir"
+
+      - name: Attach the installer to the release
+        run: gh release upload "$env:VERSION" dist\SCC-LoL-HUD-Setup.exe
         env:
           GH_TOKEN: ${{ github.token }}

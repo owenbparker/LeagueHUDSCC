@@ -29,12 +29,13 @@ The field names match your PSD layer names (`KILLS LEFT`, `GOLD LEFT`, `TRI-CODE
 
 ## Windows desktop app
 
-1. Download **LeagueHUD-windows.zip** from the latest release on the repository's **Releases** page.
-2. Extract the zip wherever you want the app to live (e.g. `C:\LeagueHUD\LeagueHUD`) and run **`LeagueHUD.exe`**. Right-click it -> **Send to -> Desktop (create shortcut)** for a desktop shortcut.
+**Install:** download and run **[SCC-LoL-HUD-Setup.exe](https://github.com/owenbparker/LeagueHUDSCC/releases/latest/download/SCC-LoL-HUD-Setup.exe)**. It downloads the latest version from GitHub, installs it to `C:\SCC LoL HUD` (creating the folder), adds a **SCC LoL HUD** desktop shortcut and Start-menu entry, and offers to launch it. No administrator rights or Python needed. Windows may show "Windows protected your PC" the first time, as the installer isn't code-signed: **More info -> Run anyway**.
 
-No install or Python needed.
+Running the installer again reinstalls the latest version and keeps your settings, logos and HUD profiles. Uninstall from Windows Settings -> Apps; it asks whether to also delete your settings.
 
-**Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. Click the version number next to it to check again. You can also update by hand: close the app and extract a newer download over the same folder.
+Prefer no installer? Download **LeagueHUD-windows.zip** from the latest release, extract it anywhere and run `LeagueHUD.exe`.
+
+**Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. Click the version number next to it to check again.
 
 The app opens in a 1280x720 window with everything that used to be in the command window built in:
 
