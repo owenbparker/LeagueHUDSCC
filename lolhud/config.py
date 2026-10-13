@@ -50,6 +50,8 @@ DEFAULTS = {
     # Tint the video with the team colours, blending left to right like the
     # static lines (off: the video's own colours).
     "bg_tint": True,
+    # Brightness of the video lines (1.0 = as filmed / tinted).
+    "bg_brightness": 1.0,
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).
     "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when

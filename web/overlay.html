@@ -377,8 +377,10 @@ function drawTimers(f, enabled) {
 // Background video: plays the file chosen in the control panel at the chosen
 // speed. Until there is one (or if it won't play), elements marked
 // hideWithVideo (the static lines) stand in for it.
-function setVideo(src, speed, tinted) {
+function setVideo(src, speed, tinted, brightness) {
+  const b = Math.min(3, Math.max(0, Number(brightness ?? 1)));
   for (const v of videos) {
+    v.parentElement.style.filter = b === 1 ? "" : `brightness(${b})`;
     v.tint.style.display = tinted ? "" : "none";
     v.style.filter = tinted ? "grayscale(1) brightness(1.6)" : "";
     const url = src ? "/" + src.split("/").map(encodeURIComponent).join("/") : "";
@@ -422,7 +424,7 @@ function render(s) {
     drawDrakes(side, s.detail.dragons[side] || []);
   }
   drawTimers(f, cfg.objective_timers || {});
-  setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false);
+  setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.
   const t = s.detail.game_time;
