@@ -189,6 +189,20 @@ class ScreenGoldTests(unittest.TestCase):
         # 2560x1440: scaled by height, still centred.
         self.assertEqual(scaled_box([804, 16, 54, 24], 2560, 1440), (1072, 21, 1144, 53))
 
+    def test_one_unreadable_counter_doesnt_drop_the_others(self):
+        import time
+        from lolhud.ocr import ScreenGold, COUNTERS
+        sg = ScreenGold.__new__(ScreenGold)
+        sg.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
+        sg.counts_at, sg._pending_counts = {}, {}
+        sg._accept_count("red", "grubs", 3)
+        sg._accept_count("red", "towers", None)   # this one can't be read
+        fresh = sg.fresh_counts()
+        self.assertEqual((fresh["red"]["grubs"], fresh["red"]["towers"]), (3, None))
+        # ...and a counter that stops reading goes stale on its own.
+        sg.counts_at[("red", "grubs")] = time.time() - 60
+        self.assertIsNone(sg.fresh_counts())
+
     def test_reader_rejects_glitches(self):
         from lolhud.ocr import ScreenGold
         sg = ScreenGold.__new__(ScreenGold)

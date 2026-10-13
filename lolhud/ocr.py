@@ -374,8 +374,9 @@ class ScreenGold:
         self.values = {"blue": None, "red": None}
         self.read_at = 0.0
         self.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
-        self.counts_read_at = 0.0
+        self.counts_at = {}          # (team, counter) -> when it was last read cleanly
         self._pending_counts = {}
+        self._last_missed = []
         self.status = "starting"
         self.ocr = None
         self._pending = {"blue": None, "red": None}
@@ -412,15 +413,19 @@ class ScreenGold:
         return dict(self.values)
 
     def fresh_counts(self):
-        """Last good counters ({"blue": {"dragons": 1, ...}, "red": {...}}) if recent."""
-        if time.time() - self.counts_read_at > self.STALE_AFTER:
-            return None
-        return {t: dict(c) for t, c in self.counts.items()}
+        """Recently read counters, each on its own: {"blue": {"dragons": 1,
+        "towers": None, ...}, ...}. A counter that can't be read right now is
+        None (the HUD uses the game's events for it); the others still count."""
+        now = time.time()
+        out = {t: {c: (v if now - self.counts_at.get((t, c), 0) <= self.STALE_AFTER else None)
+                   for c, v in counts.items()} for t, counts in self.counts.items()}
+        return out if any(v is not None for c in out.values() for v in c.values()) else None
 
     def reset(self):
         self.values = {"blue": None, "red": None}
         self._pending = {"blue": None, "red": None}
         self.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
+        self.counts_at = {}
         self._pending_counts = {}
 
     def _accept_count(self, team, name, value):
@@ -429,9 +434,10 @@ class ScreenGold:
         prev = self.counts[team][name]
         key = (team, name)
         if value is None:
-            return prev is not None  # keep the last good value for now
+            return False  # unreadable this time; its last value goes stale on its own
         if prev is None or prev <= value <= prev + 3 or self._pending_counts.get(key) == value:
             self.counts[team][name] = value
+            self.counts_at[key] = time.time()
             self._pending_counts.pop(key, None)
             return True
         self._pending_counts[key] = value
@@ -474,10 +480,15 @@ class ScreenGold:
                     if result:
                         counters = result.pop("_counters", {})
                         if "error" not in counters:
-                            accepted = [self._accept_count(t, n, v) for t, r in counters.items()
-                                        for n, v in r["values"].items()]
-                            if all(accepted):
-                                self.counts_read_at = time.time()
+                            for t, r in counters.items():
+                                for n, v in r["values"].items():
+                                    self._accept_count(t, n, v)
+                            missed = [f"{t} {n}" for t, r in counters.items()
+                                      for n, v in r["values"].items() if v is None]
+                            if missed and missed != self._last_missed:
+                                log("Couldn't read on the top bar: " + ", ".join(missed)
+                                    + " (using game events for those)", "warn")
+                            self._last_missed = missed
                         ok = [self._accept(t, r["value"]) for t, r in result.items()]
                         if all(ok):
                             self.read_at = time.time()
