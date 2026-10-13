@@ -5,144 +5,69 @@
 <title>League HUD Overlay</title>
 <!--
   Browser source for OBS / vMix: 1920x1080, transparent background.
-  Positions, sizes and fonts come straight from design/lol-hud-SCC27.psd.
+  Draws the active HUD profile (control panel > HUD profile); each profile is
+  a list of elements in web/profiles/<id>/profile.json or an imported PSD.
 
   URL options (add to the end, e.g. /overlay?timers=0&dragons=1):
-    timers=0   hide all objective timers in the top-left (pick which ones in the control panel)
-    diff=0     hide the gold-lead tab that slides out under the leading team's gold
-    dragons=1  show each team's dragons in the lower strip
+    profile=ID one particular profile instead of the active one
+    timers=0   hide all objective timers in the top-left
+    diff=0     hide the gold-lead tab
+    dragons=1  show each team's dragons as coloured dots
     idle=0     hide the whole HUD while no game is running
 -->
 <style>
-  @font-face { font-family: "Heathergreen"; src: url("fonts/Heathergreen.otf") format("opentype"); }
-  @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
   html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
   svg { display: block; }
   #hud { transition: opacity .4s ease; }
   #hud.hidden { opacity: 0; }
-  text { fill: #fff; text-anchor: middle; }
-  .inter { font-family: "Inter", sans-serif; font-weight: 700; }
-  .hg { font-family: "Heathergreen", "Inter", sans-serif; }
-  .start { text-anchor: start; }
-  .end { text-anchor: end; }
-  .big { font-size: 40px; }
-  .tri { font-size: 55.5px; }
-  .timer { font-size: 18.9px; }
-  .grub { font-size: 20.6px; }
+  text { fill: #fff; }
+  .objective-off { display: none; }
   /* Gold lead: a team-coloured tab that slides down out of the bar. */
   .diff-tab { transform: translateY(-19px); transition: transform .3s cubic-bezier(.5,0,.75,0); }
   .diff-tab.show { transform: translateY(0); transition: transform .5s cubic-bezier(.2,.9,.25,1.15); }
   .diff-tab rect { transition: x .3s ease, width .3s ease; }
-  .diff-tab text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 12.5px; letter-spacing: .02em; }
+  .diff-tab text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 12.5px; letter-spacing: .02em; text-anchor: middle; }
+  .diff-tab.fade { opacity: 0; transition: transform .3s ease, opacity .3s ease; }
+  .diff-tab.fade.show { opacity: 1; }
   .diff-tab .shine { opacity: 0; }
   .diff-tab.show .shine { animation: shine .9s .35s ease-out; }
   @keyframes shine { 0% { opacity: .9; transform: translateX(-40px); } 100% { opacity: 0; transform: translateX(40px); } }
   /* Series pips: dark when not yet won, bright team colour when won. */
   .pip { fill: rgba(0,0,0,.62); stroke: rgba(255,255,255,.22); stroke-width: 1; }
   .pip.won { stroke: rgba(255,255,255,.85); }
-  /* Objective timers, top left (as in the reference broadcast). */
-  #timers .box { fill: rgba(0,0,0,.82); }
-  #timers text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 17px; text-anchor: start; }
-  #timers .letter { font-size: 12px; text-anchor: middle; }
-  #timers .live { fill: #ffd34d; }
-  /* Boxes fade out when an objective is gone (or switched off) and the rest close up. */
+  /* Objective timers, top left. */
+  .timers .box { fill: rgba(0,0,0,.82); }
+  .timers text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 17px; }
+  .timers .letter { font-size: 12px; text-anchor: middle; }
+  .timers .live { fill: #ffd34d; }
   .obj { transition: transform .4s ease, opacity .3s ease; }
   .obj.off { opacity: 0; }
   .drake { stroke: rgba(0,0,0,.6); stroke-width: 1; }
 </style>
+<style id="fonts"></style>
 </head>
 <body>
 <svg id="hud" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Team colours. Set from the control panel; see applyColors(). -->
-    <filter id="tint-left" color-interpolation-filters="sRGB">
-      <feFlood id="flood-left" flood-color="#0a6d4c"/><feComposite in2="SourceGraphic" operator="in"/></filter>
-    <filter id="tint-right" color-interpolation-filters="sRGB">
-      <feFlood id="flood-right" flood-color="#bd1313"/><feComposite in2="SourceGraphic" operator="in"/></filter>
-    <!-- The bar's contour lines, blending from the left team's colour to the right's. -->
-    <mask id="lines-mask" maskUnits="userSpaceOnUse" x="511" y="1" width="902" height="105">
-      <image href="assets/hud_lines.png" x="511" y="1" width="902" height="105"/></mask>
-    <linearGradient id="lines-grad" gradientUnits="userSpaceOnUse" x1="511" y1="0" x2="1413" y2="0">
-      <stop id="lines-l1" offset="0"/><stop id="lines-l2" offset=".3"/>
-      <stop id="lines-r1" offset=".7"/><stop id="lines-r2" offset="1"/></linearGradient>
-  </defs>
-  <image href="assets/hud_base.png" x="511" y="1" width="902" height="105"/>
-  <rect x="511" y="1" width="902" height="105" fill="url(#lines-grad)" mask="url(#lines-mask)"/>
-  <image href="assets/team_left.png" x="511" y="1" width="196" height="70" filter="url(#tint-left)"/>
-  <image href="assets/team_right.png" x="1216" y="1" width="197" height="70" filter="url(#tint-right)"/>
-
-  <g id="logo-left-wrap"><image id="logo-left" x="534" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/></g>
-  <g id="logo-right-wrap"><image id="logo-right" x="1346" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/></g>
-  <g id="pips-left"></g>
-  <g id="pips-right"></g>
-
-  <text id="tri-left" class="hg tri" data-max="96" x="610.7" y="57.55"></text>
-  <text id="tri-right" class="hg tri" data-max="96" x="1308.6" y="56.94"></text>
-  <text id="turrets-left" class="inter big start" x="729" y="53.53">0</text>
-  <text id="turrets-right" class="inter big end" x="1193" y="54.02">0</text>
-  <text id="gold-left" class="hg big" data-max="62" x="833.1" y="52.03">0.0K</text>
-  <text id="gold-right" class="hg big" data-max="62" x="1087.3" y="51.96">0.0K</text>
-  <text id="kills-left" class="inter big end" x="938" y="53.07">0</text>
-  <text id="kills-right" class="inter big start" x="982" y="53.07">0</text>
-  <text id="timer" class="inter timer" x="960" y="93.65">00:00</text>
-  <text id="grubs-left" class="inter grub start" x="737" y="94.28">0</text>
-  <text id="grubs-right" class="inter grub end" x="1183" y="94.11">0</text>
-
-  <!-- Dragon and Rift Herald counters, same badge style as the grubs icon
-       baked into the bar (17px white shield with a cut-out symbol). -->
-  <defs>
+    <linearGradient id="tab-shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <!-- Built-in objective badges: 17px white shield with a symbol cut out. -->
     <path id="badge" d="M8.5 1 L16 4.2 L14.6 12.8 L8.5 16.5 L2.4 12.8 L1 4.2 Z"
           fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>
     <mask id="dragon-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="17" height="17">
       <use href="#badge"/>
-      <!-- wings spread, head up: a wyvern -->
       <path d="M8.5 3.6 L9.6 6.6 L14 5.2 L11.6 9 L9.4 9.6 L8.5 13.4 L7.6 9.6 L5.4 9 L3 5.2 L7.4 6.6 Z" fill="#000"/>
     </mask>
     <mask id="herald-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="17" height="17">
       <use href="#badge"/>
-      <!-- the Herald's eye -->
       <path d="M3.2 8.8 Q8.5 3.4 13.8 8.8 Q8.5 14.2 3.2 8.8 Z" fill="#000"/>
       <circle cx="8.5" cy="8.8" r="1.9" fill="#fff"/>
     </mask>
     <g id="icon-dragon"><rect width="17" height="17" fill="#fff" mask="url(#dragon-cut)"/></g>
     <g id="icon-herald"><rect width="17" height="17" fill="#fff" mask="url(#herald-cut)"/></g>
   </defs>
-  <use href="#icon-dragon" x="568" y="78"/>
-  <text id="dragons-left" class="inter grub start" x="593" y="94.28">0</text>
-  <use href="#icon-herald" x="640" y="78"/>
-  <text id="heralds-left" class="inter grub start" x="665" y="94.28">0</text>
-  <use href="#icon-herald" x="1263" y="78"/>
-  <text id="heralds-right" class="inter grub end" x="1255" y="94.11">0</text>
-  <use href="#icon-dragon" x="1335" y="78"/>
-  <text id="dragons-right" class="inter grub end" x="1327" y="94.11">0</text>
-  <defs>
-    <clipPath id="diff-clip"><rect x="511" y="71" width="902" height="35"/></clipPath>
-    <linearGradient id="tab-left" x1="0" y1="0" x2="0" y2="1">
-      <stop id="tab-left-top" offset="0"/><stop id="tab-left-bottom" offset="1"/></linearGradient>
-    <linearGradient id="tab-right" x1="0" y1="0" x2="0" y2="1">
-      <stop id="tab-right-top" offset="0"/><stop id="tab-right-bottom" offset="1"/></linearGradient>
-    <linearGradient id="tab-shine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/>
-      <stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-  </defs>
-  <!-- Clipped at the bar's lower edge so the tabs appear to slide out from under it. -->
-  <g clip-path="url(#diff-clip)">
-    <g id="diff-left" class="diff-tab" data-cx="833.1">
-      <rect y="66" height="22" rx="4" fill="url(#tab-left)"/>
-      <rect class="shine" y="71" height="17" width="24" fill="url(#tab-shine)"/>
-      <text x="833.1" y="84"></text>
-    </g>
-    <g id="diff-right" class="diff-tab" data-cx="1087.3">
-      <rect y="66" height="22" rx="4" fill="url(#tab-right)"/>
-      <rect class="shine" y="71" height="17" width="24" fill="url(#tab-shine)"/>
-      <text x="1087.3" y="84"></text>
-    </g>
-  </g>
-  <g id="drakes-left"></g>
-  <g id="drakes-right"></g>
-
-  <!-- Objective timers, built by drawObjectives(). -->
-  <g id="timers" transform="translate(4,4)"></g>
+  <g id="stage"></g>
 </svg>
 <script>
 const params = new URLSearchParams(location.search);
@@ -150,118 +75,9 @@ const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
 const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true) };
 const $ = id => document.getElementById(id);
 const SVGNS = "http://www.w3.org/2000/svg";
+const SIDES = ["left", "right"];
 const DRAKE_COLORS = { Infernal: "#ff6a2b", Ocean: "#3fb8ff", Mountain: "#b9874f", Cloud: "#c7e4f2",
                        Hextech: "#5fe0e8", Chemtech: "#7fd447" };
-// Pip positions from the PSD ("bo3 1 left", "bo3 2 left", ...).
-const PIPS = { left: { x: 516, w: 7, y: [12, 40], h: [25, 26] }, right: { x: 1397, w: 8, y: [11, 39], h: [26, 26] } };
-
-$("timers").style.display = SHOW.timers ? "" : "none";
-
-function setText(id, value) {
-  const el = $(id);
-  value = String(value ?? "");
-  if (el.textContent === value) return;
-  el.textContent = value;
-  fit(el);
-}
-
-// Mix a #rrggbb colour with white (amount 0..1).
-function lighten(hex, amount) {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = shift => Math.round(((n >> shift) & 255) + (255 - ((n >> shift) & 255)) * amount);
-  return "#" + [16, 8, 0].map(sh => ch(sh).toString(16).padStart(2, "0")).join("");
-}
-
-let colorKey = "";
-function applyColors(left, right) {
-  if (colorKey === left + right) return;
-  colorKey = left + right;
-  const stop = (id, c) => $(id).setAttribute("stop-color", c);
-  for (const [side, c] of [["left", left], ["right", right]]) {
-    $(`flood-${side}`).setAttribute("flood-color", c);
-    stop(`tab-${side}-top`, lighten(c, .3));
-    stop(`tab-${side}-bottom`, c);
-  }
-  // Lines are lightened so dark team colours still show on the black bar.
-  stop("lines-l1", lighten(left, .35)); stop("lines-l2", lighten(left, .35));
-  stop("lines-r1", lighten(right, .35)); stop("lines-r2", lighten(right, .35));
-  for (const g of [$("pips-left"), $("pips-right")]) g.dataset.key = "";  // redraw in new colour
-}
-
-// Numbers grow away from their icons (anchored on the edge of the PSD's
-// one-digit box); text with a data-max width is squeezed if it gets too wide.
-function fit(el) {
-  if (!el.dataset.max) return;
-  el.removeAttribute("textLength");
-  if (el.getComputedTextLength() > Number(el.dataset.max)) {
-    el.setAttribute("lengthAdjust", "spacingAndGlyphs");
-    el.setAttribute("textLength", el.dataset.max);
-  }
-}
-document.fonts.ready.then(() => document.querySelectorAll("text[data-max]").forEach(fit));
-
-// Slide the lead tab in when this side leads, out when it doesn't. While
-// sliding out it keeps its last value, so the number doesn't vanish early.
-function setDiff(side, value) {
-  const tab = $("diff-" + side), text = tab.querySelector("text");
-  if (value) {
-    if (text.textContent !== value) {
-      text.textContent = value;
-      const w = Math.ceil(text.getComputedTextLength()) + 16, cx = Number(tab.dataset.cx);
-      const bg = tab.querySelector("rect"), first = !bg.style.width;
-      if (first) bg.style.transition = "none";  // size the first one instantly
-      bg.style.x = cx - w / 2 + "px";
-      bg.style.width = w + "px";
-      tab.querySelector(".shine").style.x = cx - 12 + "px";
-      if (first) { bg.getBBox(); bg.style.transition = ""; }
-    }
-    tab.classList.add("show");
-  } else {
-    tab.classList.remove("show");
-  }
-}
-
-function drawPips(side, bestOf, wins, color) {
-  const g = $("pips-" + side), p = PIPS[side], needed = Math.floor(bestOf / 2) + 1;
-  const key = bestOf + ":" + wins;
-  if (g.dataset.key === key) return;
-  g.dataset.key = key;
-  g.replaceChildren();
-  if (bestOf <= 1) return;
-  // The PSD has room for two pips; longer series share the same height.
-  const top = p.y[0], bottom = p.y[1] + p.h[1], gap = 3;
-  const h = (bottom - top - gap * (needed - 1)) / needed;
-  for (let i = 0; i < needed; i++) {
-    const pip = document.createElementNS(SVGNS, "rect");
-    pip.setAttribute("class", i < wins ? "pip won" : "pip");
-    if (i < wins) pip.style.fill = lighten(color, .55);
-    pip.setAttribute("x", p.x + .5); pip.setAttribute("width", p.w - 1);
-    pip.setAttribute("y", (needed === 2 ? p.y[i] : top + i * (h + gap)) + .5);
-    pip.setAttribute("height", (needed === 2 ? p.h[i] : h) - 1);
-    pip.setAttribute("rx", 1.5);
-    g.appendChild(pip);
-  }
-}
-
-function drawDrakes(side, list) {
-  const g = $("drakes-" + side), key = list.join(",");
-  if (!SHOW.dragons || g.dataset.key === key) return;
-  g.dataset.key = key;
-  g.replaceChildren();
-  // Left team's dragons run right-to-left from the timer; right team's left-to-right.
-  list.forEach((name, i) => {
-    const c = document.createElementNS(SVGNS, "circle");
-    c.setAttribute("class", "drake");
-    c.setAttribute("cx", side === "left" ? 908 - i * 13 : 1012 + i * 13);
-    c.setAttribute("cy", 88); c.setAttribute("r", 6);
-    c.setAttribute("fill", DRAKE_COLORS[name] || "#ccc");
-    g.appendChild(c);
-  });
-}
-
-// Objective timer boxes, left to right. A box shows while its objective has a
-// countdown or is LIVE; it hides when the objective is gone for the game (or
-// for elder, not up yet) or switched off in the control panel.
 const OBJECTIVES = [
   { key: "grubs", field: "NEXT GRUBS", letter: "G", color: "#8e44d6" },
   { key: "dragon", field: "NEXT DRAGON", letter: "D", color: "#2aa7a0" },
@@ -273,42 +89,257 @@ const BOX_W = 96, BOX_GAP = 4;
 
 function el(tag, attrs, parent) {
   const n = document.createElementNS(SVGNS, tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-  parent.appendChild(n);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
   return n;
 }
 
-for (const o of OBJECTIVES) {
-  const g = el("g", { id: `obj-${o.key}`, class: "obj off" }, $("timers"));
-  el("rect", { class: "box", width: BOX_W, height: 28, rx: 2 }, g);
-  el("circle", { cx: 14, cy: 14, r: 9, fill: o.color }, g);
-  el("text", { class: "letter", x: 14, y: 18.5, style: o.dark ? "fill:#1a1a1a" : "" }, g).textContent = o.letter;
-  el("text", { id: `next-${o.key}`, x: 28, y: 20.5 }, g);
+// Mix a #rrggbb colour with white (amount 0..1).
+function lighten(hex, amount) {
+  const n = parseInt((hex || "#888888").slice(1), 16);
+  const ch = shift => Math.round(((n >> shift) & 255) + (255 - ((n >> shift) & 255)) * amount);
+  return "#" + [16, 8, 0].map(sh => ch(sh).toString(16).padStart(2, "0")).join("");
 }
 
-function drawObjectives(f, enabled) {
-  let x = 0;
+// ---------------------------------------------------------------------------
+// Building the HUD from a profile.
+
+let profile = null, profileKey = "", base = "";
+let texts = [], logos = {}, pips = {}, diffs = {}, drakes = {}, objectiveEls = [], tints = {}, timers = null;
+
+function assetUrl(src) { return src.startsWith("/") || src.startsWith("data:") ? src : base + src; }
+
+function loadFonts(fonts) {
+  // Either {family: {src, weight}} or [{family, src, weight, style}, ...].
+  const faces = Array.isArray(fonts) ? fonts : Object.entries(fonts || {}).map(([family, f]) => ({ family, ...f }));
+  $("fonts").textContent = faces.map(f =>
+    `@font-face { font-family: "${f.family}"; src: url("${assetUrl(f.src)}"); ${f.weight ? `font-weight: ${f.weight};` : ""} ${f.style ? `font-style: ${f.style};` : ""} }`).join("\n");
+}
+
+function build(p, id) {
+  profile = p;
+  base = `/profiles/${id}/`;
+  texts = []; logos = {}; pips = {}; diffs = {}; drakes = {}; objectiveEls = []; tints = {}; timers = null;
+  loadFonts(p.fonts);
+  const stage = $("stage");
+  stage.replaceChildren();
+  const defs = el("defs", {}, stage);
+  const [W, H] = p.canvas || [1920, 1080];
+  $("hud").setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  p.elements.forEach((e, i) => {
+    let node = null;
+    switch (e.type) {
+      case "image":
+        node = el("image", { href: assetUrl(e.src), x: e.x, y: e.y, width: e.w, height: e.h, preserveAspectRatio: "none" }, stage);
+        break;
+      case "team-panel": {
+        // The panel's shape, filled with the team colour.
+        const f = el("filter", { id: `tint-${i}`, "color-interpolation-filters": "sRGB" }, defs);
+        const flood = el("feFlood", { "flood-color": "#888" }, f);
+        el("feComposite", { in2: "SourceGraphic", operator: "in" }, f);
+        (tints[e.side] ||= []).push({ type: "flood", node: flood });
+        node = el("image", { href: assetUrl(e.src), x: e.x, y: e.y, width: e.w, height: e.h, filter: `url(#tint-${i})`, preserveAspectRatio: "none" }, stage);
+        break;
+      }
+      case "lines": {
+        // Artwork lines blending from the left team's colour to the right's.
+        const m = el("mask", { id: `lines-mask-${i}`, maskUnits: "userSpaceOnUse", x: e.x, y: e.y, width: e.w, height: e.h }, defs);
+        el("image", { href: assetUrl(e.src), x: e.x, y: e.y, width: e.w, height: e.h, preserveAspectRatio: "none" }, m);
+        const g = el("linearGradient", { id: `lines-grad-${i}`, gradientUnits: "userSpaceOnUse", x1: e.x, y1: 0, x2: e.x + e.w, y2: 0 }, defs);
+        const stops = [0, .3, .7, 1].map(o => el("stop", { offset: o }, g));
+        (tints.left ||= []).push({ type: "stops", nodes: stops.slice(0, 2), amount: .35 });
+        (tints.right ||= []).push({ type: "stops", nodes: stops.slice(2), amount: .35 });
+        node = el("rect", { x: e.x, y: e.y, width: e.w, height: e.h, fill: `url(#lines-grad-${i})`, mask: `url(#lines-mask-${i})` }, stage);
+        break;
+      }
+      case "logo": {
+        const wrap = el("g", {}, stage);
+        const img = el("image", { x: e.x, y: e.y, width: e.w, height: e.h, preserveAspectRatio: "xMidYMid meet" }, wrap);
+        logos[e.side] = { wrap, img, cx: e.x + e.w / 2, cy: e.y + e.h / 2 };
+        node = wrap;
+        break;
+      }
+      case "pips":
+        pips[e.side] = { g: el("g", {}, stage), slots: e.slots };
+        node = pips[e.side].g;
+        break;
+      case "text": {
+        node = el("text", { x: e.x, y: e.y, "text-anchor": e.anchor || "start" }, stage);
+        node.style.fontFamily = `"${e.font}", "Inter", sans-serif`;
+        node.style.fontSize = e.size + "px";
+        if (e.weight) node.style.fontWeight = e.weight;
+        if (e.italic) node.style.fontStyle = "italic";
+        if (e.color) node.style.fill = e.color;
+        if (e.letterSpacing) node.style.letterSpacing = e.letterSpacing + "px";
+        texts.push({ node, e });
+        break;
+      }
+      case "icon":
+        node = el("use", { href: `#icon-${e.icon}`, x: e.x, y: e.y, transform: e.size && e.size !== 17 ? `translate(${e.x} ${e.y}) scale(${e.size / 17}) translate(${-e.x} ${-e.y})` : null }, stage);
+        break;
+      case "gold-diff": {
+        let parent = stage;
+        if (e.clip) {
+          const cp = el("clipPath", { id: `diff-clip-${i}` }, defs);
+          el("rect", { x: e.clip[0], y: e.clip[1], width: e.clip[2], height: e.clip[3] }, cp);
+          parent = el("g", { "clip-path": `url(#diff-clip-${i})` }, stage);
+        }
+        const grad = el("linearGradient", { id: `tab-grad-${i}`, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+        const top = el("stop", { offset: 0 }, grad), bottom = el("stop", { offset: 1 }, grad);
+        (tints[e.side] ||= []).push({ type: "tab", top, bottom });
+        // Without a bar edge to slide out from under, it fades in as it slides.
+        const tab = el("g", { class: e.clip ? "diff-tab" : "diff-tab fade" }, parent);
+        el("rect", { y: e.y, height: 22, rx: 4, fill: `url(#tab-grad-${i})` }, tab);
+        el("rect", { class: "shine", y: e.y + 5, height: 17, width: 24, fill: "url(#tab-shine)" }, tab);
+        el("text", { x: e.x, y: e.y + 18 }, tab);
+        diffs[e.side] = { tab, cx: e.x };
+        node = tab;
+        break;
+      }
+      case "drake-dots":
+        drakes[e.side] = { g: el("g", {}, stage), e };
+        node = drakes[e.side].g;
+        break;
+      case "timers":
+        timers = buildTimers(el("g", { class: "timers", transform: `translate(${e.x},${e.y})` }, stage));
+        node = timers.g;
+        break;
+    }
+    if (node && e.objective) objectiveEls.push({ node, key: e.objective });
+  });
+  colorKey = "";
+  document.fonts.ready.then(refit);
+}
+
+function buildTimers(g) {
+  const boxes = {};
   for (const o of OBJECTIVES) {
-    const g = $(`obj-${o.key}`), value = f[o.field] || "";
-    const visible = enabled[o.key] !== false && value !== "";
-    if (value) setText(`next-${o.key}`, value);  // keep the last value while fading out
-    $(`next-${o.key}`).classList.toggle("live", value === "LIVE");
-    g.classList.toggle("off", !visible);
-    if (visible) {
-      g.style.transform = `translateX(${x}px)`;
-      x += BOX_W + BOX_GAP;
+    const b = el("g", { class: "obj off" }, g);
+    el("rect", { class: "box", width: BOX_W, height: 28, rx: 2 }, b);
+    el("circle", { cx: 14, cy: 14, r: 9, fill: o.color }, b);
+    el("text", { class: "letter", x: 14, y: 18.5, style: o.dark ? "fill:#1a1a1a" : null }, b).textContent = o.letter;
+    boxes[o.key] = { g: b, value: el("text", { x: 28, y: 20.5 }, b) };
+  }
+  return { g, boxes };
+}
+
+// ---------------------------------------------------------------------------
+// Updating it from the live state.
+
+function setText(node, value, maxWidth) {
+  value = String(value ?? "");
+  if (node.textContent === value) return;
+  node.textContent = value;
+  if (maxWidth) {  // squeeze text that would overflow its space
+    node.removeAttribute("textLength");
+    if (node.getComputedTextLength() > maxWidth) {
+      node.setAttribute("lengthAdjust", "spacingAndGlyphs");
+      node.setAttribute("textLength", maxWidth);
     }
   }
 }
+// Text squeezed to fit is measured in whatever font has loaded; measure again
+// whenever a profile's fonts finish loading.
+function refit() {
+  texts.forEach(t => { const v = t.node.textContent; t.node.textContent = ""; setText(t.node, v, t.e.maxWidth); });
+}
+document.fonts.addEventListener("loadingdone", refit);
 
-// Logo size/position tweak from the control panel, scaled about the centre
-// of the PSD's logo box.
-const LOGO_CENTER = { left: [554, 37], right: [1366, 37] };
-function placeLogo(side, adj) {
-  const { scale = 1, x = 0, y = 0 } = adj || {}, [cx, cy] = LOGO_CENTER[side];
-  const t = `translate(${cx + x} ${cy + y}) scale(${scale}) translate(${-cx} ${-cy})`;
-  const wrap = $(`logo-${side}-wrap`);
-  if (wrap.getAttribute("transform") !== t) wrap.setAttribute("transform", t);
+let colorKey = "";
+function applyColors(left, right) {
+  if (colorKey === left + right) return;
+  colorKey = left + right;
+  for (const [side, c] of [["left", left], ["right", right]]) {
+    for (const t of tints[side] || []) {
+      if (t.type === "flood") t.node.setAttribute("flood-color", c);
+      if (t.type === "stops") t.nodes.forEach(n => n.setAttribute("stop-color", lighten(c, t.amount)));
+      if (t.type === "tab") { t.top.setAttribute("stop-color", lighten(c, .3)); t.bottom.setAttribute("stop-color", c); }
+    }
+  }
+  for (const p of Object.values(pips)) p.g.dataset.key = "";  // redraw in the new colour
+}
+
+function drawPips(side, bestOf, wins, color) {
+  const p = pips[side];
+  if (!p) return;
+  const key = `${bestOf}:${wins}:${color}`;
+  if (p.g.dataset.key === key) return;
+  p.g.dataset.key = key;
+  p.g.replaceChildren();
+  if (bestOf <= 1) return;
+  const needed = Math.floor(bestOf / 2) + 1;
+  // Exactly as many slots as needed: use them. Otherwise share the space.
+  let slots = p.slots;
+  if (slots.length !== needed) {
+    const x = Math.min(...slots.map(s => s[0])), y = Math.min(...slots.map(s => s[1]));
+    const w = Math.max(...slots.map(s => s[0] + s[2])) - x, h = Math.max(...slots.map(s => s[1] + s[3])) - y;
+    const vertical = h >= w, gap = 3, n = needed;
+    slots = Array.from({ length: n }, (_, i) => vertical
+      ? [x, y + i * (h + gap) / n, w, (h - gap * (n - 1)) / n]
+      : [x + i * (w + gap) / n, y, (w - gap * (n - 1)) / n, h]);
+  }
+  slots.forEach(([x, y, w, h], i) => {
+    const won = i < wins;
+    const r = el("rect", { class: won ? "pip won" : "pip", x: x + .5, y: y + .5, width: w - 1, height: h - 1, rx: 1.5 }, p.g);
+    if (won) r.style.fill = lighten(color, .55);
+  });
+}
+
+// Slide the lead tab in when this side leads, out when it doesn't.
+function setDiff(side, value) {
+  const d = diffs[side];
+  if (!d) return;
+  const text = d.tab.querySelector("text");
+  if (value) {
+    if (text.textContent !== value) {
+      text.textContent = value;
+      const w = Math.ceil(text.getComputedTextLength()) + 16;
+      const bg = d.tab.querySelector("rect"), first = !bg.style.width;
+      if (first) bg.style.transition = "none";
+      bg.style.x = d.cx - w / 2 + "px";
+      bg.style.width = w + "px";
+      d.tab.querySelector(".shine").style.x = d.cx - 12 + "px";
+      if (first) { bg.getBBox(); bg.style.transition = ""; }
+    }
+    d.tab.classList.add("show");
+  } else {
+    d.tab.classList.remove("show");
+  }
+}
+
+function placeLogo(side, src, adj) {
+  const l = logos[side];
+  if (!l) return;
+  if (l.img.getAttribute("href") !== src) l.img.setAttribute("href", src);
+  const { scale = 1, x = 0, y = 0 } = adj || {};
+  const t = `translate(${l.cx + x} ${l.cy + y}) scale(${scale}) translate(${-l.cx} ${-l.cy})`;
+  if (l.wrap.getAttribute("transform") !== t) l.wrap.setAttribute("transform", t);
+}
+
+function drawDrakes(side, list) {
+  const d = drakes[side];
+  if (!d) return;
+  const key = SHOW.dragons ? list.join(",") : "";
+  if (d.g.dataset.key === key) return;
+  d.g.dataset.key = key;
+  d.g.replaceChildren();
+  if (!SHOW.dragons) return;
+  list.forEach((name, i) => el("circle", { class: "drake", cx: d.e.x + i * d.e.step, cy: d.e.y, r: 6, fill: DRAKE_COLORS[name] || "#ccc" }, d.g));
+}
+
+function drawTimers(f, enabled) {
+  if (!timers) return;
+  timers.g.style.display = SHOW.timers ? "" : "none";
+  let x = 0;
+  for (const o of OBJECTIVES) {
+    const b = timers.boxes[o.key], value = f[o.field] || "";
+    const visible = enabled[o.key] !== false && value !== "";
+    if (value) setText(b.value, value);
+    b.value.classList.toggle("live", value === "LIVE");
+    b.g.classList.toggle("off", !visible);
+    if (visible) { b.g.style.transform = `translateX(${x}px)`; x += BOX_W + BOX_GAP; }
+  }
 }
 
 // Smooth the clock between polls, but stop if the game is paused.
@@ -318,23 +349,22 @@ function render(s) {
   const f = s.fields, cfg = s.config;
   $("hud").classList.toggle("hidden", !SHOW.idle && !s.detail.connected);
   applyColors(cfg.left.color, cfg.right.color);
-  for (const side of ["left", "right"]) {
+  for (const t of texts) {
+    if (t.e.field === "TIMER") continue;  // ticks on its own, below
+    let v = f[t.e.field];
+    if (t.e.case === "upper") v = String(v ?? "").toUpperCase();
+    setText(t.node, v, t.e.maxWidth);
+  }
+  const shown = cfg.strip_counters || {};
+  for (const o of objectiveEls) o.node.classList.toggle("objective-off", shown[o.key] === false);
+  for (const side of SIDES) {
     const S = side.toUpperCase();
-    setText(`tri-${side}`, String(f[`TRI-CODE ${S}`]).toUpperCase());
-    setText(`turrets-${side}`, f[`TURRETS ${S}`]);
-    setText(`gold-${side}`, f[`GOLD ${S}`]);
-    setText(`kills-${side}`, f[`KILLS ${S}`]);
-    setText(`grubs-${side}`, f[`VOID GRUB ${S}`]);
-    setText(`dragons-${side}`, f[`DRAGONS ${S}`]);
-    setText(`heralds-${side}`, f[`HERALDS ${S}`]);
     setDiff(side, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
-    const logo = cfg[side].logo;
-    if ($(`logo-${side}`).getAttribute("href") !== logo) $(`logo-${side}`).setAttribute("href", logo);
-    placeLogo(side, (cfg.logo_adjust || {})[logo]);
+    placeLogo(side, cfg[side].logo, (cfg.logo_adjust || {})[cfg[side].logo]);
     drawPips(side, cfg.best_of, cfg[side].wins, cfg[side].color);
     drawDrakes(side, s.detail.dragons[side] || []);
   }
-  drawObjectives(f, cfg.objective_timers || {});
+  drawTimers(f, cfg.objective_timers || {});
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.
   const t = s.detail.game_time;
@@ -345,14 +375,21 @@ function tick() {
   let t = clock.base;
   if (clock.running) t += Math.min(1, (performance.now() - clock.at) / 1000);
   t = Math.floor(t);
-  setText("timer", String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"));
+  const value = String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  for (const x of texts) if (x.e.field === "TIMER") setText(x.node, value);
   requestAnimationFrame(tick);
 }
 
 async function poll() {
   try {
-    const r = await fetch("/api/state", { cache: "no-store" });
-    render(await r.json());
+    const s = await (await fetch("/api/state", { cache: "no-store" })).json();
+    const id = params.get("profile") || s.config.profile || "scc-2026";
+    const key = id + ":" + (s.profiles_version || 0);
+    if (key !== profileKey) {
+      const p = await (await fetch(`/api/profile?id=${encodeURIComponent(id)}`, { cache: "no-store" })).json();
+      if (!p.error) { build(p, id); profileKey = key; }
+    }
+    if (profile) render(s);
   } catch (e) { /* app restarting; keep the last frame on screen */ }
   setTimeout(poll, 500);
 }

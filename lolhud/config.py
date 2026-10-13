@@ -19,6 +19,7 @@ RESOURCE_DIR = getattr(sys, "_MEIPASS", ROOT) if FROZEN else ROOT
 DATA_DIR = os.path.dirname(os.path.abspath(sys.executable)) if FROZEN else ROOT
 WEB_DIR = os.path.join(RESOURCE_DIR, "web")
 LOGO_DIR = os.path.join(DATA_DIR, "logos")
+PROFILE_DIR = os.path.join(DATA_DIR, "profiles")  # imported HUD profiles
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 DEFAULTS = {
@@ -39,6 +40,10 @@ DEFAULTS = {
     # Stored per logo, so a team's logo keeps its tweak whichever side it is on.
     "logo_adjust": {},
     "best_of": 3,
+    # Which HUD design the overlay draws (see the HUD profile section).
+    "profile": "scc-2026",
+    # Claimed-objective counters in the HUD (dragons, heralds, grubs).
+    "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when
     # the left-hand team is playing red side.
     "swap_sides": False,
@@ -143,6 +148,8 @@ def web_file(rel):
     candidates = []
     if rel.startswith("assets/logos/"):
         candidates.append((LOGO_DIR, rel[len("assets/logos/"):]))
+    if rel.startswith("profiles/"):
+        candidates.append((PROFILE_DIR, rel[len("profiles/"):]))
     candidates.append((WEB_DIR, rel))
     for base, sub in candidates:
         path = os.path.normpath(os.path.join(base, sub))

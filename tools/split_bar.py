@@ -7,6 +7,7 @@ the lines with each team's colour:
 
     web/assets/hud_base.png   the bar with the lines removed
     web/assets/hud_lines.png  the lines alone, white, strength in the alpha
+    web/assets/grub_*.png     the void grub icons from the lower strip
 
 Run from the project folder:  python tools/split_bar.py   (needs Pillow)
 """
@@ -48,6 +49,19 @@ def main():
             # Boosted, since the tint colour is darker than the white mask.
             out_lines[x, y] = (255, 255, 255, min(255, round(hi * a / 255 * 1.6)))
             out_base[x, y] = (0, 0, 0, a)
+    # The void grub icons in the lower strip become their own images, so the
+    # counters can be switched off: cut them out and repaint the strip, which
+    # only changes from top to bottom, from 30px to the side.
+    bp = base.load()
+    for side, (x0, x1) in {"left": (199, 221), "right": (678, 700)}.items():
+        icon = Image.new("RGBA", (x1 - x0, 23), (255, 255, 255, 0))
+        ip = icon.load()
+        for y in range(75, 98):
+            for x in range(x0, x1):
+                r, g, b, a = bp[x, y]
+                ip[x - x0, y - 75] = (255, 255, 255, round(min(r, g, b) * a / 255))
+                bp[x, y] = bp[x - 30 if side == "left" else x + 30, y]
+        icon.save(os.path.join(ASSETS, f"grub_{side}.png"))
     base.save(os.path.join(ASSETS, "hud_base.png"))
     lines.save(os.path.join(ASSETS, "hud_lines.png"))
 

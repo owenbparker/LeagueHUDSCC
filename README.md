@@ -94,6 +94,24 @@ The CSV is one header row plus one data row. The file is swapped in whole each t
 
 If vMix runs on a different PC, start the HUD with `--host 0.0.0.0` and use `http://<spectating-PC-IP>:8777/hud.json`.
 
+## HUD profiles (designs)
+
+The overlay draws whichever **HUD profile** is picked in the control panel. **SCC 2026** is built in; more can be imported from Photoshop with **Import PSD…**. Every feature (team colours, logos, pips, gold-lead tab, timers, objective counters) keeps working with any design, as long as the PSD's layers are named after what they show:
+
+| Layer name | Becomes |
+|---|---|
+| A text layer named after a live field: `KILLS LEFT`, `GOLD RIGHT`, `TIMER`, `TRI-CODE LEFT`, `TURRETS LEFT`, `DRAGONS LEFT`, `TEAM NAME RIGHT`… (anything in the Live fields list) | Live text, in that layer's font, size, colour, alignment and caps |
+| `TEAM LEFT` / `TEAM RIGHT` | Filled with the team colour |
+| `TEAM LOGO LEFT` / `LOGO RIGHT` | Where the team logo goes |
+| `BO3 1 LEFT`, `BO3 2 LEFT`, … (a `WIN` copy is fine) | Series pips |
+| `LINES` *(optional)* | Artwork tinted from the left team's colour to the right's |
+| `GOLD DIFF LEFT` / `RIGHT` *(optional)* | Where the gold-lead tab hangs (otherwise under the gold) |
+| `OBJECTIVE TIMERS` *(optional)* | Top-left corner of the objective timers |
+| `DRAGONS ICON LEFT`, `HERALDS ICON LEFT`, `GRUBS ICON LEFT` *(optional)* | Icons that hide when that counter is switched off |
+| Anything else | Artwork, flattened with Photoshop's blending and effects |
+
+Text keeps the PSD's paragraph alignment, so right-align numbers that sit to the left of an icon (and vice versa) to have them grow away from it. Fonts aren't stored in PSDs: the importer finds them in Windows' fonts, and the import report lists any it can't find with an **Add font file…** button. Imported profiles live in `profiles\` next to the app; `/overlay?profile=ID` shows a particular one regardless of the selection.
+
 ## The control panel
 
 - **Teams:** tricode, name, logo (upload or pick), team colour (colour picker, or type a hex code), series wins (+/−).
@@ -101,6 +119,7 @@ If vMix runs on a different PC, start the HUD with `--host 0.0.0.0` and use `htt
 - **Swap teams left/right:** swaps names, logos and scores.
 - **Left team is on red side:** by default the left of the bar is blue side. Tick this when the left team plays red.
 - **Series:** Bo1 / Bo3 / Bo5 (pips follow).
+- **Claimed objectives:** switch each team's dragon, Rift Herald and void grub counters in the HUD on or off.
 - **Objective timers:** switch Void Grubs, Dragon, Rift Herald, Elder Drake and Baron on or off. Each shows while its objective is counting down or LIVE, and drops off once it's gone for the game; the rest close up.
 - **Gold:** see below.
 - A live preview, and every field with its current value (click a name to copy it).
@@ -133,6 +152,8 @@ lolhud/          the app (Python standard library; the desktop window also uses 
   gold.py          gold estimate + Data Dragon prices/icons
   ocr.py           reads team gold off the spectator top bar (Windows text recognition)
   updater.py       checks GitHub releases and installs updates; version.py holds the build's version
+  profiles.py      HUD profiles (built-in in web/profiles/, imported in profiles/)
+  psd_import.py    turns a PSD into a HUD profile
   outputs.py       CSV / JSON / XML
   app.py           web server, control panel API
   gui.py           the desktop window (pywebview)

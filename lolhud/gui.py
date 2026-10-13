@@ -58,6 +58,12 @@ def smoke_test(port):
     except Exception as e:
         ok = False
         results.append(f"FAIL window library: {e!r}")
+    try:
+        import psd_tools  # noqa: F401  (PSD import bundled?)
+        results.append("OK   PSD import")
+    except Exception as e:
+        ok = False
+        results.append(f"FAIL PSD import library: {e!r}")
     if sys.platform == "win32":
         try:
             import winrt.windows.media.ocr  # noqa: F401  (bundled into the .exe?)

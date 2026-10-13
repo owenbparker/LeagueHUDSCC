@@ -9,3 +9,5 @@ winrt-Windows.Globalization
 winrt-Windows.Graphics.Imaging
 winrt-Windows.Media.Ocr
 winrt-Windows.Storage.Streams
+# Importing HUD designs from Photoshop files.
+psd-tools

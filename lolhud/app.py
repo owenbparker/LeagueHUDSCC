@@ -20,6 +20,7 @@ from .gold import DataDragon
 from .log import log, since
 from .ocr import ScreenGold
 from .updater import Updater, clean_up_old_update
+from . import profiles
 from .source import DemoSource, LiveClientSource
 from .state import build_state
 
@@ -145,6 +146,7 @@ class HudApp:
         with self._lock:
             return {"fields": self.state["fields"], "detail": self.state["detail"],
                     "updated_at": self.updated_at, "config": self.config.get(),
+                    "profiles_version": profiles.version(),
                     "output_dir": self.config.output_dir(), "app": self.app_info()}
 
     def save_logo(self, side, filename, data_b64):
@@ -246,6 +248,12 @@ def make_handler(app):
                 self._send(outputs.to_xml(fields), "application/xml; charset=utf-8")
             elif path == "/api/logos":
                 self._send(json.dumps(app.list_logos()))
+            elif path == "/api/profiles":
+                self._send(json.dumps(profiles.listing()))
+            elif path == "/api/profile":
+                pid = (parse_qs(url.query).get("id") or [app.config.get().get("profile")])[0]
+                data = profiles.load(pid) or profiles.load(profiles.DEFAULT_PROFILE)
+                self._send(json.dumps(data))
             else:
                 self._static(path.lstrip("/"))
 
@@ -268,6 +276,30 @@ def make_handler(app):
                     app.set_network(body["enabled"])
                 elif path == "/api/open":
                     app.open_folder(body["folder"])
+                elif path == "/api/profiles/import":
+                    from .psd_import import import_upload
+                    log(f"Importing {body.get('filename')}...")
+                    try:
+                        report = import_upload(body.get("name"), body.get("filename", ""), base64.b64decode(body["data"]))
+                    except ValueError:
+                        raise
+                    except Exception as e:  # a PSD the reader can't handle
+                        log(f"PSD import failed: {e!r}", "error")
+                        raise ValueError(f"Couldn't read that PSD: {e}")
+                    app.config.update({"profile": report["id"]})
+                    log(f"Imported HUD profile '{report['name']}': {len(report['fields'])} live fields"
+                        + (f"; fonts to add: {', '.join(report['missing_fonts'])}" if report["missing_fonts"] else ""))
+                    app.refresh(fetch=False)
+                    return self._send(json.dumps({"report": report, **app.snapshot()}))
+                elif path == "/api/profiles/font":
+                    from .psd_import import add_font
+                    result = add_font(body["id"], body.get("filename", ""), base64.b64decode(body["data"]))
+                    log(f"Font added to '{body['id']}'" + (f" for {result['matched']}" if result["matched"] else ""))
+                elif path == "/api/profiles/delete":
+                    profiles.delete(body["id"])
+                    if app.config.get().get("profile") == body["id"]:
+                        app.config.update({"profile": profiles.DEFAULT_PROFILE})
+                    log(f"Deleted HUD profile {body['id']}")
                 elif path == "/api/update/check":
                     app.updater.check()
                 elif path == "/api/update/install":

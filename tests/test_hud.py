@@ -248,6 +248,63 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue(u.info()["available"])
 
 
+class ProfileTests(unittest.TestCase):
+    def test_builtin_scc_profile(self):
+        from lolhud import profiles
+        listed = {p["id"]: p for p in profiles.listing()}
+        self.assertIn("scc-2026", listed)
+        self.assertEqual(listed["scc-2026"]["name"], "SCC 2026")
+        p = profiles.load("scc-2026")
+        fields = {e["field"] for e in p["elements"] if e["type"] == "text"}
+        self.assertTrue({"KILLS LEFT", "GOLD RIGHT", "TIMER", "DRAGONS LEFT", "HERALDS RIGHT"} <= fields)
+        # Every image the profile uses exists.
+        from lolhud.config import web_file
+        for e in p["elements"]:
+            if "src" in e:
+                self.assertIsNotNone(web_file(e["src"].lstrip("/")), e["src"])
+
+    def test_profile_ids_are_safe(self):
+        from lolhud import profiles
+        self.assertIsNone(profiles.folder("../../etc"))
+        self.assertIsNone(profiles.folder("SCC 2026"))
+
+    def test_layer_names(self):
+        from lolhud.psd_import import field_for, live_fields, role_for
+        fields = live_fields()
+        self.assertEqual(field_for("Kills Left", fields), "KILLS LEFT")
+        self.assertEqual(field_for("TOWERS RIGHT", fields), "TURRETS RIGHT")
+        self.assertEqual(field_for("grubs_left", fields), "VOID GRUB LEFT")
+        self.assertIsNone(field_for("Background", fields))
+        self.assertEqual(role_for("team logo left"), ("logo", "left", None))
+        self.assertEqual(role_for("bo3 2 right WIN"), ("pip", "right", (2, True)))
+        self.assertEqual(role_for("TEAM RIGHT"), ("team-panel", "right", None))
+        self.assertEqual(role_for("Dragons Icon Left"), ("objective-icon", "left", "dragons"))
+
+    def test_import_scc_psd(self):
+        try:
+            import psd_tools  # noqa: F401
+        except ImportError:
+            self.skipTest("psd-tools not installed")
+        from lolhud import profiles, psd_import
+        with tempfile.TemporaryDirectory() as d:
+            old = profiles.PROFILE_DIR
+            profiles.PROFILE_DIR = d
+            try:
+                psd = os.path.join(os.path.dirname(__file__), "..", "design", "lol-hud-SCC27.psd")
+                report = psd_import.import_psd(psd, "Test SCC")
+                self.assertEqual(report["missing_fields"], [])
+                self.assertEqual(report["pips"], {"left": 2, "right": 2})
+                p = profiles.load(report["id"])
+                kills = next(e for e in p["elements"] if e.get("field") == "KILLS LEFT")
+                self.assertEqual((kills["font"], kills["weight"], kills["anchor"]), ("Inter", 700, "middle"))
+                self.assertAlmostEqual(kills["size"], 40.0, delta=0.5)
+                tri = next(e for e in p["elements"] if e.get("field") == "TRI-CODE LEFT")
+                self.assertEqual(tri.get("case"), "upper")
+                self.assertTrue(any(e["type"] == "team-panel" for e in p["elements"]))
+            finally:
+                profiles.PROFILE_DIR = old
+
+
 class OutputTests(unittest.TestCase):
     def test_csv_round_trip(self):
         f = build_state(load(), cfg())["fields"]

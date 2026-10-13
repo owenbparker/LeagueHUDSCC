@@ -45,6 +45,12 @@ jobs:
           python -m lolhud.ocr tests/fixtures/spectator_topbar_bounties.png --height 1079 --gold 8000 8900 --counts 0,0,0,0 0,0,3,0
           if ($LASTEXITCODE) { exit 1 }
 
+      - name: Import the SCC PSD as a HUD profile
+        run: |
+          python -m lolhud.psd_import design/lol-hud-SCC27.psd "CI import"
+          if ($LASTEXITCODE) { exit 1 }
+          Remove-Item profiles -Recurse -ErrorAction SilentlyContinue
+
       - name: Stamp the version
         shell: pwsh
         run: |

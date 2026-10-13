@@ -82,6 +82,11 @@
   .screen-result img { width: 100%; image-rendering: pixelated; background: #fff; border-radius: 3px; }
   .screen-result figcaption { font-size: 12px; margin-top: 4px; }
   .ok { color: var(--accent); }
+  .report { margin-top: 10px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+  .report .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .report .chips span { background: #252a2f; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  details ul { margin: 6px 0 0; padding-left: 18px; }
+  details li { margin-bottom: 4px; }
   @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -104,6 +109,28 @@
 <div class="layout">
 <main>
   <section class="wide">
+    <h2>HUD profile</h2>
+    <div class="row">
+      <select id="profile" aria-label="HUD profile"></select>
+      <button type="button" id="profile-import" style="flex:0 0 auto">Import PSD…</button>
+      <button type="button" id="profile-delete" style="flex:0 0 auto" hidden>Delete</button>
+      <input type="file" id="psd-file" accept=".psd,.psb" hidden>
+      <input type="file" id="font-file" accept=".ttf,.otf,.woff,.woff2" hidden>
+    </div>
+    <div id="profile-report" class="report" hidden></div>
+    <details class="note" style="margin-top:8px">
+      <summary>How to set up a PSD</summary>
+      <p>Name layers after what they show and the HUD keeps working with any design:</p>
+      <ul>
+        <li><b>Text layers</b> named after a live field (<code>KILLS LEFT</code>, <code>GOLD RIGHT</code>, <code>TIMER</code>, <code>TRI-CODE LEFT</code>, <code>TURRETS LEFT</code>, <code>DRAGONS LEFT</code>…, anything in Live fields) become live text in that layer's font, size, colour and alignment.</li>
+        <li><code>TEAM LEFT</code> / <code>TEAM RIGHT</code>: filled with the team colour. <code>TEAM LOGO LEFT</code>: where the logo goes. <code>BO3 1 LEFT</code>, <code>BO3 2 LEFT</code>…: series pips.</li>
+        <li>Optional: <code>LINES</code> (tinted in the team colours), <code>GOLD DIFF LEFT</code> (where the gold-lead tab goes), <code>OBJECTIVE TIMERS</code>, <code>DRAGONS ICON LEFT</code> / <code>HERALDS ICON LEFT</code> / <code>GRUBS ICON LEFT</code> (hide with their counter).</li>
+        <li>Everything else is artwork. Fonts are found in Windows' fonts; any that aren't can be added here after importing.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="wide">
     <h2>Teams</h2>
     <div class="teams">
       <div class="team left" data-side="left"></div>
@@ -115,6 +142,12 @@
       <label class="row" style="margin:0;color:var(--text)">Series
         <select id="best-of"><option value="1">Bo1</option><option value="3">Bo3</option><option value="5">Bo5</option></select></label>
     </div>
+  </section>
+
+  <section>
+    <h2>Claimed objectives</h2>
+    <div id="counters" class="checks"></div>
+    <p class="note">Each team's count of dragons, Rift Heralds and void grubs taken, in the HUD. Switching one off hides its icon and number.</p>
   </section>
 
   <section>
@@ -270,6 +303,70 @@ $("objectives").innerHTML = OBJECTIVES.map(([key, name, letter, color]) =>
 $("objectives").querySelectorAll("input").forEach(box => box.addEventListener("change", () =>
   post("/api/config", { objective_timers: { [box.dataset.obj]: box.checked } })));
 
+// Claimed-objective counters in the HUD.
+const COUNTERS = [["dragons", "Dragons", "D", "#2aa7a0"], ["heralds", "Rift Heralds", "H", "#c2449e"], ["grubs", "Void grubs", "G", "#8e44d6"]];
+$("counters").innerHTML = COUNTERS.map(([key, name, letter, color]) =>
+  `<label><input type="checkbox" data-counter="${key}"><span class="dot" style="background:${color}">${letter}</span>${name}</label>`).join("");
+$("counters").querySelectorAll("input").forEach(box => box.addEventListener("change", () =>
+  post("/api/config", { strip_counters: { [box.dataset.counter]: box.checked } })));
+
+// HUD profiles.
+let profileList = [], profilesVersion = -1;
+async function loadProfiles(current) {
+  profileList = await (await fetch("/api/profiles")).json();
+  $("profile").innerHTML = profileList.map(p =>
+    `<option value="${p.id}">${p.name}${p.builtin ? "" : " (imported)"}</option>`).join("");
+  $("profile").value = current;
+  showProfile(current);
+}
+function showProfile(id) {
+  const p = profileList.find(x => x.id === id);
+  $("profile-delete").hidden = !p || p.builtin;
+  const box = $("profile-report");
+  if (!p || !p.report) { box.hidden = true; return; }
+  const r = p.report, chips = list => `<div class="chips">${list.map(x => `<span>${x}</span>`).join("")}</div>`;
+  box.hidden = false;
+  box.innerHTML = `<b>${p.name}</b>: imported from a PSD.
+    <div style="margin-top:6px">Recognised layers (${r.fields.length}):</div>${chips(r.fields)}
+    ${r.missing_fields.length ? `<div class="warn" style="margin-top:6px">No layer for: ${r.missing_fields.join(", ")}</div>` : ""}
+    <div style="margin-top:6px">Pips: ${r.pips.left} left / ${r.pips.right} right · Logos: ${r.logos.join(", ") || "none"}</div>
+    ${p.missing_fonts.length ? `<div class="warn" style="margin-top:6px">Fonts not found: ${p.missing_fonts.join(", ")}
+      <button type="button" id="add-font" style="margin-left:8px">Add font file…</button></div>`
+      : `<div class="ok" style="margin-top:6px">All fonts found (${r.fonts.join(", ")})</div>`}`;
+  const add = $("add-font");
+  if (add) add.onclick = () => $("font-file").click();
+}
+$("profile").onchange = e => { post("/api/config", { profile: e.target.value }); showProfile(e.target.value); };
+$("profile-import").onclick = () => $("psd-file").click();
+$("profile-delete").onclick = () => {
+  const p = profileList.find(x => x.id === $("profile").value);
+  if (p && confirm(`Delete the "${p.name}" profile?`)) post("/api/profiles/delete", { id: p.id });
+};
+function readFile(file) {
+  return new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result.split(",")[1]); r.readAsDataURL(file); });
+}
+$("psd-file").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const name = prompt("Name for this HUD profile:", file.name.replace(/\.ps[db]$/i, ""));
+  if (name === null) return;
+  const box = $("profile-report");
+  box.hidden = false;
+  box.innerHTML = `Importing ${file.name}…`;
+  const r = await fetch("/api/profiles/import", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, filename: file.name, data: await readFile(file) }) });
+  const data = await r.json();
+  if (data.error) { box.innerHTML = `<span class="warn">${data.error}</span>`; return; }
+  apply(data);
+  await loadProfiles(data.report.id);
+});
+$("font-file").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) await post("/api/profiles/font", { id: $("profile").value, filename: file.name, data: await readFile(file) });
+});
+
 $("swap-teams").onclick = () => post("/api/config", { left: state.config.right, right: state.config.left });
 $("swap-sides").onchange = e => post("/api/config", { swap_sides: e.target.checked });
 $("best-of").onchange = e => post("/api/config", { best_of: Number(e.target.value) });
@@ -328,6 +425,9 @@ function apply(s) {
   if (logosChanged) loadLogos(cfg);
   $("swap-sides").checked = cfg.swap_sides;
   $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
+  $("counters").querySelectorAll("input").forEach(box => box.checked = (cfg.strip_counters || {})[box.dataset.counter] !== false);
+  if (s.profiles_version !== profilesVersion) { profilesVersion = s.profiles_version; loadProfiles(cfg.profile); }
+  else if (document.activeElement !== $("profile") && $("profile").value !== cfg.profile && profileList.length) { $("profile").value = cfg.profile; showProfile(cfg.profile); }
   $("best-of").value = cfg.best_of;
   setIfIdle($("gold-mode"), cfg.gold_mode);
   setIfIdle($("gold-scale"), cfg.gold_estimate_scale);
