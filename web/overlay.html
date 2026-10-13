@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>League HUD Overlay</title>
+<!--
+  Browser source for OBS / vMix: 1920x1080, transparent background.
+  Positions, sizes and fonts come straight from design/lol-hud-SCC27.psd.
+
+  URL options (add to the end, e.g. /overlay?timers=0&dragons=1):
+    timers=0   hide the dragon / baron countdowns in the top-left
+    diff=0     hide the gold lead under the leading team's gold
+    dragons=1  show each team's dragons in the lower strip
+    idle=0     hide the whole HUD while no game is running
+-->
+<style>
+  @font-face { font-family: "Heathergreen"; src: url("fonts/Heathergreen.otf") format("opentype"); }
+  @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+  svg { display: block; }
+  #hud { transition: opacity .4s ease; }
+  #hud.hidden { opacity: 0; }
+  text { fill: #fff; text-anchor: middle; }
+  .inter { font-family: "Inter", sans-serif; font-weight: 700; }
+  .hg { font-family: "Heathergreen", "Inter", sans-serif; }
+  .start { text-anchor: start; }
+  .end { text-anchor: end; }
+  .big { font-size: 40px; }
+  .tri { font-size: 55.5px; }
+  .timer { font-size: 18.9px; }
+  .grub { font-size: 20.6px; }
+  .diff { font-family: "Inter", sans-serif; font-weight: 600; font-size: 12px; fill: #d9d9d9; }
+  .pop { animation: pop .45s ease-out; transform-box: fill-box; transform-origin: center; }
+  @keyframes pop { 0% { transform: scale(1); } 35% { transform: scale(1.28); } 100% { transform: scale(1); } }
+  /* Objective timers, top left (as in the reference broadcast). */
+  #timers .box { fill: rgba(0,0,0,.82); }
+  #timers text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 17px; text-anchor: start; }
+  #timers .live { fill: #ffd34d; }
+  .drake { stroke: rgba(0,0,0,.6); stroke-width: 1; }
+</style>
+</head>
+<body>
+<svg id="hud" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <image href="assets/hud_bar.png" x="511" y="1" width="902" height="105"/>
+  <image href="assets/team_left.png" x="511" y="1" width="196" height="70"/>
+  <image href="assets/team_right.png" x="1216" y="1" width="197" height="70"/>
+
+  <image id="logo-left" x="534" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/>
+  <image id="logo-right" x="1346" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/>
+  <g id="pips-left"></g>
+  <g id="pips-right"></g>
+
+  <text id="tri-left" class="hg tri" data-max="96" x="610.7" y="57.55"></text>
+  <text id="tri-right" class="hg tri" data-max="96" x="1308.6" y="56.94"></text>
+  <text id="turrets-left" class="inter big start" x="729" y="53.53">0</text>
+  <text id="turrets-right" class="inter big end" x="1193" y="54.02">0</text>
+  <text id="gold-left" class="hg big" data-max="62" x="833.1" y="52.03">0.0K</text>
+  <text id="gold-right" class="hg big" data-max="62" x="1087.3" y="51.96">0.0K</text>
+  <text id="kills-left" class="inter big end" x="938" y="53.07">0</text>
+  <text id="kills-right" class="inter big start" x="982" y="53.07">0</text>
+  <text id="timer" class="inter timer" x="960" y="93.65">00:00</text>
+  <text id="grubs-left" class="inter grub start" x="737" y="94.28">0</text>
+  <text id="grubs-right" class="inter grub end" x="1183" y="94.11">0</text>
+  <text id="diff-left" class="diff" x="833.1" y="66"></text>
+  <text id="diff-right" class="diff" x="1087.3" y="66"></text>
+  <g id="drakes-left"></g>
+  <g id="drakes-right"></g>
+
+  <g id="timers" transform="translate(4,4)">
+    <rect class="box" width="96" height="28" rx="2"/>
+    <circle cx="14" cy="14" r="9" fill="#7b4bd1"/>
+    <text x="9" y="19" style="font-size:12px">B</text>
+    <text id="next-baron" x="28" y="20.5"></text>
+    <rect class="box" x="100" width="96" height="28" rx="2"/>
+    <circle cx="114" cy="14" r="9" fill="#2aa7a0"/>
+    <text x="109" y="19" style="font-size:12px">D</text>
+    <text id="next-dragon" x="128" y="20.5"></text>
+  </g>
+</svg>
+<script>
+const params = new URLSearchParams(location.search);
+const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
+const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true) };
+const $ = id => document.getElementById(id);
+const SVGNS = "http://www.w3.org/2000/svg";
+const DRAKE_COLORS = { Infernal: "#ff6a2b", Ocean: "#3fb8ff", Mountain: "#b9874f", Cloud: "#c7e4f2",
+                       Hextech: "#5fe0e8", Chemtech: "#7fd447" };
+// Pip positions from the PSD ("bo3 1 left", "bo3 2 left", ...).
+const PIPS = { left: { x: 516, w: 7, y: [12, 40], h: [25, 26] }, right: { x: 1397, w: 8, y: [11, 39], h: [26, 26] } };
+
+$("timers").style.display = SHOW.timers ? "" : "none";
+
+function setText(id, value) {
+  const el = $(id);
+  value = String(value ?? "");
+  if (el.textContent === value) return;
+  const animate = el.textContent !== "" && /kills|turrets|grubs/.test(id);
+  el.textContent = value;
+  fit(el);
+  if (animate) { el.classList.remove("pop"); void el.getBBox(); el.classList.add("pop"); }
+}
+
+// Numbers grow away from their icons (anchored on the edge of the PSD's
+// one-digit box); text with a data-max width is squeezed if it gets too wide.
+function fit(el) {
+  if (!el.dataset.max) return;
+  el.removeAttribute("textLength");
+  if (el.getComputedTextLength() > Number(el.dataset.max)) {
+    el.setAttribute("lengthAdjust", "spacingAndGlyphs");
+    el.setAttribute("textLength", el.dataset.max);
+  }
+}
+document.fonts.ready.then(() => document.querySelectorAll("text[data-max]").forEach(fit));
+
+function drawPips(side, bestOf, wins) {
+  const g = $("pips-" + side), p = PIPS[side], needed = Math.floor(bestOf / 2) + 1;
+  const key = bestOf + ":" + wins;
+  if (g.dataset.key === key) return;
+  g.dataset.key = key;
+  g.replaceChildren();
+  if (bestOf <= 1) return;
+  // The PSD has room for two pips; longer series share the same height.
+  const top = p.y[0], bottom = p.y[1] + p.h[1], gap = 3;
+  const h = (bottom - top - gap * (needed - 1)) / needed;
+  for (let i = 0; i < needed; i++) {
+    const img = document.createElementNS(SVGNS, "image");
+    img.setAttribute("href", `assets/pip_${side}${i < wins ? "_win" : ""}.png`);
+    img.setAttribute("x", p.x); img.setAttribute("width", p.w);
+    img.setAttribute("y", needed === 2 ? p.y[i] : top + i * (h + gap));
+    img.setAttribute("height", needed === 2 ? p.h[i] : h);
+    img.setAttribute("preserveAspectRatio", "none");
+    g.appendChild(img);
+  }
+}
+
+function drawDrakes(side, list) {
+  const g = $("drakes-" + side), key = list.join(",");
+  if (!SHOW.dragons || g.dataset.key === key) return;
+  g.dataset.key = key;
+  g.replaceChildren();
+  // Left team's dragons run right-to-left from the timer; right team's left-to-right.
+  list.forEach((name, i) => {
+    const c = document.createElementNS(SVGNS, "circle");
+    c.setAttribute("class", "drake");
+    c.setAttribute("cx", side === "left" ? 900 - i * 16 : 1020 + i * 16);
+    c.setAttribute("cy", 88); c.setAttribute("r", 6);
+    c.setAttribute("fill", DRAKE_COLORS[name] || "#ccc");
+    g.appendChild(c);
+  });
+}
+
+// Smooth the clock between polls, but stop if the game is paused.
+let clock = { base: 0, at: 0, running: false };
+
+function render(s) {
+  const f = s.fields, cfg = s.config;
+  $("hud").classList.toggle("hidden", !SHOW.idle && !s.detail.connected);
+  for (const side of ["left", "right"]) {
+    const S = side.toUpperCase();
+    setText(`tri-${side}`, String(f[`TRI-CODE ${S}`]).toUpperCase());
+    setText(`turrets-${side}`, f[`TURRETS ${S}`]);
+    setText(`gold-${side}`, f[`GOLD ${S}`]);
+    setText(`kills-${side}`, f[`KILLS ${S}`]);
+    setText(`grubs-${side}`, f[`VOID GRUB ${S}`]);
+    setText(`diff-${side}`, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
+    const logo = cfg[side].logo;
+    if ($(`logo-${side}`).getAttribute("href") !== logo) $(`logo-${side}`).setAttribute("href", logo);
+    drawPips(side, cfg.best_of, cfg[side].wins);
+    drawDrakes(side, s.detail.dragons[side] || []);
+  }
+  for (const [id, key] of [["next-baron", "NEXT BARON"], ["next-dragon", "NEXT DRAGON"]]) {
+    setText(id, f[key] || "--:--");
+    $(id).classList.toggle("live", f[key] === "LIVE");
+  }
+  // The game reports its clock about once a second; only restart the
+  // extrapolation when it moves, so a paused game freezes the timer.
+  const t = s.detail.game_time;
+  if (t !== clock.base) clock = { base: t, at: performance.now(), running: s.detail.connected && t > clock.base };
+}
+
+function tick() {
+  let t = clock.base;
+  if (clock.running) t += Math.min(1, (performance.now() - clock.at) / 1000);
+  t = Math.floor(t);
+  setText("timer", String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"));
+  requestAnimationFrame(tick);
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    render(await r.json());
+  } catch (e) { /* app restarting; keep the last frame on screen */ }
+  setTimeout(poll, 500);
+}
+poll();
+tick();
+</script>
+</body>
+</html>

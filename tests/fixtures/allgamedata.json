@@ -1,0 +1,42 @@
+{
+  "activePlayer": {"error": "Spectator mode"},
+  "allPlayers": [
+    {"championName": "Wukong", "rawChampionName": "game_character_displayname_MonkeyKing", "isDead": false, "respawnTimer": 0, "level": 12, "position": "JUNGLE", "team": "ORDER", "riotId": "DSG Aelune#NA1", "riotIdGameName": "DSG Aelune", "summonerName": "DSG Aelune#NA1",
+     "items": [{"itemID": 3071, "price": 3000, "count": 1}], "scores": {"kills": 2, "deaths": 1, "assists": 3, "creepScore": 110, "wardScore": 10}},
+    {"championName": "Gnar", "rawChampionName": "game_character_displayname_Gnar", "isDead": true, "respawnTimer": 12.4, "level": 13, "position": "TOP", "team": "ORDER", "riotId": "DSG Atlas#NA1", "riotIdGameName": "DSG Atlas", "summonerName": "DSG Atlas#NA1",
+     "items": [], "scores": {"kills": 1, "deaths": 2, "assists": 0, "creepScore": 140, "wardScore": 5}},
+    {"championName": "Ahri", "rawChampionName": "game_character_displayname_Ahri", "isDead": false, "respawnTimer": 0, "level": 14, "position": "MIDDLE", "team": "ORDER", "riotId": "DSG Wren#NA1", "riotIdGameName": "DSG Wren", "summonerName": "DSG Wren#NA1",
+     "items": [], "scores": {"kills": 3, "deaths": 0, "assists": 1, "creepScore": 160, "wardScore": 6}},
+    {"championName": "Jinx", "rawChampionName": "game_character_displayname_Jinx", "isDead": false, "respawnTimer": 0, "level": 12, "position": "BOTTOM", "team": "ORDER", "riotId": "DSG Ember#NA1", "riotIdGameName": "DSG Ember", "summonerName": "DSG Ember#NA1",
+     "items": [], "scores": {"kills": 0, "deaths": 1, "assists": 2, "creepScore": 150, "wardScore": 8}},
+    {"championName": "Nautilus", "rawChampionName": "game_character_displayname_Nautilus", "isDead": false, "respawnTimer": 0, "level": 10, "position": "UTILITY", "team": "ORDER", "riotId": "DSG Quill#NA1", "riotIdGameName": "DSG Quill", "summonerName": "DSG Quill#NA1",
+     "items": [], "scores": {"kills": 0, "deaths": 0, "assists": 5, "creepScore": 20, "wardScore": 30}},
+    {"championName": "K'Sante", "rawChampionName": "game_character_displayname_KSante", "isDead": false, "respawnTimer": 0, "level": 12, "position": "TOP", "team": "CHAOS", "riotId": "MU Obstinatus#EUW", "riotIdGameName": "MU Obstinatus", "summonerName": "MU Obstinatus#EUW",
+     "items": [], "scores": {"kills": 1, "deaths": 2, "assists": 0, "creepScore": 130, "wardScore": 5}},
+    {"championName": "Vi", "rawChampionName": "game_character_displayname_Vi", "isDead": false, "respawnTimer": 0, "level": 11, "position": "JUNGLE", "team": "CHAOS", "riotId": "MU Cinder#EUW", "riotIdGameName": "MU Cinder", "summonerName": "MU Cinder#EUW",
+     "items": [], "scores": {"kills": 1, "deaths": 2, "assists": 1, "creepScore": 100, "wardScore": 9}},
+    {"championName": "Azir", "rawChampionName": "game_character_displayname_Azir", "isDead": false, "respawnTimer": 0, "level": 13, "position": "MIDDLE", "team": "CHAOS", "riotId": "MU Moth#EUW", "riotIdGameName": "MU Moth", "summonerName": "MU Moth#EUW",
+     "items": [], "scores": {"kills": 1, "deaths": 1, "assists": 0, "creepScore": 150, "wardScore": 4}},
+    {"championName": "Kai'Sa", "rawChampionName": "game_character_displayname_Kaisa", "isDead": false, "respawnTimer": 0, "level": 12, "position": "BOTTOM", "team": "CHAOS", "riotId": "MU Solace#EUW", "riotIdGameName": "MU Solace", "summonerName": "MU Solace#EUW",
+     "items": [], "scores": {"kills": 0, "deaths": 1, "assists": 1, "creepScore": 145, "wardScore": 6}},
+    {"championName": "Rakan", "rawChampionName": "game_character_displayname_Rakan", "isDead": false, "respawnTimer": 0, "level": 10, "position": "UTILITY", "team": "CHAOS", "riotId": "MU Brightvale#EUW", "riotIdGameName": "MU Brightvale", "summonerName": "MU Brightvale#EUW",
+     "items": [], "scores": {"kills": 0, "deaths": 0, "assists": 2, "creepScore": 15, "wardScore": 25}}
+  ],
+  "events": {"Events": [
+    {"EventID": 0, "EventName": "GameStart", "EventTime": 0.02},
+    {"EventID": 1, "EventName": "MinionsSpawning", "EventTime": 65.0},
+    {"EventID": 2, "EventName": "FirstBlood", "EventTime": 300.1, "Recipient": "DSG Wren"},
+    {"EventID": 3, "EventName": "ChampionKill", "EventTime": 300.1, "KillerName": "DSG Wren", "VictimName": "MU Moth", "Assisters": []},
+    {"EventID": 4, "EventName": "DragonKill", "EventTime": 400.0, "DragonType": "Fire", "Stolen": "False", "KillerName": "DSG Aelune", "Assisters": []},
+    {"EventID": 5, "EventName": "HordeKill", "EventTime": 500.0, "KillerName": "DSG Aelune", "Stolen": "False", "Assisters": []},
+    {"EventID": 6, "EventName": "HordeKill", "EventTime": 502.0, "KillerName": "DSG Aelune", "Stolen": "False", "Assisters": []},
+    {"EventID": 7, "EventName": "HordeKill", "EventTime": 504.0, "KillerName": "MU Cinder", "Stolen": "True", "Assisters": []},
+    {"EventID": 8, "EventName": "FirstBrick", "EventTime": 640.0, "KillerName": "MU Obstinatus"},
+    {"EventID": 9, "EventName": "TurretKilled", "EventTime": 640.0, "TurretKilled": "Turret_T1_L_03_A", "KillerName": "MU Obstinatus", "Assisters": []},
+    {"EventID": 10, "EventName": "TurretKilled", "EventTime": 700.0, "TurretKilled": "Turret_T2_R_03_A", "KillerName": "Minion_T100R1S04N0005", "Assisters": []},
+    {"EventID": 11, "EventName": "DragonKill", "EventTime": 760.0, "DragonType": "Water", "Stolen": "False", "KillerName": "MU Cinder", "Assisters": []},
+    {"EventID": 12, "EventName": "HeraldKill", "EventTime": 900.0, "KillerName": "MU Cinder", "Stolen": "False", "Assisters": []},
+    {"EventID": 13, "EventName": "SomeFutureEvent", "EventTime": 910.0}
+  ]},
+  "gameData": {"gameMode": "CLASSIC", "gameTime": 974.5, "mapName": "Map11", "mapNumber": 11, "mapTerrain": "Default"}
+}

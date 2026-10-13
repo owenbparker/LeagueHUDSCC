@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>League HUD Control</title>
+<style>
+  @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b;
+          --left: #10815b; --right: #b8191c; --accent: #31c392; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #c0392b; }
+  .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px 20px; max-width: 1400px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
+  input, select { width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  input[type=checkbox] { width: auto; }
+  button { padding: 8px 12px; background: #252a2f; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .team { border-top: 4px solid var(--left); padding-top: 8px; }
+  .team.right { border-top-color: var(--right); }
+  .team img { width: 48px; height: 48px; object-fit: contain; background: #000; border-radius: 6px; flex: 0 0 48px; }
+  .wins { display: flex; align-items: center; gap: 8px; }
+  .wins b { font-size: 22px; min-width: 28px; text-align: center; }
+  .wins button { flex: 0 0 40px; font-size: 18px; padding: 4px; }
+  .preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #2f3d2c url("assets/preview_bg.jpg") center/cover; border-radius: 6px; overflow: hidden; }
+  .preview iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; }
+  code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; font-size: 12px; max-height: 320px; overflow: auto; }
+  .fields div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); padding: 3px 0; cursor: copy; }
+  .fields span:last-child { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+  .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .warn { color: #ffcf66; }
+  @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } main { padding: 12px 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>League HUD</h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+  <div class="status" style="margin-left:auto"><span id="clock">00:00</span></div>
+</header>
+<main>
+  <section class="wide">
+    <h2>Teams</h2>
+    <div class="teams">
+      <div class="team left" data-side="left"></div>
+      <div class="team right" data-side="right"></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="swap-teams" title="Swap names, logos and series score between left and right">⇄ Swap teams left/right</button>
+      <label class="row" style="margin:0;color:var(--text)"><input type="checkbox" id="swap-sides" style="flex:0"> Left team is on red side</label>
+      <label class="row" style="margin:0;color:var(--text)">Series
+        <select id="best-of"><option value="1">Bo1</option><option value="3">Bo3</option><option value="5">Bo5</option></select></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gold</h2>
+    <label for="gold-mode">Source</label>
+    <select id="gold-mode">
+      <option value="estimate">Estimate from CS, kills and time (closest to real)</option>
+      <option value="items">Value of items held (always a bit low)</option>
+      <option value="manual">Type it in manually</option>
+    </select>
+    <div id="manual-gold" class="row" style="margin-top:8px">
+      <input type="number" id="manual-left" placeholder="Left gold" step="100">
+      <input type="number" id="manual-right" placeholder="Right gold" step="100">
+    </div>
+    <label for="gold-scale">Estimate adjustment (1.00 = no change)</label>
+    <input type="number" id="gold-scale" step="0.01" min="0.5" max="1.5">
+    <p class="note">League's game client doesn't share other players' gold, so this is an estimate. If you see it running high or low against the in-game scoreboard, nudge the adjustment.</p>
+  </section>
+
+  <section>
+    <h2>Use it in OBS / vMix</h2>
+    <p><b>Browser source</b> (1920×1080):<br><code id="url-overlay"></code></p>
+    <p><b>vMix Data Source</b> (CSV, JSON or XML):<br><code id="url-csv"></code></p>
+    <p><b>Files</b> (updated every second):<br><code id="out-dir"></code></p>
+    <p class="note">In GT Title Designer, name your fields to match the list below, then bind them in vMix's Data Sources Manager. Image fields (logos, pips) are file paths.</p>
+    <p class="note warn" id="unknown"></p>
+  </section>
+
+  <section class="wide">
+    <h2>Preview</h2>
+    <div class="preview" id="preview"><iframe src="/overlay" title="Overlay preview"></iframe></div>
+  </section>
+
+  <section class="wide">
+    <h2>Live fields <span style="text-transform:none;letter-spacing:0">(click to copy the name)</span></h2>
+    <div class="fields" id="fields"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let state = null;
+
+function teamForm(side) {
+  return `
+    <div class="row"><img id="${side}-logo-img" alt="">
+      <div><label>Tricode</label><input data-k="tricode" maxlength="5"></div></div>
+    <label>Team name</label><input data-k="name">
+    <label>Logo</label>
+    <div class="row"><select data-k="logo" id="${side}-logo"></select>
+      <button type="button" onclick="document.getElementById('${side}-upload').click()" style="flex:0 0 auto">Upload…</button>
+      <input type="file" id="${side}-upload" accept="image/*" hidden></div>
+    <label>Series wins</label>
+    <div class="wins"><button data-w="-1">−</button><b id="${side}-wins">0</b><button data-w="1">+</button></div>`;
+}
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (data.error) alert(data.error); else apply(data);
+}
+
+for (const el of document.querySelectorAll(".team")) {
+  const side = el.dataset.side;
+  el.innerHTML = teamForm(side);
+  el.querySelectorAll("[data-k]").forEach(input => input.addEventListener("change", () =>
+    post("/api/config", { [side]: { [input.dataset.k]: input.value } })));
+  el.querySelectorAll("[data-w]").forEach(b => b.addEventListener("click", () => {
+    const wins = Math.max(0, state.config[side].wins + Number(b.dataset.w));
+    post("/api/config", { [side]: { wins } });
+  }));
+  $(`${side}-upload`).addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => post("/api/logo", { side, filename: file.name, data: reader.result.split(",")[1] });
+    reader.readAsDataURL(file);
+  });
+}
+
+$("swap-teams").onclick = () => post("/api/config", { left: state.config.right, right: state.config.left });
+$("swap-sides").onchange = e => post("/api/config", { swap_sides: e.target.checked });
+$("best-of").onchange = e => post("/api/config", { best_of: Number(e.target.value) });
+$("gold-mode").onchange = e => post("/api/config", { gold_mode: e.target.value });
+$("gold-scale").onchange = e => post("/api/config", { gold_estimate_scale: Number(e.target.value) || 1 });
+for (const side of ["left", "right"])
+  $(`manual-${side}`).onchange = e => post("/api/config", { manual_gold: { [side]: Number(e.target.value) || 0 } });
+
+async function loadLogos(cfg) {
+  const logos = await (await fetch("/api/logos")).json();
+  for (const side of ["left", "right"]) {
+    const sel = $(`${side}-logo`), current = cfg[side].logo;
+    const all = [...new Set([current, `assets/logo_${side}.png`, ...logos])];
+    sel.innerHTML = all.map(l => `<option value="${l}">${l.split("/").pop()}</option>`).join("");
+    sel.value = current;
+  }
+}
+
+function setIfIdle(el, value) { if (document.activeElement !== el) el.value = value; }
+
+function apply(s) {
+  const first = !state;
+  const logosChanged = !state || ["left", "right"].some(x => state.config[x].logo !== s.config[x].logo);
+  state = s;
+  const cfg = s.config, f = s.fields;
+  $("dot").classList.toggle("on", s.detail.connected);
+  $("status").textContent = s.detail.connected ? "Game connected" : (s.detail.error || "Waiting for a game…");
+  $("clock").textContent = f.TIMER;
+  for (const side of ["left", "right"]) {
+    const el = document.querySelector(`.team.${side}`);
+    el.querySelectorAll("input[data-k]").forEach(i => setIfIdle(i, cfg[side][i.dataset.k]));
+    $(`${side}-wins`).textContent = cfg[side].wins;
+    $(`${side}-logo-img`).src = cfg[side].logo;
+    setIfIdle($(`manual-${side}`), cfg.manual_gold[side] || "");
+  }
+  if (logosChanged) loadLogos(cfg);
+  $("swap-sides").checked = cfg.swap_sides;
+  $("best-of").value = cfg.best_of;
+  setIfIdle($("gold-mode"), cfg.gold_mode);
+  setIfIdle($("gold-scale"), cfg.gold_estimate_scale);
+  $("manual-gold").style.display = cfg.gold_mode === "manual" ? "" : "none";
+  if (first) {
+    $("url-overlay").textContent = `${location.origin}/overlay`;
+    $("url-csv").textContent = `${location.origin}/hud.csv`;
+    $("out-dir").textContent = s.output_dir;
+  }
+  $("unknown").textContent = s.detail.unknown_events.length
+    ? "New game events not used yet: " + s.detail.unknown_events.join(", ") : "";
+  $("fields").innerHTML = Object.entries(f).map(([k, v]) =>
+    `<div title="${k}" data-k="${k}"><span>${k}</span><span>${String(v).replace(/</g, "&lt;")}</span></div>`).join("");
+}
+
+$("fields").addEventListener("click", e => {
+  const row = e.target.closest("[data-k]");
+  if (row) navigator.clipboard?.writeText(row.dataset.k);
+});
+
+function fitPreview() {
+  const box = $("preview");
+  box.querySelector("iframe").style.transform = `scale(${box.clientWidth / 1920})`;
+}
+addEventListener("resize", fitPreview);
+fitPreview();
+
+async function poll() {
+  try { apply(await (await fetch("/api/state", { cache: "no-store" })).json()); }
+  catch (e) { $("dot").classList.remove("on"); $("status").textContent = "HUD app not running"; }
+  setTimeout(poll, 1000);
+}
+poll();
+</script>
+</body>
+</html>
