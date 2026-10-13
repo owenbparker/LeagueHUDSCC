@@ -9,7 +9,7 @@
 
   URL options (add to the end, e.g. /overlay?timers=0&dragons=1):
     timers=0   hide the dragon / baron countdowns in the top-left
-    diff=0     hide the gold lead under the leading team's gold
+    diff=0     hide the gold-lead tab that slides out under the leading team's gold
     dragons=1  show each team's dragons in the lower strip
     idle=0     hide the whole HUD while no game is running
 -->
@@ -29,7 +29,14 @@
   .tri { font-size: 55.5px; }
   .timer { font-size: 18.9px; }
   .grub { font-size: 20.6px; }
-  .diff { font-family: "Inter", sans-serif; font-weight: 600; font-size: 12px; fill: #d9d9d9; }
+  /* Gold lead: a team-coloured tab that slides down out of the bar. */
+  .diff-tab { transform: translateY(-19px); transition: transform .3s cubic-bezier(.5,0,.75,0); }
+  .diff-tab.show { transform: translateY(0); transition: transform .5s cubic-bezier(.2,.9,.25,1.15); }
+  .diff-tab rect { transition: x .3s ease, width .3s ease; }
+  .diff-tab text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 12.5px; letter-spacing: .02em; }
+  .diff-tab .shine { opacity: 0; }
+  .diff-tab.show .shine { animation: shine .9s .35s ease-out; }
+  @keyframes shine { 0% { opacity: .9; transform: translateX(-40px); } 100% { opacity: 0; transform: translateX(40px); } }
   .pop { animation: pop .45s ease-out; transform-box: fill-box; transform-origin: center; }
   @keyframes pop { 0% { transform: scale(1); } 35% { transform: scale(1.28); } 100% { transform: scale(1); } }
   /* Objective timers, top left (as in the reference broadcast). */
@@ -61,8 +68,29 @@
   <text id="timer" class="inter timer" x="960" y="93.65">00:00</text>
   <text id="grubs-left" class="inter grub start" x="737" y="94.28">0</text>
   <text id="grubs-right" class="inter grub end" x="1183" y="94.11">0</text>
-  <text id="diff-left" class="diff" x="833.1" y="66"></text>
-  <text id="diff-right" class="diff" x="1087.3" y="66"></text>
+  <defs>
+    <clipPath id="diff-clip"><rect x="511" y="71" width="902" height="35"/></clipPath>
+    <linearGradient id="tab-left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#31c392"/><stop offset="1" stop-color="#0f7a55"/></linearGradient>
+    <linearGradient id="tab-right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fb5a5a"/><stop offset="1" stop-color="#a51518"/></linearGradient>
+    <linearGradient id="tab-shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <!-- Clipped at the bar's lower edge so the tabs appear to slide out from under it. -->
+  <g clip-path="url(#diff-clip)">
+    <g id="diff-left" class="diff-tab" data-cx="833.1">
+      <rect y="66" height="22" rx="4" fill="url(#tab-left)"/>
+      <rect class="shine" y="71" height="17" width="24" fill="url(#tab-shine)"/>
+      <text x="833.1" y="84"></text>
+    </g>
+    <g id="diff-right" class="diff-tab" data-cx="1087.3">
+      <rect y="66" height="22" rx="4" fill="url(#tab-right)"/>
+      <rect class="shine" y="71" height="17" width="24" fill="url(#tab-shine)"/>
+      <text x="1087.3" y="84"></text>
+    </g>
+  </g>
   <g id="drakes-left"></g>
   <g id="drakes-right"></g>
 
@@ -112,6 +140,27 @@ function fit(el) {
 }
 document.fonts.ready.then(() => document.querySelectorAll("text[data-max]").forEach(fit));
 
+// Slide the lead tab in when this side leads, out when it doesn't. While
+// sliding out it keeps its last value, so the number doesn't vanish early.
+function setDiff(side, value) {
+  const tab = $("diff-" + side), text = tab.querySelector("text");
+  if (value) {
+    if (text.textContent !== value) {
+      text.textContent = value;
+      const w = Math.ceil(text.getComputedTextLength()) + 16, cx = Number(tab.dataset.cx);
+      const bg = tab.querySelector("rect"), first = !bg.style.width;
+      if (first) bg.style.transition = "none";  // size the first one instantly
+      bg.style.x = cx - w / 2 + "px";
+      bg.style.width = w + "px";
+      tab.querySelector(".shine").style.x = cx - 12 + "px";
+      if (first) { bg.getBBox(); bg.style.transition = ""; }
+    }
+    tab.classList.add("show");
+  } else {
+    tab.classList.remove("show");
+  }
+}
+
 function drawPips(side, bestOf, wins) {
   const g = $("pips-" + side), p = PIPS[side], needed = Math.floor(bestOf / 2) + 1;
   const key = bestOf + ":" + wins;
@@ -142,7 +191,7 @@ function drawDrakes(side, list) {
   list.forEach((name, i) => {
     const c = document.createElementNS(SVGNS, "circle");
     c.setAttribute("class", "drake");
-    c.setAttribute("cx", side === "left" ? 900 - i * 16 : 1020 + i * 16);
+    c.setAttribute("cx", side === "left" ? 908 - i * 13 : 1012 + i * 13);
     c.setAttribute("cy", 88); c.setAttribute("r", 6);
     c.setAttribute("fill", DRAKE_COLORS[name] || "#ccc");
     g.appendChild(c);
@@ -162,7 +211,7 @@ function render(s) {
     setText(`gold-${side}`, f[`GOLD ${S}`]);
     setText(`kills-${side}`, f[`KILLS ${S}`]);
     setText(`grubs-${side}`, f[`VOID GRUB ${S}`]);
-    setText(`diff-${side}`, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
+    setDiff(side, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
     const logo = cfg[side].logo;
     if ($(`logo-${side}`).getAttribute("href") !== logo) $(`logo-${side}`).setAttribute("href", logo);
     drawPips(side, cfg.best_of, cfg[side].wins);

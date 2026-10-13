@@ -52,7 +52,7 @@ Optional switches on the end of the URL:
 | | |
 |---|---|
 | `?timers=0` | hide the baron/dragon countdowns in the top left |
-| `?diff=0` | hide the gold lead under the leading team's gold |
+| `?diff=0` | hide the gold-lead tab (it slides out in the leading team's colour under their gold, and back in when the lead flips or disappears) |
 | `?dragons=1` | show each team's dragons as coloured dots in the lower strip |
 | `?idle=0` | hide the bar when no game is running |
 
