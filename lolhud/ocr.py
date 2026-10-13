@@ -59,16 +59,26 @@ def scaled_box(box, width, height):
     return (round(left), round(y * s), round(left + w * s), round((y + h) * s))
 
 
-def prepare(crop):
+# Ways to prepare a number for text recognition, tried in order until one
+# reads as gold. Windows OCR is fussy about single short words, so having a
+# couple of alternatives makes a big difference: (scale, sharp edges?, border).
+VARIANTS = [(4, False, 24), (4, True, 24), (3, False, 48), (6, True, 32)]
+
+
+def prepare(crop, variant=0):
     """Bright coloured text on dark teal -> large black text on white."""
     from PIL import Image, ImageChops, ImageOps
+    scale, sharp, border = VARIANTS[variant]
     r, g, b = crop.convert("RGB").split()
     # Brightest channel: the blue or red digits stand out, the teal bar doesn't.
     gray = ImageChops.lighter(ImageChops.lighter(r, g), b)
     gray = ImageOps.autocontrast(gray, cutoff=2)
-    big = gray.resize((gray.width * 4, gray.height * 4), Image.LANCZOS)
-    big = big.point(lambda v: 0 if v > 110 else 255)  # black text on white
-    return ImageOps.expand(big, border=24, fill=255)
+    big = gray.resize((gray.width * scale, gray.height * scale), Image.LANCZOS)
+    if sharp:
+        big = big.point(lambda v: 0 if v > 110 else 255)  # black text on white
+    else:
+        big = ImageOps.invert(big)  # keep smooth edges
+    return ImageOps.expand(big, border=border, fill=255)
 
 
 class WindowsOcr:
@@ -213,9 +223,13 @@ def read_image(image, ocr, height=None, boxes=None):
     out = {}
     for team, box in boxes.items():
         crop = image.crop(scaled_box(box, image.width, height))
-        ready = prepare(crop)
-        text = ocr.read(ready)
-        out[team] = {"text": text, "value": parse_gold(text), "image": ready}
+        for variant in range(len(VARIANTS)):
+            ready = prepare(crop, variant)
+            text = ocr.read(ready)
+            value = parse_gold(text)
+            if value is not None:
+                break
+        out[team] = {"text": text, "value": value, "image": ready, "variant": variant}
     return out
 
 
@@ -341,7 +355,7 @@ def main(argv):
     height = int(argv[3]) if len(argv) > 3 else None
     result = read_image(image, WindowsOcr(), height)
     for team, r in result.items():
-        print(f"{team}: text={r['text']!r} value={r['value']}")
+        print(f"{team}: text={r['text']!r} value={r['value']} (variant {r['variant']})")
     if len(argv) >= 3:
         expected = {"blue": int(argv[1]), "red": int(argv[2])}
         if any(result[t]["value"] != v for t, v in expected.items()):
