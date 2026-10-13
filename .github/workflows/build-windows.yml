@@ -33,9 +33,14 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
-      - name: Read gold from a real spectator screenshot (Windows text recognition)
-        # Top 60px of a 1920x1080 frame that showed 8.0k / 8.9k.
-        run: python -m lolhud.ocr tests/fixtures/spectator_topbar.png 8000 8900 1079
+      - name: Read the top bar from real spectator screenshots (Windows text recognition)
+        # Top 60px of a 1920x1080 frame: 8.0k / 8.9k gold, all objectives 0;
+        # then the same frame with red on 3 grubs. --counts is dragons,heralds,grubs.
+        run: |
+          python -m lolhud.ocr tests/fixtures/spectator_topbar.png --height 1079 --gold 8000 8900 --counts 0,0,0 0,0,0
+          if ($LASTEXITCODE) { exit 1 }
+          python -m lolhud.ocr tests/fixtures/spectator_topbar_grubs3.png --height 1079 --gold 8000 8900 --counts 0,0,0 0,0,3
+          if ($LASTEXITCODE) { exit 1 }
 
       - name: Stamp the version
         shell: pwsh

@@ -118,6 +118,13 @@ def tally_events(events, names):
                 obj[killer_team]["atakhans"] += 1
         elif kind not in IGNORED_EVENTS:
             unknown.add(kind)
+            continue
+        else:
+            continue
+        # An objective we couldn't credit to a team: say so, so it can be fixed.
+        if kind in ("DragonKill", "BaronKill", "HeraldKill") or "horde" in low or "grub" in low or "atakhan" in low:
+            if not killer_team:
+                unknown.add(f"{kind} by {ev.get('KillerName')!r} (team unknown)")
     return obj, last, last_team, unknown
 
 
@@ -148,10 +155,14 @@ def asset_path(rel):
 SCREEN_TEAM = {"ORDER": "blue", "CHAOS": "red"}
 
 
-def build_state(raw, cfg, ddragon=None, screen_gold=None):
-    """screen_gold: {"blue": 8000, "red": 8900} read off the spectator top bar,
-    or None (not available / not readable right now)."""
-    """Return {"fields": flat dict for CSV/vMix, "detail": extra structure}."""
+def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
+    """Return {"fields": flat dict for CSV/vMix, "detail": extra structure}.
+
+    screen_gold: {"blue": 8000, "red": 8900} and screen_counts:
+    {"blue": {"dragons": 1, "heralds": 0, "grubs": 3}, "red": {...}} as read
+    off the spectator top bar, or None when not available right now. When
+    present they're used instead of the game's events, which don't report
+    every objective."""
     connected = raw is not None
     raw = raw or {}
     players = raw.get("allPlayers") or []
@@ -165,6 +176,21 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None):
     names = NameIndex(players)
     obj, last, last_team, unknown = tally_events(events, names)
     timers = cfg["timers"]
+    dragon_count = {t: len(obj[t]["dragons"]) for t in obj}
+    if screen_counts and connected:
+        for team, colour in SCREEN_TEAM.items():
+            seen = screen_counts.get(colour) or {}
+            if seen.get("grubs") is not None:
+                obj[team]["grubs"] = seen["grubs"]
+            if seen.get("heralds") is not None:
+                obj[team]["heralds"] = seen["heralds"]
+            if seen.get("dragons") is not None:
+                dragon_count[team] = seen["dragons"]
+        # Objectives the events missed still end their timers.
+        grubs_seen = sum(obj[t]["grubs"] for t in obj)
+        last["grubs"] = last["grubs"] + [game_time] * max(0, grubs_seen - len(last["grubs"]))
+        if last["herald"] is None and any(obj[t]["heralds"] for t in obj):
+            last["herald"] = game_time
 
     f = {"STATUS": "LIVE" if connected else "WAITING", "TIMER": fmt_clock(game_time),
          "GAME TIME SECONDS": int(game_time)}
@@ -198,7 +224,7 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None):
         f[f"GOLD {S}"] = goldlib.format_gold(gold_raw[side], cfg["gold_decimals"], cfg["decimal_separator"])
         f[f"GOLD RAW {S}"] = int(gold_raw[side])
         f[f"VOID GRUB {S}"] = o["grubs"]
-        f[f"DRAGONS {S}"] = len(o["dragons"])
+        f[f"DRAGONS {S}"] = dragon_count[team]
         f[f"DRAGON TYPES {S}"] = ",".join(o["dragons"])
         f[f"ELDERS {S}"] = o["elders"]
         f[f"HERALDS {S}"] = o["heralds"]
@@ -219,7 +245,7 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None):
 
     # Objective timers: a countdown, "LIVE", or blank when the objective is
     # gone for the game (or not up yet, for elder) or switched off.
-    soul_taken = any(len(obj[t]["dragons"]) >= 4 for t in obj)
+    soul_taken = any(n >= 4 for n in dragon_count.values())
     if last["dragon"] is None:
         dragon_spawn = timers["dragon_first"]
     else:

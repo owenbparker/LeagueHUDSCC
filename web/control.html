@@ -142,7 +142,7 @@
         <button type="button" id="screen-test" style="flex:0 0 auto">Test read</button>
       </div>
       <div id="screen-result" class="screen-result" hidden></div>
-      <p class="note">Reads the gold numbers off the League window on this PC. Keep the spectator top bar showing. Falls back to the estimate below when it can't be read.</p>
+      <p class="note">Reads the gold and the dragon, herald and grub counters off the League window on this PC. Keep the spectator top bar showing. Falls back to the estimate below when it can't be read.</p>
     </div>
     <label for="gold-scale">Estimate adjustment (1.00 = no change)</label>
     <input type="number" id="gold-scale" step="0.01" min="0.5" max="1.5">
@@ -368,8 +368,12 @@ $("screen-test").onclick = async () => {
   box.innerHTML = '<span class="note">Reading…</span>';
   const r = await (await fetch("/api/screen-gold/test", { method: "POST", body: "{}" })).json();
   if (!r.blue) { box.innerHTML = `<span class="warn">${r.error}</span>`; return; }
+  const counts = c => c ? ["dragons", "heralds", "grubs"].map(n =>
+    `${n} <b>${c.values[n] ?? '<span class="warn">?</span>'}</b>`).join(" · ") : "";
   box.innerHTML = ["blue", "red"].map(t => `<figure><img src="${r[t].image}" alt="">
-    <figcaption>${t}: read <b>${r[t].text || "nothing"}</b> → ${r[t].value != null ? (r[t].value / 1000).toFixed(1) + "k" : '<span class="warn">not a gold value</span>'}</figcaption></figure>`).join("");
+    <figcaption>${t} gold: read <b>${r[t].text || "nothing"}</b> → ${r[t].value != null ? (r[t].value / 1000).toFixed(1) + "k" : '<span class="warn">not a gold value</span>'}</figcaption>
+    ${r.counters[t] ? `<img src="${r.counters[t].image}" alt="" style="margin-top:6px"><figcaption>${counts(r.counters[t])}</figcaption>` : ""}
+    </figure>`).join("") + (r.counters_error ? `<span class="warn">Counters: ${r.counters_error}</span>` : "");
 };
 
 // Updates: a button in the top bar when GitHub has a newer version.

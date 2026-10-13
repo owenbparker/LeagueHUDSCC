@@ -141,6 +141,29 @@ class ScreenGoldTests(unittest.TestCase):
         self.assertEqual(state["detail"]["gold_source"], "estimate")
         self.assertGreater(state["fields"]["GOLD RAW LEFT"], 0)
 
+    def test_screen_counters_override_events(self):
+        counts = {"blue": {"dragons": 2, "heralds": 1, "grubs": 0}, "red": {"dragons": 0, "heralds": 0, "grubs": 3}}
+        f = build_state(load(), cfg(), screen_counts=counts)["fields"]
+        self.assertEqual((f["DRAGONS LEFT"], f["HERALDS LEFT"], f["VOID GRUB LEFT"]), (2, 1, 0))
+        self.assertEqual((f["DRAGONS RIGHT"], f["HERALDS RIGHT"], f["VOID GRUB RIGHT"]), (0, 0, 3))
+        # A counter that couldn't be read keeps the events' number.
+        counts["red"]["grubs"] = None
+        f = build_state(load(), cfg(), screen_counts=counts)["fields"]
+        self.assertEqual(f["VOID GRUB RIGHT"], 1)
+
+    def test_screen_counters_end_timers(self):
+        raw = load()
+        raw["events"]["Events"] = raw["events"]["Events"][:2]   # no grub/herald events at all
+        raw["gameData"]["gameTime"] = 950.0
+        counts = {"blue": {"dragons": 0, "heralds": 1, "grubs": 0}, "red": {"dragons": 0, "heralds": 0, "grubs": 3}}
+        f = build_state(raw, cfg(), screen_counts=counts)["fields"]
+        self.assertEqual((f["NEXT GRUBS"], f["NEXT HERALD"]), ("", ""))
+
+    def test_parse_count(self):
+        from lolhud.ocr import parse_count
+        for text, value in {"3": 3, "O": 0, "o": 0, "l": 1, "11": 11, "": None, "abc": None}.items():
+            self.assertEqual(parse_count(text), value, text)
+
     def test_parse_gold(self):
         from lolhud.ocr import parse_gold
         cases = {"8.0k": 8000, "8,9k": 8900, "B.Ok": 8000, "12.4K": 12400, "100.2k": 100200,

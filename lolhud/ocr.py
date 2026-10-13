@@ -25,6 +25,12 @@ from .log import log
 # They scale with the window's height and stay centred, like the top bar.
 REF_HEIGHT = 1080
 DEFAULT_BOXES = {"blue": [804, 16, 54, 24], "red": [1106, 16, 54, 24]}
+# The objective counters next to their icons (room for two digits).
+COUNTER_BOXES = {
+    "blue": {"dragons": [517, 16, 26, 24], "heralds": [592, 16, 26, 24], "grubs": [662, 16, 26, 24]},
+    "red": {"grubs": [1250, 16, 26, 24], "heralds": [1328, 16, 26, 24], "dragons": [1407, 16, 26, 24]},
+}
+COUNTERS = ("dragons", "heralds", "grubs")
 WINDOW_TITLE = "League of Legends (TM) Client"
 WINDOW_CLASS = "RiotWindowClass"
 
@@ -94,7 +100,7 @@ class WindowsOcr:
             raise RuntimeError("Windows text recognition isn't installed for any of your languages")
         self.engine = engine
 
-    def read(self, image):
+    def recognize(self, image):
         from winrt.windows.graphics.imaging import BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap
         from winrt.windows.storage.streams import DataWriter
         rgba = image.convert("RGBA")
@@ -110,7 +116,19 @@ class WindowsOcr:
         async def run():
             return await self.engine.recognize_async(bitmap)
 
-        return asyncio.run(run()).text
+        return asyncio.run(run())
+
+    def read(self, image):
+        return self.recognize(image).text
+
+    def read_words(self, image):
+        """[(text, x_centre), ...] for every word found."""
+        words = []
+        for line in self.recognize(image).lines:
+            for word in line.words:
+                rect = word.bounding_rect
+                words.append((word.text, rect.x + rect.width / 2))
+        return words
 
 
 # --- capturing the League window -------------------------------------------
@@ -233,8 +251,52 @@ def read_image(image, ocr, height=None, boxes=None):
     return out
 
 
+def parse_count(text):
+    """"3" -> 3, "O" -> 0, "l1" -> 11. None if it isn't a small number."""
+    digits = re.sub(r"\D", "", (text or "").translate(_FIXES))
+    return int(digits) if 1 <= len(digits) <= 2 else None
+
+
+def read_counters(image, ocr, height=None, boxes=None):
+    """Read each team's dragon / herald / grub counters.
+
+    Windows OCR is poor at lone characters, so each team's digits are laid
+    out in one row with wide gaps and read as a line of words; each word's
+    position says which counter it belongs to."""
+    from PIL import Image
+    height = height or image.height
+    boxes = boxes or COUNTER_BOXES
+    out = {}
+    for team, slots in boxes.items():
+        best = None
+        for variant in range(len(VARIANTS)):
+            pieces = [(name, prepare(image.crop(scaled_box(box, image.width, height)), variant))
+                      for name, box in slots.items()]
+            gap = 120
+            row = Image.new("L", (sum(p.width for _, p in pieces) + gap * (len(pieces) + 1),
+                                  max(p.height for _, p in pieces)), 255)
+            spans, x = {}, gap
+            for name, piece in pieces:
+                row.paste(piece, (x, 0))
+                spans[name] = (x - gap / 2, x + piece.width + gap / 2)
+                x += piece.width + gap
+            words = ocr.read_words(row)
+            values = {}
+            for name, (lo, hi) in spans.items():
+                found = [t for t, cx in words if lo <= cx < hi]
+                values[name] = parse_count("".join(found)) if found else None
+            read = sum(v is not None for v in values.values())
+            if best is None or read > best[0]:
+                best = (read, values, row, words)
+            if read == len(slots):
+                break
+        out[team] = {"values": best[1], "image": best[2], "text": " ".join(t for t, _ in best[3])}
+    return out
+
+
 class ScreenGold:
-    """Keeps reading the gold in the background and keeps the last good values."""
+    """Keeps reading the gold and objective counters in the background and
+    keeps the last good values."""
 
     STALE_AFTER = 5.0  # seconds without a good read before the estimate takes over
 
@@ -242,6 +304,9 @@ class ScreenGold:
         self.config = config
         self.values = {"blue": None, "red": None}
         self.read_at = 0.0
+        self.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
+        self.counts_read_at = 0.0
+        self._pending_counts = {}
         self.status = "starting"
         self.ocr = None
         self._pending = {"blue": None, "red": None}
@@ -277,9 +342,31 @@ class ScreenGold:
             return None
         return dict(self.values)
 
+    def fresh_counts(self):
+        """Last good counters ({"blue": {"dragons": 1, ...}, "red": {...}}) if recent."""
+        if time.time() - self.counts_read_at > self.STALE_AFTER:
+            return None
+        return {t: dict(c) for t, c in self.counts.items()}
+
     def reset(self):
         self.values = {"blue": None, "red": None}
         self._pending = {"blue": None, "red": None}
+        self.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
+        self._pending_counts = {}
+
+    def _accept_count(self, team, name, value):
+        """Counters only go up, a few at a time; anything else needs two
+        reads in a row (a new game, or a misread corrected)."""
+        prev = self.counts[team][name]
+        key = (team, name)
+        if value is None:
+            return prev is not None  # keep the last good value for now
+        if prev is None or prev <= value <= prev + 3 or self._pending_counts.get(key) == value:
+            self.counts[team][name] = value
+            self._pending_counts.pop(key, None)
+            return True
+        self._pending_counts[key] = value
+        return False
 
     def _accept(self, team, value):
         """Team gold only goes up, and not by huge jumps. A surprising value is
@@ -301,7 +388,12 @@ class ScreenGold:
         if not captured:
             return None, reason
         image, height = captured
-        result = read_image(image, self.ocr, height, self.config.get().get("gold_ocr_boxes"))
+        cfg = self.config.get()
+        result = read_image(image, self.ocr, height, cfg.get("gold_ocr_boxes"))
+        try:
+            result["_counters"] = read_counters(image, self.ocr, height, cfg.get("counter_ocr_boxes"))
+        except Exception as e:  # counters are a bonus; never lose the gold over them
+            result["_counters"] = {"error": repr(e)}
         return result, None
 
     def _run(self):
@@ -311,6 +403,12 @@ class ScreenGold:
                 try:
                     result, reason = self.read_once()
                     if result:
+                        counters = result.pop("_counters", {})
+                        if "error" not in counters:
+                            accepted = [self._accept_count(t, n, v) for t, r in counters.items()
+                                        for n, v in r["values"].items()]
+                            if all(accepted):
+                                self.counts_read_at = time.time()
                         ok = [self._accept(t, r["value"]) for t, r in result.items()]
                         if all(ok):
                             self.read_at = time.time()
@@ -339,29 +437,55 @@ class ScreenGold:
             return {"ok": False, "error": repr(e)}
         if not result:
             return {"ok": False, "error": reason}
-        out = {"ok": all(r["value"] is not None for r in result.values())}
-        for team, r in result.items():
+
+        def data_url(image):
             buf = io.BytesIO()
-            r["image"].save(buf, "PNG")
-            out[team] = {"text": r["text"], "value": r["value"],
-                         "image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
+            image.save(buf, "PNG")
+            return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+        counters = result.pop("_counters", {})
+        out = {"ok": all(r["value"] is not None for r in result.values()), "counters": {}}
+        for team, r in result.items():
+            out[team] = {"text": r["text"], "value": r["value"], "image": data_url(r["image"])}
+        if "error" in counters:
+            out["counters_error"] = counters["error"]
+        else:
+            for team, r in counters.items():
+                out["counters"][team] = {"values": r["values"], "text": r["text"], "image": data_url(r["image"])}
         return out
 
 
 def main(argv):
-    """Read a saved screenshot: python -m lolhud.ocr screenshot.png [expected_blue expected_red]"""
+    """Read a saved screenshot (the top of a spectator screen):
+
+    python -m lolhud.ocr IMAGE [--height 1079] [--gold 8000 8900] [--counts 0,0,0 0,0,3]
+
+    --counts gives dragons,heralds,grubs for blue then red. Exits 1 on a mismatch.
+    """
+    import argparse
     from PIL import Image
-    image = Image.open(argv[0])
-    height = int(argv[3]) if len(argv) > 3 else None
-    result = read_image(image, WindowsOcr(), height)
-    for team, r in result.items():
-        print(f"{team}: text={r['text']!r} value={r['value']} (variant {r['variant']})")
-    if len(argv) >= 3:
-        expected = {"blue": int(argv[1]), "red": int(argv[2])}
-        if any(result[t]["value"] != v for t, v in expected.items()):
-            print("MISMATCH")
-            return 1
-    return 0
+    parser = argparse.ArgumentParser()
+    parser.add_argument("image")
+    parser.add_argument("--height", type=int, help="full window height the image was cut from")
+    parser.add_argument("--gold", nargs=2, type=int, metavar=("BLUE", "RED"))
+    parser.add_argument("--counts", nargs=2, metavar=("BLUE", "RED"))
+    args = parser.parse_args(argv)
+    image = Image.open(args.image)
+    ocr, ok = WindowsOcr(), True
+    gold = read_image(image, ocr, args.height)
+    for team, r in gold.items():
+        print(f"{team} gold: text={r['text']!r} value={r['value']} (variant {r['variant']})")
+        if args.gold and r["value"] != args.gold[0 if team == "blue" else 1]:
+            ok = False
+    counters = read_counters(image, ocr, args.height)
+    for i, (team, r) in enumerate(counters.items()):
+        print(f"{team} counters: {r['values']} (words: {r['text']!r})")
+        if args.counts:
+            expected = dict(zip(COUNTERS, map(int, args.counts[0 if team == "blue" else 1].split(","))))
+            if r["values"] != expected:
+                ok = False
+    print("OK" if ok else "MISMATCH")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

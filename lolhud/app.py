@@ -70,8 +70,10 @@ class HudApp:
     def refresh(self, fetch=True):
         if fetch:
             self.raw = self.source.fetch()
-        screen = self.screen_gold.fresh() if self.mode == "live" else None
-        state = build_state(self.raw, self.config.get(), self.ddragon, screen)
+        live = self.mode == "live"
+        state = build_state(self.raw, self.config.get(), self.ddragon,
+                            self.screen_gold.fresh() if live else None,
+                            self.screen_gold.fresh_counts() if live else None)
         state["detail"]["error"] = self.source.last_error
         with self._lock:
             self.state = state
@@ -95,10 +97,15 @@ class HudApp:
         if error and error != self._last_error:
             log(error, "warn")
         self._last_error = error
+        events = {e.get("EventName"): e for e in ((self.raw or {}).get("events") or {}).get("Events") or []}
         for name in state["detail"]["unknown_events"]:
             if name not in self._seen_unknown:
                 self._seen_unknown.add(name)
-                log(f"New game event not used yet: {name}", "warn")
+                if "(team unknown)" in name:
+                    log(f"Couldn't tell which team took: {name}", "warn")
+                else:
+                    # Include one example, so the HUD can learn to use it.
+                    log(f"New game event not used yet: {name} {json.dumps(events.get(name, {}))}", "warn")
 
     def run_poller(self):
         while not self._stop.is_set():
