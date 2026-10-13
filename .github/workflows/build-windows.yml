@@ -4,6 +4,8 @@
 # Each release also gets SCC-LoL-HUD-Setup.exe, an installer that downloads
 # the latest release from GitHub when it runs.
 #
+# A commit with [no release] in its message builds and tests without publishing.
+#
 # Every run also leaves the zip on the run's summary page (Actions tab).
 name: Build Windows app
 
@@ -73,6 +75,28 @@ jobs:
           Remove-Item "$app\smoke-test.txt", "$app\config.json" -ErrorAction SilentlyContinue
           Remove-Item "$app\output", "$app\_update" -Recurse -ErrorAction SilentlyContinue
 
+      - name: Check the HUD-on-game window (see-through and click-through)
+        # Puts a red window on screen with the HUD window over it, then checks
+        # the red shows through, the HUD is drawn and clicks pass through.
+        timeout-minutes: 4
+        shell: pwsh
+        run: |
+          $app = "dist\LeagueHUD"
+          $p = Start-Process "$app\LeagueHUD.exe" -ArgumentList '--overlay-test', '--demo', '--port', '8798' -PassThru
+          if (-not $p.WaitForExit(150000)) { $p.Kill(); Write-Host "Timed out" }
+          New-Item overlay-test -ItemType Directory -Force | Out-Null
+          Move-Item "$app\overlay-test*" overlay-test\ -ErrorAction SilentlyContinue
+          Remove-Item "$app\config.json" -ErrorAction SilentlyContinue
+          Remove-Item "$app\output", "$app\_update" -Recurse -ErrorAction SilentlyContinue
+          Get-Content overlay-test\overlay-test.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "HUD window check failed (exit code $($p.ExitCode))" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: overlay-test
+          path: overlay-test
+
       - name: Add readme
         shell: pwsh
         run: Copy-Item README.md dist\LeagueHUD\
@@ -83,6 +107,7 @@ jobs:
           path: dist/LeagueHUD
 
       - name: Build the installer
+        if: "!contains(github.event.head_commit.message, '[no release]')"
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
@@ -91,6 +116,7 @@ jobs:
           if ($LASTEXITCODE) { exit 1 }
 
       - name: Publish release
+        if: "!contains(github.event.head_commit.message, '[no release]')"
         # The app zip and the installer go up together, so the latest release
         # always has both (the installer link never 404s mid-build).
         shell: pwsh
@@ -103,6 +129,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Test the installer (silent; installs the release just published)
+        if: "!contains(github.event.head_commit.message, '[no release]')"
         shell: pwsh
         run: |
           $dir = "$env:RUNNER_TEMP\SCC LoL HUD test"

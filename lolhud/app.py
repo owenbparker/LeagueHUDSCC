@@ -49,6 +49,7 @@ class HudApp:
         self.server = None
         self.screen_gold = ScreenGold(config)
         self.updater = Updater()
+        self.overlay_window = None  # the desktop app's HUD-over-the-game window
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._was_connected = None
@@ -143,6 +144,7 @@ class HudApp:
                   "age": round(time.time() - sg.read_at, 1) if sg.read_at else None}
         return {"mode": self.mode, "demo_speed": self.demo_speed, "network": network, "port": port,
                 "screen_gold": screen, "update": self.updater.info(),
+                "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
     def snapshot(self):
@@ -377,6 +379,10 @@ def make_handler(app):
                     app.updater.check()
                 elif path == "/api/update/install":
                     app.updater.install_in_background()
+                elif path == "/api/overlay-window":
+                    if not app.overlay_window:
+                        raise ValueError("The HUD window is only available in the desktop app")
+                    app.overlay_window.set(bool(body.get("open")), body.get("screen"))
                 elif path == "/api/screen-gold/test":
                     return self._send(json.dumps(app.screen_gold.test()))
                 else:

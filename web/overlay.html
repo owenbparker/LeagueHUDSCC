@@ -14,6 +14,8 @@
     diff=0     hide the gold-lead tab
     dragons=1  show each team's dragons as coloured dots
     idle=0     hide the whole HUD while no game is running
+    fit=1      scale the HUD to the window, centred at the top (used by the
+               desktop app's window over the game, whatever the screen size)
 -->
 <style>
   html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
@@ -74,6 +76,16 @@ const params = new URLSearchParams(location.search);
 const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
 const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true) };
 const $ = id => document.getElementById(id);
+if (opt("fit", false)) {
+  // Scales with the screen's height like League's own top bar does.
+  const fit = () => {
+    const k = Math.min(innerHeight / 1080, innerWidth / 1920);
+    Object.assign(document.body.style, { transformOrigin: "0 0",
+      transform: `translateX(${(innerWidth - 1920 * k) / 2}px) scale(${k})` });
+  };
+  addEventListener("resize", fit);
+  fit();
+}
 const SVGNS = "http://www.w3.org/2000/svg";
 const SIDES = ["left", "right"];
 const DRAKE_COLORS = { Infernal: "#ff6a2b", Ocean: "#3fb8ff", Mountain: "#b9874f", Cloud: "#c7e4f2",

@@ -102,6 +102,10 @@
   <select id="demo-speed" title="Demo speed" style="width:auto">
     <option value="1">1x</option><option value="4">4x</option><option value="8">8x</option><option value="30">30x</option>
   </select>
+  <div class="seg" id="ow" hidden title="Draws the HUD in a see-through window over the whole screen, on top of League. Clicks go through it to the game. Set League to Borderless or Windowed (not Fullscreen).">
+    <button id="ow-btn">Show HUD on game</button>
+    <select id="ow-screen" title="Which screen the HUD covers" style="width:auto;border:0;border-left:1px solid var(--line);border-radius:0"></select>
+  </div>
   <div class="status" style="margin-left:auto">
     <button id="update" class="update" hidden></button>
     <span class="version" id="version" title="Check for updates"></span>
@@ -367,6 +371,8 @@ $("bg-file").addEventListener("change", e => {
   xhr.onerror = () => alert("Couldn't copy the video");
   xhr.send(file);
 });
+$("ow-btn").onclick = () => post("/api/overlay-window", { open: !state.app.overlay_window.open });
+$("ow-screen").onchange = e => post("/api/overlay-window", { open: state.app.overlay_window.open, screen: Number(e.target.value) });
 $("bg-tint").onchange = e => post("/api/config", { bg_tint: e.target.checked });
 let speedTimer = null;
 let brightTimer = null;
@@ -503,6 +509,16 @@ function apply(s) {
     $("out-dir").textContent = s.output_dir;
   }
   document.querySelectorAll("#mode button").forEach(b => b.classList.toggle("on", b.dataset.mode === app.mode));
+  const ow = app.overlay_window;
+  $("ow").hidden = !ow.available;
+  if (ow.available) {
+    $("ow-btn").classList.toggle("on", ow.open);
+    $("ow-btn").textContent = ow.open ? "HUD on game: on" : "Show HUD on game";
+    const opts = ow.screens.map((label, i) => `<option value="${i}">${label}</option>`).join("");
+    if ($("ow-screen").dataset.opts !== opts) { $("ow-screen").innerHTML = opts; $("ow-screen").dataset.opts = opts; }
+    $("ow-screen").hidden = ow.screens.length < 2;
+    setIfIdle($("ow-screen"), String(ow.screen));
+  }
   $("mode-badge").textContent = app.mode === "live" ? "" : app.mode.toUpperCase();
   $("demo-speed").hidden = app.mode !== "demo";
   setIfIdle($("demo-speed"), String(app.demo_speed));

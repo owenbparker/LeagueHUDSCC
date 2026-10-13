@@ -93,6 +93,7 @@ def main():
     add_arguments(parser)
     parser.add_argument("--debug", action="store_true", help="allow right-click > Inspect in the window")
     parser.add_argument("--smoke-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--overlay-test", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     app = build_app(args)
@@ -114,11 +115,31 @@ def main():
         app.stop()
         return 0 if ok else 1
 
+    if args.overlay_test:
+        import webview
+        from .overlay_window import self_test
+        result = {}
+        holder = webview.create_window("overlay-test", html="", hidden=True)
+
+        def run():
+            try:
+                result["ok"] = self_test(port, DATA_DIR)
+            finally:
+                holder.destroy()
+        webview.start(run)
+        app.stop()
+        return 0 if result.get("ok") else 1
+
     url = f"http://127.0.0.1:{port}/control"
     try:
         import webview
+        from .overlay_window import OverlayWindow
         window = webview.create_window(f"{TITLE} {app.updater.current}", url, width=1280, height=720,
                                        min_size=(960, 600), background_color="#0e1012", text_select=True)
+        if own_server:
+            app.overlay_window = OverlayWindow(app.config, port)
+            # Closing the control panel closes the HUD window too.
+            window.events.closed += app.overlay_window.close
         # Installing an update closes the window; the updater restarts the app.
         app.updater.on_exit = window.destroy
         webview.start(debug=args.debug)

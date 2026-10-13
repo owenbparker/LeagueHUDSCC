@@ -52,6 +52,8 @@ DEFAULTS = {
     "bg_tint": True,
     # Brightness of the video lines (1.0 = as filmed / tinted).
     "bg_brightness": 1.0,
+    # Which screen the "HUD on the game" window covers (0 = main screen).
+    "overlay_screen": 0,
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).
     "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when
