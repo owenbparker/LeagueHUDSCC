@@ -257,40 +257,107 @@ def parse_count(text):
     return int(digits) if 1 <= len(digits) <= 2 else None
 
 
-def read_counters(image, ocr, height=None, boxes=None):
-    """Read each team's dragon / herald / grub counters.
+# ".0k" cut from a real gold number on a 1079px-high spectator screen.
+# Windows OCR won't read a lone digit, but it reads gold values reliably, so
+# each counter digit is read with this stuck on the end: "3" -> "3.0k".
+_SUFFIX_HEIGHT = 1079
+_SUFFIX_PNG = (
+    "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"
+)
 
-    Windows OCR is poor at lone characters, so each team's digits are laid
-    out in one row with wide gaps and read as a line of words; each word's
-    position says which counter it belongs to."""
+
+def _suffix(height):
+    import base64
     from PIL import Image
+    img = Image.open(io.BytesIO(base64.b64decode(_SUFFIX_PNG))).convert("RGB")
+    s = height / _SUFFIX_HEIGHT
+    return img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.LANCZOS)
+
+
+def _text_only(img):
+    """Keep the coloured (blue/red) text, blank the grey/beige icons and bar."""
+    from PIL import Image, ImageChops, ImageFilter
+    rgb = img.convert("RGB")
+    r, g, b = rgb.split()
+    hi = ImageChops.lighter(ImageChops.lighter(r, g), b)
+    lo = ImageChops.darker(ImageChops.darker(r, g), b)
+    colourful = ImageChops.subtract(hi, lo).point(lambda v: 255 if v > 70 else 0)
+    colourful = colourful.filter(ImageFilter.MaxFilter(3))  # keep the soft edges of each digit
+    return Image.composite(rgb, Image.new("RGB", rgb.size), colourful)
+
+
+def counter_image(crop, height):
+    """The counter's digit(s) followed by ".0k", or None if there's no digit."""
+    from PIL import Image
+    text = _text_only(crop)
+    box = text.convert("L").point(lambda v: 255 if v > 60 else 0).getbbox()
+    if not box:
+        return None
+    digits = text.crop((0, 0, box[2], text.height))
+    suffix = _text_only(_suffix(height))
+    gap = max(1, round(height / 1080))
+    out = Image.new("RGB", (digits.width + gap + suffix.width, max(digits.height, suffix.height)))
+    out.paste(digits, (0, 0))
+    out.paste(suffix, (digits.width + gap, 0))
+    return out
+
+
+def read_counters(image, ocr, height=None, boxes=None):
+    """Read each team's dragon / herald / grub counters."""
     height = height or image.height
     boxes = boxes or COUNTER_BOXES
     out = {}
     for team, slots in boxes.items():
-        best = None
-        for variant in range(len(VARIANTS)):
-            pieces = [(name, prepare(image.crop(scaled_box(box, image.width, height)), variant))
-                      for name, box in slots.items()]
-            gap = 120
-            row = Image.new("L", (sum(p.width for _, p in pieces) + gap * (len(pieces) + 1),
-                                  max(p.height for _, p in pieces)), 255)
-            spans, x = {}, gap
-            for name, piece in pieces:
-                row.paste(piece, (x, 0))
-                spans[name] = (x - gap / 2, x + piece.width + gap / 2)
-                x += piece.width + gap
-            words = ocr.read_words(row)
-            values = {}
-            for name, (lo, hi) in spans.items():
-                found = [t for t, cx in words if lo <= cx < hi]
-                values[name] = parse_count("".join(found)) if found else None
-            read = sum(v is not None for v in values.values())
-            if best is None or read > best[0]:
-                best = (read, values, row, words)
-            if read == len(slots):
-                break
-        out[team] = {"values": best[1], "image": best[2], "text": " ".join(t for t, _ in best[3])}
+        values, texts, shown = {}, [], []
+        for name, box in slots.items():
+            combined = counter_image(image.crop(scaled_box(box, image.width, height)), height)
+            value, text = None, ""
+            if combined is not None:
+                for variant in range(len(VARIANTS)):
+                    ready = prepare(combined, variant)
+                    text = ocr.read(ready)
+                    gold = parse_gold(text)
+                    if gold is not None and gold % 1000 == 0:
+                        value = gold // 1000
+                        break
+                shown.append(ready)
+            values[name] = value
+            texts.append(f"{name}={text!r}")
+        out[team] = {"values": values, "text": " ".join(texts), "image": _stack(shown)}
+    return out
+
+
+def _stack(images):
+    from PIL import Image
+    if not images:
+        return Image.new("L", (1, 1), 255)
+    out = Image.new("L", (sum(i.width for i in images) + 8 * len(images), max(i.height for i in images)), 255)
+    x = 0
+    for i in images:
+        out.paste(i, (x, 0))
+        x += i.width + 8
     return out
 
 
