@@ -18,7 +18,7 @@ It also has a control panel for team names, logos, series score and sides.
 | Team gold, and the lead | `GOLD LEFT` (31.0K), `GOLD RAW LEFT` (31012), `GOLD DIFF LEFT` (+2.9K, only on the leading side) |
 | Kills | `KILLS LEFT` |
 | Game clock | `TIMER` |
-| Void grubs | `VOID GRUB LEFT` |
+| Dragons, Rift Heralds, void grubs (lower strip) | `DRAGONS LEFT`, `HERALDS LEFT`, `VOID GRUB LEFT` |
 | Series pips | `BO3 1 LEFT` (image path, lit when won), `BO3 1 LEFT WIN` (1/0) |
 | Objective timers | `NEXT GRUBS`, `NEXT DRAGON`, `NEXT HERALD`, `NEXT ELDER`, `NEXT BARON`: countdown, `LIVE`, or blank once the objective is gone for the game (elder: blank until a team takes soul). Also blank when switched off in the control panel. `NEXT DRAGON IS ELDER` |
 | Buffs | `BARON BUFF SIDE`, `BARON BUFF TIME`, `ELDER BUFF SIDE`, `ELDER BUFF TIME` |

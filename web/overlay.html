@@ -87,6 +87,34 @@
   <text id="timer" class="inter timer" x="960" y="93.65">00:00</text>
   <text id="grubs-left" class="inter grub start" x="737" y="94.28">0</text>
   <text id="grubs-right" class="inter grub end" x="1183" y="94.11">0</text>
+
+  <!-- Dragon and Rift Herald counters, same badge style as the grubs icon
+       baked into the bar (17px white shield with a cut-out symbol). -->
+  <defs>
+    <path id="badge" d="M8.5 1 L16 4.2 L14.6 12.8 L8.5 16.5 L2.4 12.8 L1 4.2 Z"
+          fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/>
+    <mask id="dragon-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="17" height="17">
+      <use href="#badge"/>
+      <!-- wings spread, head up: a wyvern -->
+      <path d="M8.5 3.6 L9.6 6.6 L14 5.2 L11.6 9 L9.4 9.6 L8.5 13.4 L7.6 9.6 L5.4 9 L3 5.2 L7.4 6.6 Z" fill="#000"/>
+    </mask>
+    <mask id="herald-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="17" height="17">
+      <use href="#badge"/>
+      <!-- the Herald's eye -->
+      <path d="M3.2 8.8 Q8.5 3.4 13.8 8.8 Q8.5 14.2 3.2 8.8 Z" fill="#000"/>
+      <circle cx="8.5" cy="8.8" r="1.9" fill="#fff"/>
+    </mask>
+    <g id="icon-dragon"><rect width="17" height="17" fill="#fff" mask="url(#dragon-cut)"/></g>
+    <g id="icon-herald"><rect width="17" height="17" fill="#fff" mask="url(#herald-cut)"/></g>
+  </defs>
+  <use href="#icon-dragon" x="568" y="78"/>
+  <text id="dragons-left" class="inter grub start" x="593" y="94.28">0</text>
+  <use href="#icon-herald" x="640" y="78"/>
+  <text id="heralds-left" class="inter grub start" x="665" y="94.28">0</text>
+  <use href="#icon-herald" x="1263" y="78"/>
+  <text id="heralds-right" class="inter grub end" x="1255" y="94.11">0</text>
+  <use href="#icon-dragon" x="1335" y="78"/>
+  <text id="dragons-right" class="inter grub end" x="1327" y="94.11">0</text>
   <defs>
     <clipPath id="diff-clip"><rect x="511" y="71" width="902" height="35"/></clipPath>
     <linearGradient id="tab-left" x1="0" y1="0" x2="0" y2="1">
@@ -297,6 +325,8 @@ function render(s) {
     setText(`gold-${side}`, f[`GOLD ${S}`]);
     setText(`kills-${side}`, f[`KILLS ${S}`]);
     setText(`grubs-${side}`, f[`VOID GRUB ${S}`]);
+    setText(`dragons-${side}`, f[`DRAGONS ${S}`]);
+    setText(`heralds-${side}`, f[`HERALDS ${S}`]);
     setDiff(side, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
     const logo = cfg[side].logo;
     if ($(`logo-${side}`).getAttribute("href") !== logo) $(`logo-${side}`).setAttribute("href", logo);
