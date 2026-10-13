@@ -1,4 +1,5 @@
 @echo off
 cd /d "%~dp0"
-python -m lolhud %*
+where py >nul 2>nul
+if %errorlevel%==0 (py -3 -m lolhud %*) else (python -m lolhud %*)
 pause

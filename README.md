@@ -27,6 +27,13 @@ It also has a control panel for team names, logos, series score and sides.
 
 The field names match your PSD layer names (`KILLS LEFT`, `GOLD LEFT`, `TRI-CODE LEFT`, `TIMER`, `VOID GRUB LEFT`…), so if you build the GT title from the PSD the names already line up.
 
+## Install on Windows
+
+1. Download this project as a zip (on GitHub: **Code -> Download ZIP**) and **extract it** (right-click -> Extract All). Don't run the installer from inside the zip.
+2. Double-click **`install.bat`**.
+
+It copies everything to `C:\LeagueHUD\LeagueHUD`, checks for Python (and offers to install it with winget if missing), and puts two shortcuts on your desktop: **League HUD** and **League HUD (Demo)**. Run it again any time to update; your settings, uploaded logos and output files are kept.
+
 ## Setup
 
 You need **Python 3.9 or newer** ([python.org](https://www.python.org/downloads/); tick "Add Python to PATH" when installing). Nothing else to install.
