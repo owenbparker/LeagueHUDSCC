@@ -1,0 +1,65 @@
+# Builds the League HUD desktop app (LeagueHUD.exe) on Windows.
+#
+# Every push produces a "LeagueHUD-windows" download on the run's summary
+# page (Actions tab). Pushing a tag like v1.0.0 also attaches the zip to a
+# GitHub release.
+name: Build Windows app
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pywebview pillow
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build LeagueHUD.exe
+        run: pyinstaller --noconfirm LeagueHUD.spec
+
+      - name: Smoke test the built app
+        shell: pwsh
+        run: |
+          $app = "dist\LeagueHUD"
+          $p = Start-Process "$app\LeagueHUD.exe" -ArgumentList '--smoke-test', '--port', '8799' -PassThru -Wait
+          Get-Content "$app\smoke-test.txt"
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
+          # Leave no test leftovers in the download.
+          Remove-Item "$app\smoke-test.txt", "$app\config.json" -ErrorAction SilentlyContinue
+          Remove-Item "$app\output" -Recurse -ErrorAction SilentlyContinue
+
+      - name: Add installer and readme
+        shell: pwsh
+        run: Copy-Item install.bat, install.ps1, README.md dist\LeagueHUD\
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LeagueHUD-windows
+          path: dist/LeagueHUD
+
+      - name: Attach to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\LeagueHUD -DestinationPath LeagueHUD-windows.zip
+          gh release create "${{ github.ref_name }}" LeagueHUD-windows.zip --title "League HUD ${{ github.ref_name }}" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -27,12 +27,26 @@ It also has a control panel for team names, logos, series score and sides.
 
 The field names match your PSD layer names (`KILLS LEFT`, `GOLD LEFT`, `TRI-CODE LEFT`, `TIMER`, `VOID GRUB LEFT`…), so if you build the GT title from the PSD the names already line up.
 
-## Install on Windows
+## Install on Windows (desktop app)
 
-1. Download this project as a zip (on GitHub: **Code -> Download ZIP**) and **extract it** (right-click -> Extract All). Don't run the installer from inside the zip.
-2. Double-click **`install.bat`**.
+1. Download **LeagueHUD-windows**. On GitHub, open the **Actions** tab and the latest **Build Windows app** run, and download it under **Artifacts**. Tagged versions are also on the **Releases** page.
+2. Extract the zip (right-click -> Extract All), then double-click **`install.bat`**.
 
-It copies everything to `C:\LeagueHUD\LeagueHUD`, checks for Python (and offers to install it with winget if missing), and puts two shortcuts on your desktop: **League HUD** and **League HUD (Demo)**. Run it again any time to update; your settings, uploaded logos and output files are kept.
+It copies the app to `C:\LeagueHUD\LeagueHUD` and puts a **League HUD** shortcut on your desktop. No Python needed. Run a newer download's `install.bat` to update; your settings, logos and output files are kept.
+
+The app opens in a 1280x720 window with everything that used to be in the command window built in:
+
+- **Live game / Demo game** switch (and demo speed) in the top bar.
+- **Outputs:** copy the overlay and vMix URLs, open the output folder, and let other PCs on your network read the HUD (they can read it, but only this PC can change settings).
+- **Log:** game connected/disconnected, errors, new game events.
+
+Closing the window stops the HUD. It needs Microsoft Edge WebView2, which is built into Windows 10 and 11; if it's missing, the control panel opens in your browser instead.
+
+Settings (`config.json`), uploaded logos (`logos\`) and output files (`output\`) live next to `LeagueHUD.exe`.
+
+### Running from source instead
+
+Download the source zip, extract it, and double-click `install.bat`: it copies it to `C:\LeagueHUD\LeagueHUD`, checks for Python, and adds **League HUD** / **League HUD (Demo)** shortcuts that run it in a command window with the control panel in your browser. For the desktop window from source: `pip install pywebview`, then `python -m lolhud.gui`.
 
 ## Setup
 
@@ -45,7 +59,7 @@ Run it on **the PC that is spectating the game**. League only shares live game d
 
 Then open the control panel at <http://localhost:8777/control>.
 
-From a terminal: `python -m lolhud` (or `python -m lolhud --demo`). Options: `--port 8777`, `--host 0.0.0.0` (lets other PCs on your network read it), `--demo-speed 8`, `--replay saved_allgamedata.json`.
+From a terminal: `python -m lolhud` (or `python -m lolhud --demo`) runs it without a window. `LeagueHUD.exe` and `python -m lolhud.gui` take the same options. Options: `--port 8777`, `--host 0.0.0.0` (lets other PCs on your network read it), `--demo-speed 8`, `--replay saved_allgamedata.json`.
 
 ## Option A: the built-in overlay (OBS or vMix)
 
@@ -109,12 +123,14 @@ Item prices and champion icons come from Riot's Data Dragon. They are downloaded
 ## Files
 
 ```
-lolhud/          the app (Python, standard library only)
+lolhud/          the app (Python standard library; the desktop window also uses pywebview)
   source.py        reads the game (Riot Live Client Data API) or runs the demo game
   state.py         turns game data into HUD fields
   gold.py          gold estimate + Data Dragon prices/icons
   outputs.py       CSV / JSON / XML
   app.py           web server, control panel API
+  gui.py           the desktop window (pywebview)
+  log.py           the log shown in the app
 web/overlay.html   the broadcast overlay
 web/control.html   the control panel
 web/assets/        images exported from the PSD (bar, its background lines, team panels, logos, pips)
@@ -122,4 +138,6 @@ tools/split_bar.py rebuilds the bar and line images from design/hud_bar.png
 web/fonts/         Heathergreen, Inter
 design/            the original PSD
 tests/             python -m unittest discover -s tests
+LeagueHUD.py       desktop app entry point; LeagueHUD.spec builds the .exe (pyinstaller --noconfirm LeagueHUD.spec)
+.github/workflows/ builds the .exe on Windows for every push
 ```

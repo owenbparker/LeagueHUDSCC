@@ -10,12 +10,36 @@
           --left: #10815b; --right: #b8191c; --accent: #31c392; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif; }
-  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  html, body { height: 100%; }
+  header { display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .clock { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+  .badge { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; background: #ffcf66; color: #1a1a1a; }
+  .badge:empty { display: none; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; padding: 6px 12px; color: var(--muted); }
+  .seg button.on { background: var(--accent); color: #06231a; font-weight: 600; }
+  /* Desktop layout: settings scroll on the left, preview / outputs / log on the right. */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 440px; height: calc(100% - 54px); }
+  .layout > main, .layout > aside { overflow-y: auto; }
+  aside { border-left: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .out { margin-bottom: 10px; }
+  .out > span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .out .row { align-items: stretch; }
+  .out code { display: flex; align-items: center; padding: 6px 8px; min-width: 0; }
+  .out button { flex: 0 0 auto; }
+  .toggle { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; margin: 6px 0 10px; cursor: pointer; }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .log { height: 190px; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+         font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  .log .t { color: var(--muted); margin-right: 6px; }
+  .log .warn { color: #ffcf66; }
+  .log .error { color: #ff7b7b; }
+  @media (max-width: 900px) { .layout { display: block; height: auto; } aside { border-left: 0; } }
   header h1 { margin: 0; font-size: 16px; font-weight: 700; }
-  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: #c0392b; }
   .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px 20px; max-width: 1400px; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding: 16px; align-content: start; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
   section.wide { grid-column: 1 / -1; }
   h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -47,15 +71,22 @@
   .checks input { width: 18px; height: 18px; accent-color: var(--accent); }
   .checks .dot { width: 18px; height: 18px; box-shadow: none; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; }
   .warn { color: #ffcf66; }
-  @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } main { padding: 12px 16px; } }
+  @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header>
   <h1>League HUD</h1>
   <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
-  <div class="status" style="margin-left:auto"><span id="clock">00:00</span></div>
+  <div class="seg" id="mode" role="group" aria-label="Game source">
+    <button data-mode="live">Live game</button><button data-mode="demo">Demo game</button>
+  </div>
+  <select id="demo-speed" title="Demo speed" style="width:auto">
+    <option value="1">1x</option><option value="4">4x</option><option value="8">8x</option><option value="30">30x</option>
+  </select>
+  <div class="status" style="margin-left:auto"><span class="badge" id="mode-badge"></span><span id="clock" class="clock">00:00</span></div>
 </header>
+<div class="layout">
 <main>
   <section class="wide">
     <h2>Teams</h2>
@@ -94,25 +125,37 @@
     <p class="note">League's game client doesn't share other players' gold, so this is an estimate. If you see it running high or low against the in-game scoreboard, nudge the adjustment.</p>
   </section>
 
-  <section>
-    <h2>Use it in OBS / vMix</h2>
-    <p><b>Browser source</b> (1920×1080):<br><code id="url-overlay"></code></p>
-    <p><b>vMix Data Source</b> (CSV, JSON or XML):<br><code id="url-csv"></code></p>
-    <p><b>Files</b> (updated every second):<br><code id="out-dir"></code></p>
-    <p class="note">In GT Title Designer, name your fields to match the list below, then bind them in vMix's Data Sources Manager. Image fields (logos, pips) are file paths.</p>
-    <p class="note warn" id="unknown"></p>
-  </section>
-
-  <section class="wide">
-    <h2>Preview</h2>
-    <div class="preview" id="preview"><iframe src="/overlay" title="Overlay preview"></iframe></div>
-  </section>
-
   <section class="wide">
     <h2>Live fields <span style="text-transform:none;letter-spacing:0">(click to copy the name)</span></h2>
     <div class="fields" id="fields"></div>
   </section>
 </main>
+<aside>
+  <section>
+    <h2>Preview</h2>
+    <div class="preview" id="preview"><iframe src="/overlay" title="Overlay preview"></iframe></div>
+  </section>
+
+  <section>
+    <h2>Outputs</h2>
+    <div class="out"><span>Overlay (OBS / vMix browser source, 1920×1080)</span>
+      <div class="row"><code id="url-overlay"></code><button data-copy="url-overlay">Copy</button></div></div>
+    <div class="out"><span>vMix data source (CSV; also /hud.json, /hud.xml)</span>
+      <div class="row"><code id="url-csv"></code><button data-copy="url-csv">Copy</button></div></div>
+    <div class="out"><span>CSV / JSON / XML files</span>
+      <div class="row"><code id="out-dir"></code><button data-open="output">Open folder</button></div></div>
+    <label class="toggle"><input type="checkbox" id="network"> Let other PCs on the network read the HUD</label>
+    <div class="out" id="lan-row" hidden><span>From another PC</span>
+      <div class="row"><code id="url-lan"></code><button data-copy="url-lan">Copy</button></div></div>
+    <p class="note">In GT Title Designer, name your fields to match the Live fields list, then bind them in vMix's Data Sources Manager. Image fields (logos, pips) are file paths.</p>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div class="log" id="log"></div>
+  </section>
+</aside>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 let state = null;
@@ -237,7 +280,9 @@ function apply(s) {
   state = s;
   const cfg = s.config, f = s.fields;
   $("dot").classList.toggle("on", s.detail.connected);
-  $("status").textContent = s.detail.connected ? "Game connected" : (s.detail.error || "Waiting for a game…");
+  // Short status here; the full error is in the log.
+  $("status").textContent = s.detail.connected ? "Game connected" : "Waiting for a game…";
+  $("status").title = s.detail.error || "";
   $("clock").textContent = f.TIMER;
   for (const side of ["left", "right"]) {
     const el = document.querySelector(`.team.${side}`);
@@ -263,13 +308,19 @@ function apply(s) {
   setIfIdle($("gold-mode"), cfg.gold_mode);
   setIfIdle($("gold-scale"), cfg.gold_estimate_scale);
   $("manual-gold").style.display = cfg.gold_mode === "manual" ? "" : "none";
+  const app = s.app;
   if (first) {
-    $("url-overlay").textContent = `${location.origin}/overlay`;
-    $("url-csv").textContent = `${location.origin}/hud.csv`;
+    $("url-overlay").textContent = `http://localhost:${app.port}/overlay`;
+    $("url-csv").textContent = `http://localhost:${app.port}/hud.csv`;
     $("out-dir").textContent = s.output_dir;
   }
-  $("unknown").textContent = s.detail.unknown_events.length
-    ? "New game events not used yet: " + s.detail.unknown_events.join(", ") : "";
+  document.querySelectorAll("#mode button").forEach(b => b.classList.toggle("on", b.dataset.mode === app.mode));
+  $("mode-badge").textContent = app.mode === "live" ? "" : app.mode.toUpperCase();
+  $("demo-speed").hidden = app.mode !== "demo";
+  setIfIdle($("demo-speed"), String(app.demo_speed));
+  $("network").checked = app.network;
+  $("lan-row").hidden = !app.lan_url;
+  $("url-lan").textContent = app.lan_url ? `${app.lan_url}/overlay` : "";
   $("fields").innerHTML = Object.entries(f).map(([k, v]) =>
     `<div title="${k}" data-k="${k}"><span>${k}</span><span>${String(v).replace(/</g, "&lt;")}</span></div>`).join("");
 }
@@ -279,11 +330,53 @@ $("fields").addEventListener("click", e => {
   if (row) navigator.clipboard?.writeText(row.dataset.k);
 });
 
+// Header: game source.
+document.querySelectorAll("#mode button").forEach(b => b.addEventListener("click", () => {
+  if (b.dataset.mode !== state?.app.mode) post("/api/mode", { mode: b.dataset.mode, speed: Number($("demo-speed").value) });
+}));
+$("demo-speed").onchange = e => post("/api/mode", { mode: "demo", speed: Number(e.target.value) });
+
+// Outputs.
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  const t = document.createElement("textarea");
+  t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+}
+document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", () => {
+  copyText($(b.dataset.copy).textContent);
+  const label = b.textContent; b.textContent = "Copied"; setTimeout(() => b.textContent = label, 1200);
+}));
+document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => post("/api/open", { folder: b.dataset.open })));
+$("network").onchange = e => post("/api/network", { enabled: e.target.checked });
+
+// Log: what used to print in the command window.
+let logAfter = 0;
+async function pollLog() {
+  try {
+    const lines = await (await fetch(`/api/log?after=${logAfter}`, { cache: "no-store" })).json();
+    if (lines.length) {
+      const box = $("log"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 20;
+      for (const l of lines) {
+        const row = document.createElement("div");
+        row.className = l.level;
+        row.innerHTML = `<span class="t">${l.time}</span>`;
+        row.append(l.message);
+        box.appendChild(row);
+        logAfter = l.id;
+      }
+      while (box.childElementCount > 500) box.firstChild.remove();
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+  } catch (e) { /* app closing */ }
+  setTimeout(pollLog, 1000);
+}
+pollLog();
+
 function fitPreview() {
   const box = $("preview");
   box.querySelector("iframe").style.transform = `scale(${box.clientWidth / 1920})`;
 }
-addEventListener("resize", fitPreview);
+new ResizeObserver(fitPreview).observe($("preview"));
 fitPreview();
 
 async function poll() {

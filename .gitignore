@@ -5,3 +5,7 @@ config.json.tmp
 output/
 web/assets/logos/*
 !web/assets/logos/scc.png
+logos/
+smoke-test.txt
+build/
+dist/

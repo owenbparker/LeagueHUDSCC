@@ -1,4 +1,5 @@
-"""Settings for the HUD, saved to config.json next to the project.
+"""Settings for the HUD, saved to config.json next to the project (or next
+to LeagueHUD.exe in the desktop build).
 
 Everything here can be changed from the control panel while the app runs.
 """
@@ -6,11 +7,19 @@ Everything here can be changed from the control panel while the app runs.
 import copy
 import json
 import os
+import sys
 import threading
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WEB_DIR = os.path.join(ROOT, "web")
-CONFIG_PATH = os.path.join(ROOT, "config.json")
+FROZEN = getattr(sys, "frozen", False)
+# Read-only files shipped with the app (overlay, fonts, images). In the .exe
+# build these are unpacked by PyInstaller.
+RESOURCE_DIR = getattr(sys, "_MEIPASS", ROOT) if FROZEN else ROOT
+# Things the app writes: settings, uploaded logos, output files.
+DATA_DIR = os.path.dirname(os.path.abspath(sys.executable)) if FROZEN else ROOT
+WEB_DIR = os.path.join(RESOURCE_DIR, "web")
+LOGO_DIR = os.path.join(DATA_DIR, "logos")
+CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 DEFAULTS = {
     # Where the game data comes from. Riot's Live Client Data API runs on the
@@ -19,6 +28,9 @@ DEFAULTS = {
     "poll_interval": 1.0,
     "http_host": "127.0.0.1",
     "http_port": 8777,
+    # Let other PCs on your network read the overlay and data (changes can
+    # still only be made on this PC).
+    "allow_network": False,
     "output_dir": "output",
 
     "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0, "color": "#0a6d4c"},
@@ -104,4 +116,22 @@ class Config:
 
     def output_dir(self):
         out = self.get()["output_dir"]
-        return out if os.path.isabs(out) else os.path.join(ROOT, out)
+        return out if os.path.isabs(out) else os.path.join(DATA_DIR, out)
+
+
+def web_file(rel):
+    """Path on disk for a URL path like "assets/logos/x.png", or None.
+
+    Uploaded logos live in LOGO_DIR (served as assets/logos/...); everything
+    else comes from WEB_DIR. Paths that try to climb out are refused.
+    """
+    rel = rel.replace("\\", "/").lstrip("/")
+    candidates = []
+    if rel.startswith("assets/logos/"):
+        candidates.append((LOGO_DIR, rel[len("assets/logos/"):]))
+    candidates.append((WEB_DIR, rel))
+    for base, sub in candidates:
+        path = os.path.normpath(os.path.join(base, sub))
+        if path.startswith(os.path.normpath(base) + os.sep) and os.path.isfile(path):
+            return path
+    return None

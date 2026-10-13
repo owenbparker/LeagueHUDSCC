@@ -11,7 +11,7 @@ Write-Host "Installing League HUD to $Target" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
 
 if ((Resolve-Path $Source).Path.TrimEnd('\') -ne $Target) {
-    robocopy $Source $Target /E /XD .git output __pycache__ /XF config.json /NFL /NDL /NJH /NJS /NP | Out-Null
+    robocopy $Source $Target /E /XD .git output logos __pycache__ /XF config.json smoke-test.txt /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "Copying files failed (robocopy exit code $LASTEXITCODE)" }
 }
 # Files from a downloaded zip are marked as "from the internet"; clear that
@@ -19,7 +19,10 @@ if ((Resolve-Path $Source).Path.TrimEnd('\') -ne $Target) {
 Get-ChildItem -Path $Target -Recurse -File | Unblock-File
 Write-Host '  Files copied.' -ForegroundColor Green
 
-# Python 3.9+ is the only thing the HUD needs.
+# The desktop build (LeagueHUD.exe) has everything built in.
+$IsExeBuild = Test-Path (Join-Path $Target 'LeagueHUD.exe')
+
+# Running from source needs Python 3.9+.
 function Test-Python {
     foreach ($cmd in @(@('py', '-3'), @('python'))) {
         try {
@@ -32,7 +35,9 @@ function Test-Python {
     return $false
 }
 
-if (Test-Python) {
+if ($IsExeBuild) {
+    Write-Host '  Desktop app found (no Python needed).' -ForegroundColor Green
+} elseif (Test-Python) {
     Write-Host '  Python found.' -ForegroundColor Green
 } else {
     Write-Host '  Python 3.9 or newer was not found.' -ForegroundColor Yellow
@@ -48,14 +53,25 @@ if (Test-Python) {
 # Desktop shortcuts.
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shell = New-Object -ComObject WScript.Shell
-foreach ($s in @(@('League HUD', 'start-hud.bat'), @('League HUD (Demo)', 'start-demo.bat'))) {
+if ($IsExeBuild) {
+    $shortcuts = @(, @('League HUD', 'LeagueHUD.exe'))
+    # Older source installs left a separate demo shortcut; the app has a Demo switch now.
+    Remove-Item (Join-Path $desktop 'League HUD (Demo).lnk') -ErrorAction SilentlyContinue
+} else {
+    $shortcuts = @(@('League HUD', 'start-hud.bat'), @('League HUD (Demo)', 'start-demo.bat'))
+}
+foreach ($s in $shortcuts) {
     $link = $shell.CreateShortcut((Join-Path $desktop ($s[0] + '.lnk')))
     $link.TargetPath = Join-Path $Target $s[1]
     $link.WorkingDirectory = $Target
     $link.Save()
 }
-Write-Host '  Desktop shortcuts created: "League HUD" and "League HUD (Demo)".' -ForegroundColor Green
+Write-Host ('  Desktop shortcut created: ' + (($shortcuts | ForEach-Object { '"' + $_[0] + '"' }) -join ' and ') + '.') -ForegroundColor Green
 
 Write-Host ''
-Write-Host 'Done. Start it from the desktop shortcut, then open http://localhost:8777/control' -ForegroundColor Cyan
+if ($IsExeBuild) {
+    Write-Host 'Done. Start it from the "League HUD" desktop shortcut.' -ForegroundColor Cyan
+} else {
+    Write-Host 'Done. Start it from the desktop shortcut, then open http://localhost:8777/control' -ForegroundColor Cyan
+}
 Write-Host "vMix CSV file: $Target\output\hud.csv"

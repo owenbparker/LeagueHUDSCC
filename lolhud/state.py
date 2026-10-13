@@ -4,7 +4,7 @@ import os
 import re
 
 from . import gold as goldlib
-from .config import WEB_DIR
+from .config import WEB_DIR, web_file
 
 SIDES = ("left", "right")
 POSITION_ORDER = {"TOP": 0, "JUNGLE": 1, "MIDDLE": 2, "BOTTOM": 3, "UTILITY": 4}
@@ -142,7 +142,7 @@ def asset_path(rel):
     """Absolute path on disk for vMix; leaves absolute paths and URLs alone."""
     if not rel or rel.startswith(("http://", "https://")) or os.path.isabs(rel):
         return rel or ""
-    return os.path.normpath(os.path.join(WEB_DIR, rel))
+    return web_file(rel) or os.path.normpath(os.path.join(WEB_DIR, rel))
 
 
 def build_state(raw, cfg, ddragon=None):
