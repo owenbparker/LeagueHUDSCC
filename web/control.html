@@ -72,6 +72,11 @@
   .checks input { width: 18px; height: 18px; accent-color: var(--accent); }
   .checks .dot { width: 18px; height: 18px; box-shadow: none; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; }
   .warn { color: #ffcf66; }
+  .screen-result { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .screen-result figure { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+  .screen-result img { width: 100%; image-rendering: pixelated; background: #fff; border-radius: 3px; }
+  .screen-result figcaption { font-size: 12px; margin-top: 4px; }
+  .ok { color: var(--accent); }
   @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -113,13 +118,22 @@
     <h2>Gold</h2>
     <label for="gold-mode">Source</label>
     <select id="gold-mode">
-      <option value="estimate">Estimate from CS, kills and time (closest to real)</option>
+      <option value="screen">Read from the spectator top bar (exact)</option>
+      <option value="estimate">Estimate from CS, kills and time</option>
       <option value="items">Value of items held (always a bit low)</option>
       <option value="manual">Type it in manually</option>
     </select>
     <div id="manual-gold" class="row" style="margin-top:8px">
       <input type="number" id="manual-left" placeholder="Left gold" step="100">
       <input type="number" id="manual-right" placeholder="Right gold" step="100">
+    </div>
+    <div id="screen-gold">
+      <div class="row" style="margin-top:10px">
+        <span id="screen-status" class="note" style="margin:0"></span>
+        <button type="button" id="screen-test" style="flex:0 0 auto">Test read</button>
+      </div>
+      <div id="screen-result" class="screen-result" hidden></div>
+      <p class="note">Reads the gold numbers off the League window on this PC. Keep the spectator top bar showing. Falls back to the estimate below when it can't be read.</p>
     </div>
     <label for="gold-scale">Estimate adjustment (1.00 = no change)</label>
     <input type="number" id="gold-scale" step="0.01" min="0.5" max="1.5">
@@ -309,6 +323,12 @@ function apply(s) {
   setIfIdle($("gold-mode"), cfg.gold_mode);
   setIfIdle($("gold-scale"), cfg.gold_estimate_scale);
   $("manual-gold").style.display = cfg.gold_mode === "manual" ? "" : "none";
+  $("screen-gold").style.display = cfg.gold_mode === "screen" ? "" : "none";
+  const sg = s.app.screen_gold;
+  const fmt = v => (v / 1000).toFixed(1) + "k";
+  $("screen-status").innerHTML = !sg.available ? `<span class="warn">${sg.status}</span>`
+    : sg.values ? `<span class="ok">Reading: blue ${fmt(sg.values.blue)} · red ${fmt(sg.values.red)}</span>`
+    : `<span class="warn">Using the estimate - ${sg.status}</span>`;
   const app = s.app;
   if (first) {
     $("url-overlay").textContent = `http://localhost:${app.port}/overlay`;
@@ -330,6 +350,17 @@ $("fields").addEventListener("click", e => {
   const row = e.target.closest("[data-k]");
   if (row) navigator.clipboard?.writeText(row.dataset.k);
 });
+
+// Gold: one-off screen read showing exactly what was captured and read.
+$("screen-test").onclick = async () => {
+  const box = $("screen-result");
+  box.hidden = false;
+  box.innerHTML = '<span class="note">Reading…</span>';
+  const r = await (await fetch("/api/screen-gold/test", { method: "POST", body: "{}" })).json();
+  if (!r.blue) { box.innerHTML = `<span class="warn">${r.error}</span>`; return; }
+  box.innerHTML = ["blue", "red"].map(t => `<figure><img src="${r[t].image}" alt="">
+    <figcaption>${t}: read <b>${r[t].text || "nothing"}</b> → ${r[t].value != null ? (r[t].value / 1000).toFixed(1) + "k" : '<span class="warn">not a gold value</span>'}</figcaption></figure>`).join("");
+};
 
 // Header: game source.
 document.querySelectorAll("#mode button").forEach(b => b.addEventListener("click", () => {

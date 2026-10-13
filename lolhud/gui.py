@@ -58,6 +58,19 @@ def smoke_test(port):
     except Exception as e:
         ok = False
         results.append(f"FAIL window library: {e!r}")
+    if sys.platform == "win32":
+        try:
+            import winrt.windows.media.ocr  # noqa: F401  (bundled into the .exe?)
+            import PIL  # noqa: F401
+            from .ocr import WindowsOcr
+            try:
+                WindowsOcr()
+                results.append("OK   text recognition")
+            except Exception as e:  # bundled fine, but this PC has no OCR language
+                results.append(f"WARN text recognition engine: {e}")
+        except Exception as e:
+            ok = False
+            results.append(f"FAIL text recognition library: {e!r}")
     with open(os.path.join(DATA_DIR, "smoke-test.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(results + ["PASSED" if ok else "FAILED"]) + "\n")
     return ok

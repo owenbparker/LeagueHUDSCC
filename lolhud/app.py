@@ -18,6 +18,7 @@ from . import outputs
 from .config import DATA_DIR, LOGO_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from .log import log, since
+from .ocr import ScreenGold
 from .source import DemoSource, LiveClientSource
 from .state import build_state
 
@@ -41,6 +42,7 @@ class HudApp:
         self.state = build_state(None, cfg, self.ddragon)
         self.updated_at = 0.0
         self.server = None
+        self.screen_gold = ScreenGold(config)
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._was_connected = None
@@ -66,7 +68,8 @@ class HudApp:
     def refresh(self, fetch=True):
         if fetch:
             self.raw = self.source.fetch()
-        state = build_state(self.raw, self.config.get(), self.ddragon)
+        screen = self.screen_gold.fresh() if self.mode == "live" else None
+        state = build_state(self.raw, self.config.get(), self.ddragon, screen)
         state["detail"]["error"] = self.source.last_error
         with self._lock:
             self.state = state
@@ -78,6 +81,8 @@ class HudApp:
 
     def _log_changes(self, state):
         connected = state["detail"]["connected"]
+        if connected != self._was_connected and not connected:
+            self.screen_gold.reset()  # next game starts from scratch
         if connected != self._was_connected:
             if connected:
                 log(f"Game connected ({state['fields']['TIMER']})")
@@ -103,6 +108,7 @@ class HudApp:
 
     def stop(self):
         self._stop.set()
+        self.screen_gold.stop()
         if self.server:
             self.server.stop()
 
@@ -111,7 +117,11 @@ class HudApp:
         port = self.server.port if self.server else cfg["http_port"]
         network = bool(cfg.get("allow_network"))
         lan = lan_ip() if network else None
+        sg = self.screen_gold
+        screen = {"available": sg.available, "status": sg.status, "values": sg.fresh(),
+                  "age": round(time.time() - sg.read_at, 1) if sg.read_at else None}
         return {"mode": self.mode, "demo_speed": self.demo_speed, "network": network, "port": port,
+                "screen_gold": screen,
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
     def snapshot(self):
@@ -241,6 +251,8 @@ def make_handler(app):
                     app.set_network(body["enabled"])
                 elif path == "/api/open":
                     app.open_folder(body["folder"])
+                elif path == "/api/screen-gold/test":
+                    return self._send(json.dumps(app.screen_gold.test()))
                 else:
                     return self._send('{"error":"not found"}', status=404)
                 app.refresh(fetch=False)
@@ -282,6 +294,7 @@ def start(app):
     """Start the web server and the game poller. Raises OSError if the port is taken."""
     port = app.config.get()["http_port"]
     app.server = Server(app, app.host(), port)
+    app.screen_gold.start()
     threading.Thread(target=app.run_poller, daemon=True).start()
     log(f"League HUD running - control panel http://localhost:{port}/control")
     log(f"Overlay (browser source, 1920x1080): http://localhost:{port}/overlay")

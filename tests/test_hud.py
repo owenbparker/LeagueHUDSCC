@@ -128,6 +128,43 @@ class GoldTests(unittest.TestCase):
         self.assertEqual(f["GOLD LEFT"], "3.2K")
 
 
+class ScreenGoldTests(unittest.TestCase):
+    def test_screen_values_used_by_team(self):
+        f = build_state(load(), cfg(), screen_gold={"blue": 8000, "red": 8900})["fields"]
+        self.assertEqual((f["GOLD LEFT"], f["GOLD RIGHT"], f["GOLD DIFF RIGHT"]), ("8.0K", "8.9K", "+0.9K"))
+        # Blue is still blue when it's shown on the right.
+        f = build_state(load(), cfg(swap_sides=True), screen_gold={"blue": 8000, "red": 8900})["fields"]
+        self.assertEqual(f["GOLD RIGHT"], "8.0K")
+
+    def test_falls_back_to_estimate(self):
+        state = build_state(load(), cfg(), screen_gold=None)
+        self.assertEqual(state["detail"]["gold_source"], "estimate")
+        self.assertGreater(state["fields"]["GOLD RAW LEFT"], 0)
+
+    def test_parse_gold(self):
+        from lolhud.ocr import parse_gold
+        cases = {"8.0k": 8000, "8,9k": 8900, "B.Ok": 8000, "12.4K": 12400, "100.2k": 100200,
+                 "l2.5k": 12500, "3": None, "": None}
+        for text, value in cases.items():
+            self.assertEqual(parse_gold(text), value, text)
+
+    def test_scaled_box(self):
+        from lolhud.ocr import scaled_box
+        self.assertEqual(scaled_box([804, 16, 54, 24], 1920, 1080), (804, 16, 858, 40))
+        # 2560x1440: scaled by height, still centred.
+        self.assertEqual(scaled_box([804, 16, 54, 24], 2560, 1440), (1072, 21, 1144, 53))
+
+    def test_reader_rejects_glitches(self):
+        from lolhud.ocr import ScreenGold
+        sg = ScreenGold.__new__(ScreenGold)
+        sg.values, sg._pending = {"blue": None, "red": None}, {"blue": None, "red": None}
+        self.assertTrue(sg._accept("blue", 8000))
+        self.assertFalse(sg._accept("blue", 800))     # misread: gold never drops
+        self.assertTrue(sg._accept("blue", 8100))
+        self.assertFalse(sg._accept("blue", 2500))    # new game? wait for a second read
+        self.assertTrue(sg._accept("blue", 2500))
+
+
 class OutputTests(unittest.TestCase):
     def test_csv_round_trip(self):
         f = build_state(load(), cfg())["fields"]

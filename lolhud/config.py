@@ -43,9 +43,13 @@ DEFAULTS = {
     # the left-hand team is playing red side.
     "swap_sides": False,
 
-    # "estimate" (model of earned gold), "items" (value of items held) or
-    # "manual" (typed into the control panel).
-    "gold_mode": "estimate",
+    # "screen" (read off the spectator top bar; Windows, falls back to the
+    # estimate when it can't be read), "estimate" (model of earned gold),
+    # "items" (value of items held) or "manual" (typed into the control panel).
+    "gold_mode": "screen",
+    # Where the gold numbers are on a 1920x1080 spectator screen, as x, y, w, h.
+    # Scaled for other resolutions. Only change if the Test read misses them.
+    "gold_ocr_boxes": {"blue": [804, 16, 54, 24], "red": [1106, 16, 54, 24]},
     "manual_gold": {"left": 0, "right": 0},
     # Multiplies the estimate if you find it runs consistently high or low.
     "gold_estimate_scale": 1.0,

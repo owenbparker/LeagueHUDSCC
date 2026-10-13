@@ -145,7 +145,12 @@ def asset_path(rel):
     return web_file(rel) or os.path.normpath(os.path.join(WEB_DIR, rel))
 
 
-def build_state(raw, cfg, ddragon=None):
+SCREEN_TEAM = {"ORDER": "blue", "CHAOS": "red"}
+
+
+def build_state(raw, cfg, ddragon=None, screen_gold=None):
+    """screen_gold: {"blue": 8000, "red": 8900} read off the spectator top bar,
+    or None (not available / not readable right now)."""
     """Return {"fields": flat dict for CSV/vMix, "detail": extra structure}."""
     connected = raw is not None
     raw = raw or {}
@@ -174,8 +179,12 @@ def build_state(raw, cfg, ddragon=None):
         o = obj[team]
         if cfg["gold_mode"] == "manual":
             gold_raw[side] = float(cfg["manual_gold"].get(side) or 0)
+        elif cfg["gold_mode"] == "screen" and screen_gold and connected:
+            gold_raw[side] = float(screen_gold[SCREEN_TEAM[team]])
         else:
-            gold_raw[side] = goldlib.team_gold(tp, game_time, cfg["gold_mode"], o["turrets"], o["barons"],
+            # "screen" falls back to the estimate whenever the screen can't be read.
+            estimate_mode = "items" if cfg["gold_mode"] == "items" else "estimate"
+            gold_raw[side] = goldlib.team_gold(tp, game_time, estimate_mode, o["turrets"], o["barons"],
                                                ddragon, cfg.get("gold_estimate_scale", 1.0),
                                                cfg.get("passive_gold_start", goldlib.PASSIVE_START))
         team_cfg = cfg[side]
@@ -258,5 +267,7 @@ def build_state(raw, cfg, ddragon=None):
         "side_team": side_team,
         "dragons": {side: obj[side_team[side]]["dragons"] for side in SIDES},
         "unknown_events": sorted(unknown),
+        "gold_source": ("screen" if cfg["gold_mode"] == "screen" and screen_gold and connected
+                        else "estimate" if cfg["gold_mode"] == "screen" else cfg["gold_mode"]),
     }
     return {"fields": f, "detail": detail}

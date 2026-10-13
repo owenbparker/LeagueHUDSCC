@@ -107,9 +107,11 @@ Settings are saved to `config.json` and survive restarts.
 
 ## About gold
 
-League's game client doesn't share other players' gold (LCS gets it from Riot's private esports feed). The HUD offers three options:
+League's game client doesn't share other players' gold (LCS gets it from Riot's private esports feed). The HUD offers four options:
 
-- **Estimate** (default): works out earned gold from game time, CS, kills, assists, turrets and barons, and never goes below the value of the items a team holds. Usually within about 10%. If it runs high or low against the in-game scoreboard, change **Estimate adjustment** (e.g. 1.05). Passive gold is counted from 0:35 (`passive_gold_start` in `config.json`), matching the 2026 season.
+- **Read from the spectator top bar** (default, Windows): the app captures the gold numbers ("8.0k") from the League window on the HUD PC twice a second and reads them with Windows' built-in text recognition. These are the same numbers your observers see. Keep the spectator top bar showing; borderless/windowed mode is the safest. Readings that don't make sense (gold going down, huge jumps) are ignored, and if the numbers can't be read for 5 seconds the HUD uses the estimate below until they can. Use **Test read** in the Gold section to see exactly what was captured and read. If your HUD scale puts the numbers somewhere else, adjust `gold_ocr_boxes` in `config.json` (x, y, width, height on a 1920x1080 screen).
+
+- **Estimate:** works out earned gold from game time, CS, kills, assists, turrets and barons, and never goes below the value of the items a team holds. Usually within about 10%. If it runs high or low against the in-game scoreboard, change **Estimate adjustment** (e.g. 1.05). Passive gold is counted from 0:35 (`passive_gold_start` in `config.json`), matching the 2026 season.
 - **Items:** the value of items held. Always a little low, since it ignores unspent gold.
 - **Manual:** type the numbers in.
 
@@ -127,6 +129,7 @@ lolhud/          the app (Python standard library; the desktop window also uses 
   source.py        reads the game (Riot Live Client Data API) or runs the demo game
   state.py         turns game data into HUD fields
   gold.py          gold estimate + Data Dragon prices/icons
+  ocr.py           reads team gold off the spectator top bar (Windows text recognition)
   outputs.py       CSV / JSON / XML
   app.py           web server, control panel API
   gui.py           the desktop window (pywebview)

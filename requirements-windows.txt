@@ -1,0 +1,11 @@
+# Desktop app extras (Windows). The HUD itself only needs Python's standard library.
+pywebview
+pillow
+# Windows text recognition, for reading gold off the spectator top bar.
+winrt-runtime
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections
+winrt-Windows.Globalization
+winrt-Windows.Graphics.Imaging
+winrt-Windows.Media.Ocr
+winrt-Windows.Storage.Streams
