@@ -90,8 +90,12 @@ class WindowsOcr:
         rgba = image.convert("RGBA")
         writer = DataWriter()
         writer.write_bytes(rgba.tobytes("raw", "BGRA"))
-        bitmap = SoftwareBitmap.create_copy_from_buffer(
-            writer.detach_buffer(), BitmapPixelFormat.BGRA8, rgba.width, rgba.height, BitmapAlphaMode.PREMULTIPLIED)
+        buffer = writer.detach_buffer()
+        try:
+            bitmap = SoftwareBitmap.create_copy_from_buffer(buffer, BitmapPixelFormat.BGRA8, rgba.width, rgba.height)
+        except TypeError:  # older winrt wrappers
+            bitmap = SoftwareBitmap(BitmapPixelFormat.BGRA8, rgba.width, rgba.height, BitmapAlphaMode.PREMULTIPLIED)
+            bitmap.copy_from_buffer(buffer)
 
         async def run():
             return await self.engine.recognize_async(bitmap)
