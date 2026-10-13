@@ -8,7 +8,7 @@
   Positions, sizes and fonts come straight from design/lol-hud-SCC27.psd.
 
   URL options (add to the end, e.g. /overlay?timers=0&dragons=1):
-    timers=0   hide the dragon / baron countdowns in the top-left
+    timers=0   hide all objective timers in the top-left (pick which ones in the control panel)
     diff=0     hide the gold-lead tab that slides out under the leading team's gold
     dragons=1  show each team's dragons in the lower strip
     idle=0     hide the whole HUD while no game is running
@@ -43,7 +43,11 @@
   /* Objective timers, top left (as in the reference broadcast). */
   #timers .box { fill: rgba(0,0,0,.82); }
   #timers text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 17px; text-anchor: start; }
+  #timers .letter { font-size: 12px; text-anchor: middle; }
   #timers .live { fill: #ffd34d; }
+  /* Boxes fade out when an objective is gone (or switched off) and the rest close up. */
+  .obj { transition: transform .4s ease, opacity .3s ease; }
+  .obj.off { opacity: 0; }
   .drake { stroke: rgba(0,0,0,.6); stroke-width: 1; }
 </style>
 </head>
@@ -109,16 +113,8 @@
   <g id="drakes-left"></g>
   <g id="drakes-right"></g>
 
-  <g id="timers" transform="translate(4,4)">
-    <rect class="box" width="96" height="28" rx="2"/>
-    <circle cx="14" cy="14" r="9" fill="#7b4bd1"/>
-    <text x="9" y="19" style="font-size:12px">B</text>
-    <text id="next-baron" x="28" y="20.5"></text>
-    <rect class="box" x="100" width="96" height="28" rx="2"/>
-    <circle cx="114" cy="14" r="9" fill="#2aa7a0"/>
-    <text x="109" y="19" style="font-size:12px">D</text>
-    <text id="next-dragon" x="128" y="20.5"></text>
-  </g>
+  <!-- Objective timers, built by drawObjectives(). -->
+  <g id="timers" transform="translate(4,4)"></g>
 </svg>
 <script>
 const params = new URLSearchParams(location.search);
@@ -235,6 +231,48 @@ function drawDrakes(side, list) {
   });
 }
 
+// Objective timer boxes, left to right. A box shows while its objective has a
+// countdown or is LIVE; it hides when the objective is gone for the game (or
+// for elder, not up yet) or switched off in the control panel.
+const OBJECTIVES = [
+  { key: "grubs", field: "NEXT GRUBS", letter: "G", color: "#8e44d6" },
+  { key: "dragon", field: "NEXT DRAGON", letter: "D", color: "#2aa7a0" },
+  { key: "herald", field: "NEXT HERALD", letter: "H", color: "#c2449e" },
+  { key: "elder", field: "NEXT ELDER", letter: "E", color: "#d9b65c", dark: true },
+  { key: "baron", field: "NEXT BARON", letter: "B", color: "#6c4bd1" },
+];
+const BOX_W = 96, BOX_GAP = 4;
+
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  parent.appendChild(n);
+  return n;
+}
+
+for (const o of OBJECTIVES) {
+  const g = el("g", { id: `obj-${o.key}`, class: "obj off" }, $("timers"));
+  el("rect", { class: "box", width: BOX_W, height: 28, rx: 2 }, g);
+  el("circle", { cx: 14, cy: 14, r: 9, fill: o.color }, g);
+  el("text", { class: "letter", x: 14, y: 18.5, style: o.dark ? "fill:#1a1a1a" : "" }, g).textContent = o.letter;
+  el("text", { id: `next-${o.key}`, x: 28, y: 20.5 }, g);
+}
+
+function drawObjectives(f, enabled) {
+  let x = 0;
+  for (const o of OBJECTIVES) {
+    const g = $(`obj-${o.key}`), value = f[o.field] || "";
+    const visible = enabled[o.key] !== false && value !== "";
+    if (value) setText(`next-${o.key}`, value);  // keep the last value while fading out
+    $(`next-${o.key}`).classList.toggle("live", value === "LIVE");
+    g.classList.toggle("off", !visible);
+    if (visible) {
+      g.style.transform = `translateX(${x}px)`;
+      x += BOX_W + BOX_GAP;
+    }
+  }
+}
+
 // Smooth the clock between polls, but stop if the game is paused.
 let clock = { base: 0, at: 0, running: false };
 
@@ -255,10 +293,7 @@ function render(s) {
     drawPips(side, cfg.best_of, cfg[side].wins, cfg[side].color);
     drawDrakes(side, s.detail.dragons[side] || []);
   }
-  for (const [id, key] of [["next-baron", "NEXT BARON"], ["next-dragon", "NEXT DRAGON"]]) {
-    setText(id, f[key] || "--:--");
-    $(id).classList.toggle("live", f[key] === "LIVE");
-  }
+  drawObjectives(f, cfg.objective_timers || {});
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.
   const t = s.detail.game_time;

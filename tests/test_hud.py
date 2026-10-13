@@ -60,6 +60,34 @@ class StateTests(unittest.TestCase):
         self.assertEqual(f["NEXT DRAGON"], "01:26")
         self.assertEqual(f["NEXT BARON"], "03:46")
 
+    def test_grubs_and_herald_timers(self):
+        raw = load()
+        raw["gameData"]["gameTime"] = 300.0
+        raw["events"]["Events"] = raw["events"]["Events"][:2]
+        f = build_state(raw, cfg())["fields"]
+        self.assertEqual(f["NEXT GRUBS"], "03:00")
+        self.assertEqual(f["NEXT HERALD"], "10:00")
+        self.assertEqual(f["NEXT ELDER"], "")
+        # In the full fixture all three grubs and the herald are dead.
+        f = build_state(load(), cfg())["fields"]
+        self.assertEqual(f["NEXT GRUBS"], "")
+        self.assertEqual(f["NEXT HERALD"], "")
+
+    def test_elder_takes_over_after_soul(self):
+        raw = load()
+        for i, t in enumerate((300, 600, 900, 950)):
+            raw["events"]["Events"].append({"EventName": "DragonKill", "EventTime": t,
+                                            "DragonType": "Fire", "KillerName": "DSG Aelune"})
+        raw["events"]["Events"].sort(key=lambda e: e["EventTime"])
+        f = build_state(raw, cfg())["fields"]
+        self.assertEqual(f["NEXT DRAGON"], "")
+        self.assertEqual(f["NEXT ELDER"], "05:36")  # 950 + 360 - 974.5
+
+    def test_timers_can_be_switched_off(self):
+        f = build_state(load(), cfg(objective_timers={"baron": False}))["fields"]
+        self.assertEqual(f["NEXT BARON"], "")
+        self.assertEqual(f["NEXT DRAGON"], "01:26")
+
     def test_unknown_events_reported(self):
         detail = build_state(load(), cfg())["detail"]
         self.assertEqual(detail["unknown_events"], ["SomeFutureEvent"])

@@ -40,15 +40,24 @@ DEFAULTS = {
 
     # Objective spawn timers in seconds of game time. Riot moves these between
     # seasons, so check them against the current patch.
+    # Defaults follow the 2026 season (patch 26.1).
     "timers": {
         "dragon_first": 300,
         "dragon_respawn": 300,
-        "elder_respawn": 360,
+        "elder_respawn": 360,      # after the 4th dragon (soul), and between elders
+        "grubs_first": 480,
+        "grubs_waves": 1,          # camps of 3 per game
+        "grubs_respawn": 240,      # only used if grubs_waves > 1
+        "grubs_despawn": 885,
+        "herald_first": 900,
+        "herald_despawn": 1185,
         "baron_first": 1200,
         "baron_respawn": 360,
         "baron_buff": 180,
         "elder_buff": 150,
     },
+    # Which objective timers to show, in the order they appear on the overlay.
+    "objective_timers": {"grubs": True, "dragon": True, "herald": True, "elder": True, "baron": True},
 }
 
 _lock = threading.Lock()

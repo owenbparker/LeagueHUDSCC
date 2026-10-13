@@ -70,7 +70,7 @@ def _blank_objectives():
 
 def tally_events(events, names):
     obj = {"ORDER": _blank_objectives(), "CHAOS": _blank_objectives()}
-    last = {"dragon": None, "baron": None, "elder": None}
+    last = {"dragon": None, "baron": None, "elder": None, "herald": None, "grubs": []}
     last_team = {"baron": None, "elder": None}
     unknown = set()
 
@@ -106,9 +106,11 @@ def tally_events(events, names):
             if killer_team:
                 obj[killer_team]["barons"] += 1
         elif kind == "HeraldKill":
+            last["herald"] = t
             if killer_team:
                 obj[killer_team]["heralds"] += 1
         elif "horde" in low or "grub" in low:
+            last["grubs"].append(t)
             if killer_team:
                 obj[killer_team]["grubs"] += 1
         elif "atakhan" in low:
@@ -124,6 +126,16 @@ def _countdown(spawn_at, now):
         return ""
     remaining = spawn_at - now
     return "LIVE" if remaining <= 0 else fmt_clock(remaining + 0.999)
+
+
+def _grubs_spawn(kills, now, timers):
+    """When the current/next grub camp spawns, or None once they're gone."""
+    per_wave, waves = 3, int(timers["grubs_waves"])
+    n = len(kills)
+    if n >= per_wave * waves or now >= timers["grubs_despawn"]:
+        return None
+    wave_start = (n // per_wave) * per_wave
+    return timers["grubs_first"] if wave_start == 0 else kills[wave_start - 1] + timers["grubs_respawn"]
 
 
 def asset_path(rel):
@@ -195,16 +207,26 @@ def build_state(raw, cfg, ddragon=None):
     f["GOLD DIFF LEFT"] = diff_text if diff >= 100 else ""
     f["GOLD DIFF RIGHT"] = diff_text if diff <= -100 else ""
 
-    # Objective timers.
+    # Objective timers: a countdown, "LIVE", or blank when the objective is
+    # gone for the game (or not up yet, for elder) or switched off.
     soul_taken = any(len(obj[t]["dragons"]) >= 4 for t in obj)
     if last["dragon"] is None:
         dragon_spawn = timers["dragon_first"]
     else:
         dragon_spawn = last["dragon"] + (timers["elder_respawn"] if soul_taken else timers["dragon_respawn"])
-    baron_spawn = timers["baron_first"] if last["baron"] is None else last["baron"] + timers["baron_respawn"]
-    f["NEXT DRAGON"] = _countdown(dragon_spawn, game_time) if connected else ""
+    herald_gone = last["herald"] is not None or game_time >= timers["herald_despawn"]
+    spawns = {
+        "grubs": _grubs_spawn(last["grubs"], game_time, timers),
+        "dragon": None if soul_taken else dragon_spawn,
+        "herald": None if herald_gone else timers["herald_first"],
+        "elder": dragon_spawn if soul_taken else None,
+        "baron": timers["baron_first"] if last["baron"] is None else last["baron"] + timers["baron_respawn"],
+    }
+    shown = cfg.get("objective_timers", {})
+    for name, spawn_at in spawns.items():
+        on = connected and shown.get(name, True)
+        f[f"NEXT {name.upper()}"] = _countdown(spawn_at, game_time) if on else ""
     f["NEXT DRAGON IS ELDER"] = int(soul_taken)
-    f["NEXT BARON"] = _countdown(baron_spawn, game_time) if connected else ""
 
     team_side = {v: k for k, v in side_team.items()}
     for buff, length in (("baron", timers["baron_buff"]), ("elder", timers["elder_buff"])):

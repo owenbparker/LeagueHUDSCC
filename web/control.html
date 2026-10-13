@@ -41,6 +41,9 @@
   .fields div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); padding: 3px 0; cursor: copy; }
   .fields span:last-child { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
   .note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .checks label { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 0; color: var(--text); font-size: 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .checks input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .checks .dot { width: 18px; height: 18px; box-shadow: none; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; }
   .warn { color: #ffcf66; }
   @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } main { padding: 12px 16px; } }
 </style>
@@ -64,6 +67,12 @@
       <label class="row" style="margin:0;color:var(--text)">Series
         <select id="best-of"><option value="1">Bo1</option><option value="3">Bo3</option><option value="5">Bo5</option></select></label>
     </div>
+  </section>
+
+  <section>
+    <h2>Objective timers</h2>
+    <div id="objectives" class="checks"></div>
+    <p class="note">Shown in the top-left of the overlay. A timer appears while its objective is counting down or LIVE, and drops off once it's gone for the game. Elder appears after a team takes soul. Switched-off timers are also left blank in the CSV.</p>
   </section>
 
   <section>
@@ -160,6 +169,13 @@ for (const el of document.querySelectorAll(".team")) {
   });
 }
 
+const OBJECTIVES = [["grubs", "Void Grubs", "G", "#8e44d6"], ["dragon", "Dragon", "D", "#2aa7a0"],
+  ["herald", "Rift Herald", "H", "#c2449e"], ["elder", "Elder Drake", "E", "#d9b65c"], ["baron", "Baron", "B", "#6c4bd1"]];
+$("objectives").innerHTML = OBJECTIVES.map(([key, name, letter, color]) =>
+  `<label><input type="checkbox" data-obj="${key}"><span class="dot" style="background:${color}">${letter}</span>${name}</label>`).join("");
+$("objectives").querySelectorAll("input").forEach(box => box.addEventListener("change", () =>
+  post("/api/config", { objective_timers: { [box.dataset.obj]: box.checked } })));
+
 $("swap-teams").onclick = () => post("/api/config", { left: state.config.right, right: state.config.left });
 $("swap-sides").onchange = e => post("/api/config", { swap_sides: e.target.checked });
 $("best-of").onchange = e => post("/api/config", { best_of: Number(e.target.value) });
@@ -200,6 +216,7 @@ function apply(s) {
   }
   if (logosChanged) loadLogos(cfg);
   $("swap-sides").checked = cfg.swap_sides;
+  $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
   $("best-of").value = cfg.best_of;
   setIfIdle($("gold-mode"), cfg.gold_mode);
   setIfIdle($("gold-scale"), cfg.gold_estimate_scale);

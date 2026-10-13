@@ -20,7 +20,7 @@ It also has a control panel for team names, logos, series score and sides.
 | Game clock | `TIMER` |
 | Void grubs | `VOID GRUB LEFT` |
 | Series pips | `BO3 1 LEFT` (image path, lit when won), `BO3 1 LEFT WIN` (1/0) |
-| Objective timers | `NEXT DRAGON`, `NEXT BARON` (countdown or `LIVE`), `NEXT DRAGON IS ELDER` |
+| Objective timers | `NEXT GRUBS`, `NEXT DRAGON`, `NEXT HERALD`, `NEXT ELDER`, `NEXT BARON`: countdown, `LIVE`, or blank once the objective is gone for the game (elder: blank until a team takes soul). Also blank when switched off in the control panel. `NEXT DRAGON IS ELDER` |
 | Buffs | `BARON BUFF SIDE`, `BARON BUFF TIME`, `ELDER BUFF SIDE`, `ELDER BUFF TIME` |
 | Other objectives | `DRAGONS LEFT`, `DRAGON TYPES LEFT` (Infernal,Ocean), `HERALDS`, `BARONS`, `ELDERS`, `ATAKHANS`, `INHIBS` |
 | Players 1–5 left, 6–10 right | `P1 NAME`, `P1 CHAMPION`, `P1 CHAMPION ICON`, `P1 LEVEL`, `P1 KDA`, `P1 CS`, `P1 DEAD`, `P1 RESPAWN` |
@@ -58,7 +58,7 @@ Optional switches on the end of the URL:
 
 | | |
 |---|---|
-| `?timers=0` | hide the baron/dragon countdowns in the top left |
+| `?timers=0` | hide all objective timers in the top left (to hide individual ones, use the control panel) |
 | `?diff=0` | hide the gold-lead tab (it slides out in the leading team's colour under their gold, and back in when the lead flips or disappears) |
 | `?dragons=1` | show each team's dragons as coloured dots in the lower strip |
 | `?idle=0` | hide the bar when no game is running |
@@ -84,6 +84,7 @@ If vMix runs on a different PC, start the HUD with `--host 0.0.0.0` and use `htt
 - **Swap teams left/right:** swaps names, logos and scores.
 - **Left team is on red side:** by default the left of the bar is blue side. Tick this when the left team plays red.
 - **Series:** Bo1 / Bo3 / Bo5 (pips follow).
+- **Objective timers:** switch Void Grubs, Dragon, Rift Herald, Elder Drake and Baron on or off. Each shows while its objective is counting down or LIVE, and drops off once it's gone for the game; the rest close up.
 - **Gold:** see below.
 - A live preview, and every field with its current value (click a name to copy it).
 
@@ -101,7 +102,7 @@ Item prices and champion icons come from Riot's Data Dragon. They are downloaded
 
 ## Things to check against the current patch
 
-- Riot moves objective spawn times between seasons. Set them in `config.json` under `timers` (seconds). The default first baron is 20:00, matching your reference broadcast.
+- Riot moves objective spawn times between seasons. Set them in `config.json` under `timers` (seconds). Defaults follow the 2026 season: dragon 5:00 (respawn 5:00), grubs 8:00 (one camp of three, gone at 14:45), herald 15:00 (once, gone at 19:45), baron 20:00 (respawn 6:00), elder 6:00 after soul and between elders.
 - Void grubs and Atakhan are counted from any game event whose name contains "Horde"/"Grub" or "Atakhan". If Riot adds an event the HUD doesn't use yet, the control panel lists it under "New game events not used yet". Send it over and it can be added.
 
 ## Files
