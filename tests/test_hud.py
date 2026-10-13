@@ -165,6 +165,24 @@ class ScreenGoldTests(unittest.TestCase):
         self.assertTrue(sg._accept("blue", 2500))
 
 
+class UpdaterTests(unittest.TestCase):
+    def test_version_ordering(self):
+        from lolhud.updater import is_newer, parse_version
+        self.assertEqual(parse_version("v1.0.12"), (1, 0, 12))
+        self.assertTrue(is_newer("v1.0.12", "v1.0.9"))      # numeric, not alphabetical
+        self.assertFalse(is_newer("v1.0.9", "v1.0.12"))
+        self.assertFalse(is_newer("v1.0.9", "v1.0.9"))
+        self.assertTrue(is_newer("v1.0.1", "dev"))          # dev builds are offered releases
+
+    def test_available_needs_the_zip(self):
+        from lolhud.updater import Updater
+        u = Updater()
+        u.current, u.latest = "v1.0.5", "v1.0.6"
+        self.assertFalse(u.info()["available"])
+        u.asset = {"name": "LeagueHUD-windows.zip", "browser_download_url": "x", "size": 1}
+        self.assertTrue(u.info()["available"])
+
+
 class OutputTests(unittest.TestCase):
     def test_csv_round_trip(self):
         f = build_state(load(), cfg())["fields"]

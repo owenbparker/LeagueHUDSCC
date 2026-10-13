@@ -19,6 +19,7 @@ from .config import DATA_DIR, LOGO_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from .log import log, since
 from .ocr import ScreenGold
+from .updater import Updater, clean_up_old_update
 from .source import DemoSource, LiveClientSource
 from .state import build_state
 
@@ -43,6 +44,7 @@ class HudApp:
         self.updated_at = 0.0
         self.server = None
         self.screen_gold = ScreenGold(config)
+        self.updater = Updater()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._was_connected = None
@@ -121,7 +123,7 @@ class HudApp:
         screen = {"available": sg.available, "status": sg.status, "values": sg.fresh(),
                   "age": round(time.time() - sg.read_at, 1) if sg.read_at else None}
         return {"mode": self.mode, "demo_speed": self.demo_speed, "network": network, "port": port,
-                "screen_gold": screen,
+                "screen_gold": screen, "update": self.updater.info(),
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
     def snapshot(self):
@@ -251,6 +253,10 @@ def make_handler(app):
                     app.set_network(body["enabled"])
                 elif path == "/api/open":
                     app.open_folder(body["folder"])
+                elif path == "/api/update/check":
+                    app.updater.check()
+                elif path == "/api/update/install":
+                    app.updater.install_in_background()
                 elif path == "/api/screen-gold/test":
                     return self._send(json.dumps(app.screen_gold.test()))
                 else:
@@ -295,8 +301,10 @@ def start(app):
     port = app.config.get()["http_port"]
     app.server = Server(app, app.host(), port)
     app.screen_gold.start()
+    clean_up_old_update()
+    app.updater.check_in_background()
     threading.Thread(target=app.run_poller, daemon=True).start()
-    log(f"League HUD running - control panel http://localhost:{port}/control")
+    log(f"League HUD {app.updater.current} running - control panel http://localhost:{port}/control")
     log(f"Overlay (browser source, 1920x1080): http://localhost:{port}/overlay")
     log(f"vMix data source: http://localhost:{port}/hud.csv  - file: {app.config.output_dir()}")
     return app.server

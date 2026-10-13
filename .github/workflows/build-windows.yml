@@ -1,14 +1,13 @@
-# Builds the League HUD desktop app (LeagueHUD.exe) on Windows.
+# Builds the League HUD desktop app (LeagueHUD.exe) on Windows and publishes
+# it as a GitHub release (v1.0.<run number>) with LeagueHUD-windows.zip.
+# The app checks the latest release on launch and offers to update itself.
 #
-# Every push produces a "LeagueHUD-windows" download on the run's summary
-# page (Actions tab). Pushing a tag like v1.0.0 also attaches the zip to a
-# GitHub release.
+# Every run also leaves the zip on the run's summary page (Actions tab).
 name: Build Windows app
 
 on:
   push:
     branches: [main, "claude/**"]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +16,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      VERSION: v1.0.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +37,12 @@ jobs:
         # Top 60px of a 1920x1080 frame that showed 8.0k / 8.9k.
         run: python -m lolhud.ocr tests/fixtures/spectator_topbar.png 8000 8900 1079
 
+      - name: Stamp the version
+        shell: pwsh
+        run: |
+          Set-Content lolhud/version.py "VERSION = `"$env:VERSION`"" -Encoding utf8
+          Get-Content lolhud/version.py
+
       - name: Build LeagueHUD.exe
         run: pyinstaller --noconfirm LeagueHUD.spec
 
@@ -48,7 +55,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
           # Leave no test leftovers in the download.
           Remove-Item "$app\smoke-test.txt", "$app\config.json" -ErrorAction SilentlyContinue
-          Remove-Item "$app\output" -Recurse -ErrorAction SilentlyContinue
+          Remove-Item "$app\output", "$app\_update" -Recurse -ErrorAction SilentlyContinue
 
       - name: Add readme
         shell: pwsh
@@ -59,11 +66,12 @@ jobs:
           name: LeagueHUD-windows
           path: dist/LeagueHUD
 
-      - name: Attach to release (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\LeagueHUD -DestinationPath LeagueHUD-windows.zip
-          gh release create "${{ github.ref_name }}" LeagueHUD-windows.zip --title "League HUD ${{ github.ref_name }}" --generate-notes
+          Compress-Archive -Path dist\LeagueHUD\* -DestinationPath LeagueHUD-windows.zip
+          $notes = git log -1 --format=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' }
+          $notes = ($notes -join "`n").Trim()
+          gh release create "$env:VERSION" LeagueHUD-windows.zip --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
         env:
           GH_TOKEN: ${{ github.token }}

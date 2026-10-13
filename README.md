@@ -29,10 +29,12 @@ The field names match your PSD layer names (`KILLS LEFT`, `GOLD LEFT`, `TRI-CODE
 
 ## Windows desktop app
 
-1. Download **LeagueHUD-windows**. On GitHub, open the **Actions** tab and the latest **Build Windows app** run, and download it under **Artifacts**. Tagged versions are also on the **Releases** page.
+1. Download **LeagueHUD-windows.zip** from the latest release on the repository's **Releases** page.
 2. Extract the zip wherever you want the app to live (e.g. `C:\LeagueHUD\LeagueHUD`) and run **`LeagueHUD.exe`**. Right-click it -> **Send to -> Desktop (create shortcut)** for a desktop shortcut.
 
-No install or Python needed. To update, close the app and extract a newer download over the same folder: your settings, logos and output files aren't in the zip, so they're kept.
+No install or Python needed.
+
+**Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. Click the version number next to it to check again. You can also update by hand: close the app and extract a newer download over the same folder.
 
 The app opens in a 1280x720 window with everything that used to be in the command window built in:
 
@@ -130,6 +132,7 @@ lolhud/          the app (Python standard library; the desktop window also uses 
   state.py         turns game data into HUD fields
   gold.py          gold estimate + Data Dragon prices/icons
   ocr.py           reads team gold off the spectator top bar (Windows text recognition)
+  updater.py       checks GitHub releases and installs updates; version.py holds the build's version
   outputs.py       CSV / JSON / XML
   app.py           web server, control panel API
   gui.py           the desktop window (pywebview)

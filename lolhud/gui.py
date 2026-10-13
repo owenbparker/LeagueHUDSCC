@@ -111,8 +111,10 @@ def main():
     url = f"http://127.0.0.1:{port}/control"
     try:
         import webview
-        webview.create_window(TITLE, url, width=1280, height=720, min_size=(960, 600),
-                              background_color="#0e1012", text_select=True)
+        window = webview.create_window(f"{TITLE} {app.updater.current}", url, width=1280, height=720,
+                                       min_size=(960, 600), background_color="#0e1012", text_select=True)
+        # Installing an update closes the window; the updater restarts the app.
+        app.updater.on_exit = window.destroy
         webview.start(debug=args.debug)
     except Exception as e:
         # No WebView2 (very old Windows 10) or no window library: use the browser.

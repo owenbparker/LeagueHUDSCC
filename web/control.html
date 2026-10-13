@@ -16,6 +16,11 @@
   .clock { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
   .badge { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; background: #ffcf66; color: #1a1a1a; }
   .badge:empty { display: none; }
+  .version { font-size: 12px; color: var(--muted); cursor: pointer; }
+  .update { background: var(--accent); color: #06231a; border: 0; font-weight: 700; padding: 6px 12px; }
+  .update:hover { filter: brightness(1.1); }
+  .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
+  .update.error { background: #6b2a2a; color: #fff; }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
   .seg button { border: 0; border-radius: 0; background: transparent; padding: 6px 12px; color: var(--muted); }
   .seg button.on { background: var(--accent); color: #06231a; font-weight: 600; }
@@ -90,7 +95,11 @@
   <select id="demo-speed" title="Demo speed" style="width:auto">
     <option value="1">1x</option><option value="4">4x</option><option value="8">8x</option><option value="30">30x</option>
   </select>
-  <div class="status" style="margin-left:auto"><span class="badge" id="mode-badge"></span><span id="clock" class="clock">00:00</span></div>
+  <div class="status" style="margin-left:auto">
+    <button id="update" class="update" hidden></button>
+    <span class="version" id="version" title="Check for updates"></span>
+    <span class="badge" id="mode-badge"></span><span id="clock" class="clock">00:00</span>
+  </div>
 </header>
 <div class="layout">
 <main>
@@ -330,6 +339,7 @@ function apply(s) {
     : sg.values ? `<span class="ok">Reading: blue ${fmt(sg.values.blue)} · red ${fmt(sg.values.red)}</span>`
     : `<span class="warn">Using the estimate - ${sg.status}</span>`;
   const app = s.app;
+  showUpdate(app.update);
   if (first) {
     $("url-overlay").textContent = `http://localhost:${app.port}/overlay`;
     $("url-csv").textContent = `http://localhost:${app.port}/hud.csv`;
@@ -360,6 +370,32 @@ $("screen-test").onclick = async () => {
   if (!r.blue) { box.innerHTML = `<span class="warn">${r.error}</span>`; return; }
   box.innerHTML = ["blue", "red"].map(t => `<figure><img src="${r[t].image}" alt="">
     <figcaption>${t}: read <b>${r[t].text || "nothing"}</b> → ${r[t].value != null ? (r[t].value / 1000).toFixed(1) + "k" : '<span class="warn">not a gold value</span>'}</figcaption></figure>`).join("");
+};
+
+// Updates: a button in the top bar when GitHub has a newer version.
+let versionNoteUntil = 0;
+function showUpdate(u) {
+  const b = $("update");
+  if (Date.now() > versionNoteUntil) $("version").textContent = u.current === "dev" ? "dev build" : u.current;
+  b.classList.remove("error");
+  b.disabled = false;
+  if (u.status === "downloading") { b.hidden = false; b.disabled = true; b.textContent = `Downloading update ${u.progress}%`; }
+  else if (u.status === "installing") { b.hidden = false; b.disabled = true; b.textContent = "Installing - restarting…"; }
+  else if (u.status === "error") { b.hidden = false; b.classList.add("error"); b.textContent = "Update failed - retry"; b.title = u.error; }
+  else if (u.available && u.can_install) { b.hidden = false; b.textContent = `⬆ Update to ${u.latest}`; b.title = u.notes; }
+  else b.hidden = true;
+}
+$("update").onclick = () => {
+  const u = state.app.update;
+  const notes = u.notes ? `\n\nWhat's new:\n${u.notes.slice(0, 600)}` : "";
+  if (confirm(`Install League HUD ${u.latest} now?\n\nThe app will close and reopen (about 10 seconds); the overlay and data feed pause while it restarts. Your settings, logos and output files are kept.${notes}`))
+    post("/api/update/install", {});
+};
+$("version").onclick = async () => {
+  $("version").textContent = "checking…";
+  await post("/api/update/check", {});
+  const u = state.app.update;
+  if (!u.available) { $("version").textContent = `${u.current} - up to date`; versionNoteUntil = Date.now() + 4000; }
 };
 
 // Header: game source.
