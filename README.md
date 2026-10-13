@@ -81,6 +81,7 @@ If vMix runs on a different PC, start the HUD with `--host 0.0.0.0` and use `htt
 ## The control panel
 
 - **Teams:** tricode, name, logo (upload or pick), team colour (colour picker, or type a hex code), series wins (+/−).
+- **Logo size & position:** sliders to scale a logo (40–250%) and nudge it left/right and up/down, for logos with lots of empty space or odd shapes. The tweak is saved against the logo file, so it follows that logo to either side and comes back whenever you pick it again. The tweak only applies to the built-in overlay; a vMix/GT title sizes the `LOGO` image itself.
 - **Swap teams left/right:** swaps names, logos and scores.
 - **Left team is on red side:** by default the left of the bar is blue side. Tick this when the left team plays red.
 - **Series:** Bo1 / Bo3 / Bo5 (pips follow).

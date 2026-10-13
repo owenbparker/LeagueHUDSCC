@@ -71,8 +71,8 @@
   <image href="assets/team_left.png" x="511" y="1" width="196" height="70" filter="url(#tint-left)"/>
   <image href="assets/team_right.png" x="1216" y="1" width="197" height="70" filter="url(#tint-right)"/>
 
-  <image id="logo-left" x="534" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/>
-  <image id="logo-right" x="1346" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/>
+  <g id="logo-left-wrap"><image id="logo-left" x="534" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/></g>
+  <g id="logo-right-wrap"><image id="logo-right" x="1346" y="14" width="40" height="46" preserveAspectRatio="xMidYMid meet"/></g>
   <g id="pips-left"></g>
   <g id="pips-right"></g>
 
@@ -273,6 +273,16 @@ function drawObjectives(f, enabled) {
   }
 }
 
+// Logo size/position tweak from the control panel, scaled about the centre
+// of the PSD's logo box.
+const LOGO_CENTER = { left: [554, 37], right: [1366, 37] };
+function placeLogo(side, adj) {
+  const { scale = 1, x = 0, y = 0 } = adj || {}, [cx, cy] = LOGO_CENTER[side];
+  const t = `translate(${cx + x} ${cy + y}) scale(${scale}) translate(${-cx} ${-cy})`;
+  const wrap = $(`logo-${side}-wrap`);
+  if (wrap.getAttribute("transform") !== t) wrap.setAttribute("transform", t);
+}
+
 // Smooth the clock between polls, but stop if the game is paused.
 let clock = { base: 0, at: 0, running: false };
 
@@ -290,6 +300,7 @@ function render(s) {
     setDiff(side, SHOW.diff ? f[`GOLD DIFF ${S}`] : "");
     const logo = cfg[side].logo;
     if ($(`logo-${side}`).getAttribute("href") !== logo) $(`logo-${side}`).setAttribute("href", logo);
+    placeLogo(side, (cfg.logo_adjust || {})[logo]);
     drawPips(side, cfg.best_of, cfg[side].wins, cfg[side].color);
     drawDrakes(side, s.detail.dragons[side] || []);
   }

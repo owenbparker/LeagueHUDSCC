@@ -23,6 +23,9 @@ DEFAULTS = {
 
     "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0, "color": "#0a6d4c"},
     "right": {"name": "Team Right", "tricode": "SCC", "logo": "assets/logo_right.png", "wins": 0, "color": "#bd1313"},
+    # Size and position tweaks per logo file: {"assets/logos/x.png": {"scale": 1.2, "x": 0, "y": -2}}.
+    # Stored per logo, so a team's logo keeps its tweak whichever side it is on.
+    "logo_adjust": {},
     "best_of": 3,
     # By default the left of the HUD is blue side (ORDER). Turn this on when
     # the left-hand team is playing red side.

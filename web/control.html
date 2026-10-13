@@ -23,6 +23,8 @@
   input, select { width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
   input[type=checkbox] { width: auto; }
   input.swatch { flex: 0 0 64px; height: 38px; padding: 3px; cursor: pointer; }
+  input[type=range] { padding: 0; border: 0; background: none; accent-color: var(--accent); }
+  .logo-adjust label span { color: var(--text); float: right; }
   button { padding: 8px 12px; background: #252a2f; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
   button:hover { border-color: var(--muted); }
   .row { display: flex; gap: 8px; align-items: center; }
@@ -124,6 +126,17 @@ function teamForm(side) {
     <div class="row"><select data-k="logo" id="${side}-logo"></select>
       <button type="button" onclick="document.getElementById('${side}-upload').click()" style="flex:0 0 auto">Upload…</button>
       <input type="file" id="${side}-upload" accept="image/*" hidden></div>
+    <div class="logo-adjust">
+      <label>Logo size <span id="${side}-scale-val">100%</span></label>
+      <input type="range" id="${side}-scale" data-adj="scale" min="40" max="250" step="1">
+      <div class="row">
+        <div><label>Left / right <span id="${side}-x-val">0</span></label>
+          <input type="range" id="${side}-x" data-adj="x" min="-30" max="30" step="1"></div>
+        <div><label>Up / down <span id="${side}-y-val">0</span></label>
+          <input type="range" id="${side}-y" data-adj="y" min="-30" max="30" step="1"></div>
+      </div>
+      <button type="button" id="${side}-adj-reset" style="margin-top:6px">Reset logo size &amp; position</button>
+    </div>
     <label>Team colour</label>
     <div class="row"><input type="color" class="swatch" id="${side}-color">
       <input id="${side}-hex" maxlength="7" spellcheck="false" placeholder="#0a6d4c"></div>
@@ -160,6 +173,20 @@ for (const el of document.querySelectorAll(".team")) {
     if (/^#[0-9a-f]{6}$/i.test(v)) post("/api/config", { [side]: { color: v.toLowerCase() } });
     else e.target.value = state.config[side].color;
   });
+  // Logo size and nudge: saved against the logo file, live while dragging.
+  let adjTimer = null;
+  const readAdj = () => ({ scale: $(`${side}-scale`).value / 100, x: Number($(`${side}-x`).value), y: Number($(`${side}-y`).value) });
+  const sendAdj = async adj => {
+    await post("/api/config", { logo_adjust: { [state.config[side].logo]: adj } });
+    adjPending[side] = false;
+  };
+  el.querySelectorAll("[data-adj]").forEach(input => input.addEventListener("input", () => {
+    adjPending[side] = true;  // don't let a refresh reset the sliders before this is saved
+    showAdj(side, readAdj());
+    clearTimeout(adjTimer);
+    adjTimer = setTimeout(() => sendAdj(readAdj()), 120);
+  }));
+  $(`${side}-adj-reset`).addEventListener("click", () => sendAdj({ scale: 1, x: 0, y: 0 }));
   $(`${side}-upload`).addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -194,6 +221,14 @@ async function loadLogos(cfg) {
   }
 }
 
+const adjPending = { left: false, right: false };
+
+function showAdj(side, adj) {
+  $(`${side}-scale-val`).textContent = Math.round(adj.scale * 100) + "%";
+  $(`${side}-x-val`).textContent = adj.x;
+  $(`${side}-y-val`).textContent = adj.y;
+}
+
 function setIfIdle(el, value) { if (document.activeElement !== el) el.value = value; }
 
 function apply(s) {
@@ -208,6 +243,13 @@ function apply(s) {
     const el = document.querySelector(`.team.${side}`);
     el.querySelectorAll("input[data-k]").forEach(i => setIfIdle(i, cfg[side][i.dataset.k]));
     $(`${side}-wins`).textContent = cfg[side].wins;
+    if (!adjPending[side]) {
+      const adj = Object.assign({ scale: 1, x: 0, y: 0 }, (cfg.logo_adjust || {})[cfg[side].logo]);
+      setIfIdle($(`${side}-scale`), Math.round(adj.scale * 100));
+      setIfIdle($(`${side}-x`), adj.x);
+      setIfIdle($(`${side}-y`), adj.y);
+      if (![`${side}-scale`, `${side}-x`, `${side}-y`].includes(document.activeElement?.id)) showAdj(side, adj);
+    }
     setIfIdle($(`${side}-color`), cfg[side].color);
     setIfIdle($(`${side}-hex`), cfg[side].color);
     el.style.borderTopColor = cfg[side].color;
