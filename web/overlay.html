@@ -39,10 +39,11 @@
   .pip { fill: rgba(0,0,0,.62); stroke: rgba(255,255,255,.22); stroke-width: 1; }
   .pip.won { stroke: rgba(255,255,255,.85); }
   /* Objective timers, top left. */
-  .timers .box { fill: rgba(0,0,0,.82); }
-  .timers text { font-family: "Inter", sans-serif; font-weight: 700; font-size: 17px; }
-  .timers .letter { font-size: 12px; text-anchor: middle; }
-  .timers .live { fill: #ffd34d; }
+  .timers .box { fill: rgba(0,0,0,.79); stroke: rgba(120,120,120,.79); stroke-width: 1; }
+  .timers .alive .box { stroke: rgba(255,255,255,.2); }
+  .timers .tile { fill-opacity: .31; stroke: rgba(255,255,255,.26); stroke-width: 1; }
+  .timers .alive .tile { stroke: rgba(255,255,255,.3); }
+  .timers .time { font-family: "Heathergreen", "Inter", sans-serif; font-size: 39px; text-anchor: middle; fill: #fff; }
   .obj { transition: transform .4s ease, opacity .3s ease; }
   .obj.off { opacity: 0; }
   .drake { stroke: rgba(0,0,0,.6); stroke-width: 1; }
@@ -106,14 +107,23 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const SIDES = ["left", "right"];
 const DRAKE_COLORS = { Infernal: "#ff6a2b", Ocean: "#3fb8ff", Mountain: "#b9874f", Cloud: "#c7e4f2",
                        Hextech: "#5fe0e8", Chemtech: "#7fd447" };
+// Objective timers (top left), from the designer's obj-timer PSD: counting
+// down, an objective is a dark box with its icon on a tinted tile and the
+// time; once it's up, just the icon on a brighter tile.
 const OBJECTIVES = [
-  { key: "grubs", field: "NEXT GRUBS", letter: "G", color: "#8e44d6" },
-  { key: "dragon", field: "NEXT DRAGON", letter: "D", color: "#2aa7a0" },
-  { key: "herald", field: "NEXT HERALD", letter: "H", color: "#c2449e" },
-  { key: "elder", field: "NEXT ELDER", letter: "E", color: "#d9b65c", dark: true },
-  { key: "baron", field: "NEXT BARON", letter: "B", color: "#6c4bd1" },
+  { key: "grubs", field: "NEXT GRUBS", icon: "grubs" },
+  { key: "dragon", field: "NEXT DRAGON", icon: "dragon" },
+  { key: "herald", field: "NEXT HERALD", icon: "herald" },
+  { key: "elder", field: "NEXT ELDER", icon: "elder" },
+  { key: "baron", field: "NEXT BARON", icon: "baron" },
 ];
-const BOX_W = 96, BOX_GAP = 4;
+// Each icon's tile colour (drawn see-through over the box), from the PSD.
+const OBJ_TILE = { grubs: "#9646af", herald: "#9646af", baron: "#9646af", elder: "#837f83",
+                   "dragon-infernal": "#94794c", "dragon-ocean": "#50867d", "dragon-mountain": "#7a6f5e",
+                   "dragon-cloud": "#7d9196", "dragon-hextech": "#598894", "dragon-chemtech": "#638255",
+                   "dragon-unknown": "#6e6e6e" };
+const DRAGON_ICONS = ["Infernal", "Ocean", "Mountain", "Cloud", "Hextech", "Chemtech"];
+const TIMER_W = 102, ALIVE_W = 49, OBJ_GAP = 2;
 
 function el(tag, attrs, parent) {
   const n = document.createElementNS(SVGNS, tag);
@@ -275,12 +285,26 @@ function buildTimers(g) {
   const boxes = {};
   for (const o of OBJECTIVES) {
     const b = el("g", { class: "obj off" }, g);
-    el("rect", { class: "box", width: BOX_W, height: 28, rx: 2 }, b);
-    el("circle", { cx: 14, cy: 14, r: 9, fill: o.color }, b);
-    el("text", { class: "letter", x: 14, y: 18.5, style: o.dark ? "fill:#1a1a1a" : null }, b).textContent = o.letter;
-    boxes[o.key] = { g: b, value: el("text", { x: 28, y: 20.5 }, b) };
+    // Counting down: a 102x46 box, 2px lower than the alive box so both centre.
+    const timer = el("g", { class: "timer", transform: "translate(0 2)" }, b);
+    el("rect", { class: "box", x: .5, y: .5, width: TIMER_W - 1, height: 45, rx: 3 }, timer);
+    const tile = el("rect", { class: "tile", x: 2.5, y: 2.5, width: 40, height: 40, rx: 3 }, timer);
+    const icon = el("image", { x: 6, y: 6, width: 34, height: 34 }, timer);
+    const value = el("text", { class: "time", x: 73, y: 35 }, timer);
+    // Up: a 49x50 box with the icon alone.
+    const alive = el("g", { class: "alive" }, b);
+    el("rect", { class: "box", x: .5, y: .5, width: ALIVE_W - 1, height: 49, rx: 4 }, alive);
+    const aliveTile = el("rect", { class: "tile", x: 4.5, y: 4.5, width: 40, height: 40, rx: 3 }, alive);
+    const aliveIcon = el("image", { x: 9, y: 9, width: 31, height: 31 }, alive);
+    boxes[o.key] = { g: b, timer, alive, value, tiles: [tile, aliveTile], icons: [icon, aliveIcon], src: "" };
   }
   return { g, boxes };
+}
+
+// The dragon's icon is the next dragon's element when it's known.
+function objectiveIcon(o, nextDragon) {
+  if (o.icon !== "dragon") return o.icon;
+  return DRAGON_ICONS.includes(nextDragon) ? `dragon-${nextDragon.toLowerCase()}` : "dragon-unknown";
 }
 
 // ---------------------------------------------------------------------------
@@ -389,17 +413,25 @@ function drawDrakes(side, list) {
   list.forEach((name, i) => el("circle", { class: "drake", cx: d.e.x + i * d.e.step, cy: d.e.y, r: 6, fill: DRAKE_COLORS[name] || "#ccc" }, d.g));
 }
 
-function drawTimers(f, enabled) {
+function drawTimers(f, enabled, nextDragon) {
   if (!timers) return;
   timers.g.style.display = SHOW.timers ? "" : "none";
   let x = 0;
   for (const o of OBJECTIVES) {
     const b = timers.boxes[o.key], value = f[o.field] || "";
     const visible = enabled[o.key] !== false && value !== "";
-    if (value) setText(b.value, value);
-    b.value.classList.toggle("live", value === "LIVE");
+    const up = value === "LIVE";
+    const name = objectiveIcon(o, nextDragon);
+    if (b.src !== name) {
+      b.src = name;
+      for (const i of b.icons) i.setAttribute("href", `/assets/objectives/${name}.png`);
+      for (const t of b.tiles) t.setAttribute("fill", OBJ_TILE[name]);
+    }
+    if (value && !up) setText(b.value, value);
+    b.timer.style.display = up ? "none" : "";
+    b.alive.style.display = up ? "" : "none";
     b.g.classList.toggle("off", !visible);
-    if (visible) { b.g.style.transform = `translateX(${x}px)`; x += BOX_W + BOX_GAP; }
+    if (visible) { b.g.style.transform = `translateX(${x}px)`; x += (up ? ALIVE_W : TIMER_W) + OBJ_GAP; }
   }
 }
 
@@ -589,7 +621,7 @@ function render(s) {
     drawPips(side, cfg.best_of, cfg[side].wins, cfg[side].color);
     drawDrakes(side, s.detail.dragons[side] || []);
   }
-  drawTimers(f, cfg.objective_timers || {});
+  drawTimers(f, cfg.objective_timers || {}, cfg.next_dragon || s.detail.next_dragon);
   checkAnimations(s);
   renderCams(s, SHOW.cams);
   setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);

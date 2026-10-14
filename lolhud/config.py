@@ -134,6 +134,10 @@ DEFAULTS = {
         "baron_buff": 180,
         "elder_buff": 150,
     },
+    # The next dragon's element for its timer icon: "" works it out (known
+    # once the rift has formed, after the third dragon), or Infernal, Ocean,
+    # Mountain, Cloud, Hextech or Chemtech to set it.
+    "next_dragon": "",
     # Which objective timers to show, in the order they appear on the overlay.
     "objective_timers": {"grubs": True, "dragon": True, "herald": True, "elder": True, "baron": True},
 }

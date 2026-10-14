@@ -71,7 +71,8 @@ def _blank_objectives():
 def tally_events(events, names):
     obj = {"ORDER": _blank_objectives(), "CHAOS": _blank_objectives()}
     last = {"dragon": None, "baron": None, "elder": None, "herald": None, "grubs": [],
-            "first_blood": None}  # (time, team) of the game's first champion kill
+            "first_blood": None,  # (time, team) of the game's first champion kill
+            "dragon_types": []}   # every elemental dragon taken, in order
     last_team = {"baron": None, "elder": None}
     unknown = set()
 
@@ -111,8 +112,10 @@ def tally_events(events, names):
                 last_team["elder"] = killer_team
                 if killer_team:
                     obj[killer_team]["elders"] += 1
-            elif killer_team:
-                obj[killer_team]["dragons"].append(DRAGON_NAMES.get(dtype, dtype))
+            else:
+                last["dragon_types"].append(DRAGON_NAMES.get(dtype, dtype))
+                if killer_team:
+                    obj[killer_team]["dragons"].append(DRAGON_NAMES.get(dtype, dtype))
             last["dragon"] = t
         elif kind == "BaronKill":
             last["baron"] = t
@@ -338,6 +341,9 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
         "game_time": game_time,
         "side_team": side_team,
         "dragons": {side: obj[side_team[side]]["dragons"] for side in SIDES},
+        # The next dragon's element, once it's known: the third dragon's
+        # element becomes the rift's, and every dragon after it is the same.
+        "next_dragon": last["dragon_types"][2] if len(last["dragon_types"]) >= 3 else None,
         # Which side drew first blood, and when (the overlay animates it once).
         "first_blood": ({"side": team_side[last["first_blood"][1]], "time": round(last["first_blood"][0], 1)}
                         if last["first_blood"] and last["first_blood"][1] in team_side else None),

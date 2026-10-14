@@ -97,6 +97,17 @@ class StateTests(unittest.TestCase):
         raw["events"]["Events"] = [e for e in raw["events"]["Events"] if e["EventName"] not in ("FirstBlood", "ChampionKill")]
         self.assertIsNone(build_state(raw, cfg())["detail"]["first_blood"])
 
+    def test_next_dragon_known_once_the_rift_forms(self):
+        raw = load()
+        raw["events"]["Events"] = [e for e in raw["events"]["Events"] if e["EventName"] != "DragonKill"]
+        kills = []
+        for i, kind in enumerate(["Fire", "Water", "Chemtech", "Chemtech"]):
+            kills.append({"EventID": 900 + i, "EventName": "DragonKill", "EventTime": 400.0 + i * 300,
+                          "DragonType": kind, "KillerName": "DSG Aelune"})
+            raw["events"]["Events"] = [e for e in raw["events"]["Events"] if e["EventName"] != "DragonKill"] + kills
+            expected = None if i < 2 else "Chemtech"   # the third dragon sets the rift
+            self.assertEqual(build_state(raw, cfg())["detail"]["next_dragon"], expected, f"after {i + 1} dragons")
+
     def test_unknown_events_reported(self):
         detail = build_state(load(), cfg())["detail"]
         self.assertEqual(detail["unknown_events"], ["SomeFutureEvent"])

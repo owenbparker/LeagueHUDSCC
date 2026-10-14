@@ -36,6 +36,6 @@
     {"type": "text", "field": "DRAGONS RIGHT", "x": 1327, "y": 94.11, "font": "Inter", "weight": 700, "size": 20.6, "anchor": "end", "objective": "dragons"},
     {"type": "drake-dots", "side": "left", "x": 908, "y": 88, "step": -13},
     {"type": "drake-dots", "side": "right", "x": 1012, "y": 88, "step": 13},
-    {"type": "timers", "x": 4, "y": 4}
+    {"type": "timers", "x": 13, "y": 8}
   ]
 }
