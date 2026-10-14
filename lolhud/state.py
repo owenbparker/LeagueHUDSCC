@@ -70,7 +70,8 @@ def _blank_objectives():
 
 def tally_events(events, names):
     obj = {"ORDER": _blank_objectives(), "CHAOS": _blank_objectives()}
-    last = {"dragon": None, "baron": None, "elder": None, "herald": None, "grubs": []}
+    last = {"dragon": None, "baron": None, "elder": None, "herald": None, "grubs": [],
+            "first_blood": None}  # (time, team) of the game's first champion kill
     last_team = {"baron": None, "elder": None}
     unknown = set()
 
@@ -85,6 +86,13 @@ def tally_events(events, names):
         low = kind.lower()
         t = ev.get("EventTime") or 0.0
         killer_team = names.team_of(ev.get("KillerName"))
+
+        if kind in ("FirstBlood", "ChampionKill") and last["first_blood"] is None:
+            # FirstBlood names the player as "Recipient"; a ChampionKill by a
+            # champion is first blood too, if that event hasn't come.
+            team = names.team_of(ev.get("Recipient")) if kind == "FirstBlood" else killer_team
+            if team:
+                last["first_blood"] = (t, team)
 
         if kind == "TurretKilled":
             owner = _structure_owner(ev.get("TurretKilled"))
@@ -301,6 +309,9 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
         "game_time": game_time,
         "side_team": side_team,
         "dragons": {side: obj[side_team[side]]["dragons"] for side in SIDES},
+        # Which side drew first blood, and when (the overlay animates it once).
+        "first_blood": ({"side": team_side[last["first_blood"][1]], "time": round(last["first_blood"][0], 1)}
+                        if last["first_blood"] and last["first_blood"][1] in team_side else None),
         "unknown_events": sorted(unknown),
         # Tower events vs the top bar, so a mismatch can be logged with its cause.
         "tower_check": {SCREEN_TEAM[t]: (obj[t].get("turrets_events"), obj[t]["turrets"]) for t in obj

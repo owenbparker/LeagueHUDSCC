@@ -45,6 +45,18 @@
   .obj { transition: transform .4s ease, opacity .3s ease; }
   .obj.off { opacity: 0; }
   .drake { stroke: rgba(0,0,0,.6); stroke-width: 1; }
+  /* Animations (first blood): a layer over the top bar, cut to its shape. */
+  #fx { position: absolute; pointer-events: none; overflow: hidden; display: none; }
+  #fx .half { position: absolute; top: 0; height: 100%; overflow: hidden; }
+  #fx .panel { position: absolute; inset: 0; }
+  #fx .stripe { position: absolute; top: -20%; height: 140%; transform: skewX(-24deg); }
+  #fx .right .stripe { transform: skewX(24deg); }
+  #fx .words { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 18px; }
+  #fx .words img { height: 74%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,.45)); }
+  #fx .words span { font-family: "Heathergreen", "Inter", sans-serif; font-weight: 700; font-size: 58px; line-height: 1;
+                    color: #fff; white-space: nowrap; text-shadow: 0 3px 8px rgba(0,0,0,.4); }
+  #fx .shine { position: absolute; top: -20%; height: 140%; width: 90px; transform: skewX(-24deg);
+               background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55), rgba(255,255,255,0)); }
 </style>
 <style id="fonts"></style>
 </head>
@@ -71,6 +83,7 @@
   </defs>
   <g id="stage"></g>
 </svg>
+<div id="fx"></div>
 <script>
 const params = new URLSearchParams(location.search);
 const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
@@ -134,6 +147,7 @@ function build(p, id) {
   base = `/profiles/${id}/`;
   texts = []; logos = {}; pips = {}; diffs = {}; drakes = {}; objectiveEls = []; tints = {}; timers = null;
   videos = []; videoStandIns = [];
+  fxSetup(p);
   loadFonts(p.fonts);
   const stage = $("stage");
   stage.replaceChildren();
@@ -416,6 +430,118 @@ function showVideo() {
 // Smooth the clock between polls, but stop if the game is paused.
 let clock = { base: 0, at: 0, running: false };
 
+
+// --- Animations ---------------------------------------------------------
+// First blood: a stinger wipes across the side that drew it, their half of
+// the bar fills with the team colour and "FIRST BLOOD" punches in with
+// their logo, then it wipes back out. Under 3 seconds in total.
+const FX_MS = 2950;
+let fxArea = null, fxBusy = false, fxSeen = { first_blood: undefined, preview: undefined };
+
+function fxSetup(profile) {
+  const v = (profile.elements || []).find(e => e.type === "video");
+  const a = profile.animation_area || (v ? { x: v.x, y: v.y, w: v.w, h: v.h, mask: v.mask } : null)
+    || { x: 511, y: 1, w: 902, h: 70, mask: "/assets/hud_video_mask.png" };
+  fxArea = a;
+  const fx = $("fx");
+  Object.assign(fx.style, { left: a.x + "px", top: a.y + "px", width: a.w + "px", height: a.h + "px" });
+  if (a.mask) {
+    const m = `url("${assetUrl(a.mask)}")`;
+    Object.assign(fx.style, { maskImage: m, webkitMaskImage: m, maskSize: "100% 100%", webkitMaskSize: "100% 100%" });
+  }
+}
+
+function playFirstBlood(side, cfg) {
+  if (fxBusy || !fxArea) return;
+  fxBusy = true;
+  const color = cfg[side].color || "#888888", dark = shade(color, -.5), light = lighten(color, .45);
+  const fx = $("fx"), half = fxArea.w / 2, H = fxArea.h, L = side === "left";
+  const el = (cls, css) => { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {}); return d; };
+  fx.innerHTML = "";
+  // The team's half of the bar.
+  const box = el("half " + side, { left: (L ? 0 : half) + "px", width: half + "px" });
+  const panel = el("panel", { background: `linear-gradient(${L ? 270 : 90}deg, ${shade(color, -.15)}, ${color} 45%, ${shade(color, -.3)})` });
+  // Dark chevrons behind the crest, which sits at the centre end (where the
+  // score was), like the Premier League's goal graphic.
+  const crestX = L ? half - H * 1.05 : H * .15;
+  const chevrons = [0, 1, 2].map(i => el("stripe", {
+    background: shade(color, -.35 - i * .12), width: `${H * .55}px`, opacity: .85,
+    left: `${L ? crestX - H * (.55 + i * .62) : crestX + H * (1.15 + i * .62)}px`,
+    transform: `skewX(${L ? 24 : -24}deg)` }));
+  const crest = document.createElement("img");
+  crest.src = cfg[side].logo;  // relative to the page, like the HUD's own logos
+  Object.assign(crest.style, { position: "absolute", top: "8%", height: "84%", width: `${H * .9}px`, objectFit: "contain",
+                               left: `${crestX}px`, filter: "drop-shadow(0 2px 5px rgba(0,0,0,.5))" });
+  const text = document.createElement("span");
+  text.textContent = "FIRST BLOOD";
+  // The words fill the rest of the half, away from the crest.
+  const words = el("words", { width: `${half - H * 1.2}px`, left: L ? "0" : `${H * 1.2}px`, right: "auto" });
+  words.append(text);
+  const shine = el("shine");
+  // Stinger: a wide bright gradient band led by a white edge and the team colour.
+  const band = el("stripe", { width: `${half * .9}px`, background: `linear-gradient(${L ? 90 : 270}deg, ${dark}, ${color}, ${light}, #fff)` });
+  const edge = el("stripe", { width: "34px", background: "#fff" });
+  const flash = el("panel", { background: `linear-gradient(${L ? 90 : 270}deg, ${light}, #ffffff)`, opacity: 0 });
+  box.append(panel, ...chevrons, crest, words, shine, band, edge, flash);
+  fx.append(box);
+  fx.style.display = "block";
+
+  const opts = (delay, duration, easing = "cubic-bezier(.6,0,.2,1)") => ({ delay, duration, easing, fill: "both" });
+  const sk = `skewX(${L ? -24 : 24}deg)`;
+  const outside = L ? -half * 1.1 : half + 60, beyond = L ? half + 60 : -half * 1.1;
+  const sweep = (node, delay, duration, a, b) =>
+    node.animate([{ transform: `translateX(${a}px) ${sk}` }, { transform: `translateX(${b}px) ${sk}` }], opts(delay, duration));
+  // 0-0.5s: the band wipes across from the outer end; the panel fills in behind it.
+  sweep(band, 0, 520, outside, beyond);
+  sweep(edge, 60, 480, outside, beyond);
+  const closed = L ? "inset(0 100% 0 0)" : "inset(0 0 0 100%)", gone = L ? "inset(0 0 0 100%)" : "inset(0 100% 0 0)";
+  for (const n of [panel, ...chevrons, words]) {
+    n.animate([{ clipPath: closed }, { clipPath: "inset(0 0 0 0)" }], opts(120, 380));
+    n.animate([{ clipPath: "inset(0 0 0 0)" }, { clipPath: gone }], opts(2450, 360));
+  }
+  // The crest drops in, "FIRST BLOOD" slides in from the outer end.
+  crest.animate([{ transform: "scale(.2) rotate(-20deg)", opacity: 0 }, { transform: "scale(1.18) rotate(4deg)", opacity: 1, offset: .65 },
+                 { transform: "scale(1) rotate(0)", opacity: 1 }], opts(330, 420, "ease-out"));
+  crest.animate([{ opacity: 1 }, { opacity: 0 }], opts(2450, 250));
+  text.animate([{ transform: `translateX(${L ? -260 : 260}px)`, opacity: 0, filter: "blur(8px)" },
+                { transform: `translateX(${L ? 10 : -10}px)`, opacity: 1, filter: "blur(0)", offset: .8 },
+                { transform: "translateX(0)", opacity: 1, filter: "blur(0)" }], opts(480, 520, "cubic-bezier(.2,.8,.2,1)"));
+  // A light sweep across the words while they hold.
+  shine.animate([{ transform: `translateX(${L ? -120 : half + 20}px) skewX(-24deg)` },
+                 { transform: `translateX(${L ? half + 20 : -120}px) skewX(-24deg)` }], opts(1150, 650, "ease-in-out"));
+  // 2.3-2.95s: a bright flash and the band again, then the normal bar is back.
+  flash.animate([{ opacity: 0 }, { opacity: .85, offset: .5 }, { opacity: 0 }], opts(2300, 450, "ease-in-out"));
+  sweep(band, 2380, 520, outside, beyond);
+  sweep(edge, 2430, 480, outside, beyond);
+  setTimeout(() => { fx.style.display = "none"; fx.innerHTML = ""; fxBusy = false; }, FX_MS);
+}
+
+function shade(hex, amount) {
+  const n = parseInt(hex.replace("#", ""), 16), k = 1 + amount;
+  const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.min(255, Math.round(v * k))));
+  return "#" + c.map(v => v.toString(16).padStart(2, "0")).join("");
+}
+
+// Plays each first blood once (not again on reload), and the control
+// panel's previews.
+function checkAnimations(s) {
+  const cfg = s.config, fb = s.detail.first_blood, pv = s.preview;
+  const fbKey = fb ? `${fb.side}@${fb.time}` : null;
+  if (fxSeen.first_blood === undefined) {
+    // First update after loading: only play a first blood that just happened.
+    fxSeen.first_blood = fb && s.detail.game_time - fb.time < 5 ? null : fbKey;
+    fxSeen.preview = pv ? pv.id : null;
+  }
+  if (fbKey && fbKey !== fxSeen.first_blood) {
+    fxSeen.first_blood = fbKey;
+    if ((cfg.animations || {}).first_blood !== false) playFirstBlood(fb.side, cfg);
+  }
+  if (pv && pv.id !== fxSeen.preview) {
+    fxSeen.preview = pv.id;
+    if (pv.name === "first_blood") playFirstBlood(pv.side, cfg);
+  }
+}
+
 function render(s) {
   const f = s.fields, cfg = s.config;
   $("hud").classList.toggle("hidden", !SHOW.idle && !s.detail.connected);
@@ -436,6 +562,7 @@ function render(s) {
     drawDrakes(side, s.detail.dragons[side] || []);
   }
   drawTimers(f, cfg.objective_timers || {});
+  checkAnimations(s);
   setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.

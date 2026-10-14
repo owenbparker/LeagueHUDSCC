@@ -88,6 +88,15 @@ class StateTests(unittest.TestCase):
         self.assertEqual(f["NEXT BARON"], "")
         self.assertEqual(f["NEXT DRAGON"], "01:26")
 
+    def test_first_blood(self):
+        detail = build_state(load(), cfg())["detail"]
+        self.assertEqual(detail["first_blood"], {"side": "left", "time": 300.1})   # DSG Wren (blue side)
+        swapped = build_state(load(), cfg(swap_sides=True))["detail"]
+        self.assertEqual(swapped["first_blood"]["side"], "right")
+        raw = load()
+        raw["events"]["Events"] = [e for e in raw["events"]["Events"] if e["EventName"] not in ("FirstBlood", "ChampionKill")]
+        self.assertIsNone(build_state(raw, cfg())["detail"]["first_blood"])
+
     def test_unknown_events_reported(self):
         detail = build_state(load(), cfg())["detail"]
         self.assertEqual(detail["unknown_events"], ["SomeFutureEvent"])

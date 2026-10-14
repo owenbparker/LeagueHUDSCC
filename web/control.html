@@ -173,6 +173,18 @@
   </section>
 
   <section>
+    <h2>Animations</h2>
+    <div class="checks">
+      <label><input type="checkbox" id="anim-first-blood"><span class="dot" style="background:#c0392b">FB</span>First blood</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button type="button" id="preview-fb-left">Preview: left team</button>
+      <button type="button" id="preview-fb-right">Preview: right team</button>
+    </div>
+    <p class="note">When a team draws first blood, a stinger wipes across their side of the top bar, which fills with their colour and logo and "FIRST BLOOD", then wipes back (under 3 seconds). Preview plays it on the overlay now.</p>
+  </section>
+
+  <section>
     <h2>Objective timers</h2>
     <div id="objectives" class="checks"></div>
     <p class="note">Shown in the top-left of the overlay. A timer appears while its objective is counting down or LIVE, and drops off once it's gone for the game. Elder appears after a team takes soul. Switched-off timers are also left blank in the CSV.</p>
@@ -323,6 +335,9 @@ const OBJECTIVES = [["grubs", "Void Grubs", "G", "#8e44d6"], ["dragon", "Dragon"
   ["herald", "Rift Herald", "H", "#c2449e"], ["elder", "Elder Drake", "E", "#d9b65c"], ["baron", "Baron", "B", "#6c4bd1"]];
 $("objectives").innerHTML = OBJECTIVES.map(([key, name, letter, color]) =>
   `<label><input type="checkbox" data-obj="${key}"><span class="dot" style="background:${color}">${letter}</span>${name}</label>`).join("");
+$("anim-first-blood").onchange = e => post("/api/config", { animations: { first_blood: e.target.checked } });
+for (const side of ["left", "right"])
+  $(`preview-fb-${side}`).onclick = () => post("/api/animation/preview", { name: "first_blood", side });
 $("objectives").querySelectorAll("input").forEach(box => box.addEventListener("change", () =>
   post("/api/config", { objective_timers: { [box.dataset.obj]: box.checked } })));
 
@@ -480,6 +495,7 @@ function apply(s) {
   if (logosChanged) loadLogos(cfg);
   $("swap-sides").checked = cfg.swap_sides;
   $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
+  $("anim-first-blood").checked = (cfg.animations || {}).first_blood !== false;
   $("counters").querySelectorAll("input").forEach(box => box.checked = (cfg.strip_counters || {})[box.dataset.counter] !== false);
   if (!$("bg-name").textContent.startsWith("Copying"))
     $("bg-name").textContent = cfg.bg_video ? cfg.bg_video.split("/").pop() : "None chosen: showing the static lines";

@@ -137,6 +137,14 @@ Text keeps the PSD's paragraph alignment, so right-align numbers that sit to the
 
 Settings are saved to `config.json` and survive restarts.
 
+## Animations
+
+**Animations** in the control panel:
+- **First blood** (on by default): when a team draws first blood, a stinger wipes across their side of the top bar. Their side fills with the team colour, their logo drops in and "FIRST BLOOD" slides across. Then a flash wipes it away and the bar is back to normal, all in under 3 seconds. It's modelled on the Premier League's goal graphic.
+- **Preview: left / right team:** plays it on the overlay right away, for checking the look before going live.
+
+The animation plays once per game, and not again if the overlay reloads.
+
 ## About gold
 
 League's game client doesn't share other players' gold (LCS gets it from Riot's private esports feed). The HUD offers four options:

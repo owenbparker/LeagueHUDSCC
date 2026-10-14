@@ -51,6 +51,7 @@ class HudApp:
         self.screen_gold = ScreenGold(config)
         self.updater = Updater()
         self.overlay_window = None  # the desktop app's HUD-over-the-game window
+        self.preview = None  # an animation the control panel asked to see
         # "gfx" runs the HUD; "observer" only shows another PC's HUD over the
         # game here, so it stops reading the game. None until one is picked.
         self.role = None
@@ -170,7 +171,7 @@ class HudApp:
         with self._lock:
             return {"fields": self.state["fields"], "detail": self.state["detail"],
                     "updated_at": self.updated_at, "config": self.config.get(),
-                    "profiles_version": profiles.version(),
+                    "profiles_version": profiles.version(), "preview": self.preview,
                     "output_dir": self.config.output_dir(), "app": self.app_info()}
 
     def save_logo(self, side, filename, data_b64):
@@ -430,6 +431,10 @@ def make_handler(app):
                     if body.get("url") is not None:
                         app.config.update({"observer_url": body["url"]})
                     app.overlay_window.set(bool(body.get("open")), body.get("screen"), body.get("url"))
+                elif path == "/api/animation/preview":
+                    if body.get("name") not in ("first_blood",) or body.get("side") not in ("left", "right"):
+                        raise ValueError("Unknown animation")
+                    app.preview = {"name": body["name"], "side": body["side"], "id": time.time()}
                 elif path == "/api/role":
                     app.set_role(body.get("role"))
                 elif path == "/api/screen-gold/test":

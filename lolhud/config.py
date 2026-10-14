@@ -56,6 +56,8 @@ DEFAULTS = {
     "overlay_screen": 0,
     # Observer client: the GFX PC whose HUD to show, e.g. http://192.168.2.40:8777/overlay
     "observer_url": "",
+    # Overlay animations that can be switched off in the control panel.
+    "animations": {"first_blood": True},
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).
     "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when
