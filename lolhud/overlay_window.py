@@ -20,7 +20,12 @@ WS_EX_TRANSPARENT = 0x20      # clicks go to the window underneath
 WS_EX_TOOLWINDOW = 0x80       # not in the taskbar or Alt+Tab
 WS_EX_LAYERED = 0x80000
 WS_EX_NOACTIVATE = 0x8000000  # never takes focus from the game
+LWA_COLORKEY = 0x1
 LWA_ALPHA = 0x2
+# The window's own background is painted in this colour and then cut out, so
+# only the HUD shows. Nearly black, so any soft edges blend in.
+KEY_RGB = (1, 0, 1)
+KEY_COLORREF = KEY_RGB[0] | KEY_RGB[1] << 8 | KEY_RGB[2] << 16
 HWND_TOPMOST = -1
 SWP_NOACTIVATE = 0x10
 SWP_SHOWWINDOW = 0x40
@@ -57,14 +62,32 @@ def _hwnd(title):
     return ctypes.windll.user32.FindWindowW(None, title) if sys.platform == "win32" else 0
 
 
-def make_click_through(hwnd):
+def make_click_through(hwnd, click_through=True):
+    """Cut out the background colour and (optionally) let clicks through."""
     user32 = ctypes.windll.user32
     user32.GetWindowLongW.restype = ctypes.c_long
     style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-    want = style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+    want = style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+    if click_through:
+        want |= WS_EX_TRANSPARENT
     if style != want:
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, want)
-        user32.SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)
+        user32.SetLayeredWindowAttributes(hwnd, KEY_COLORREF, 255, LWA_COLORKEY | LWA_ALPHA)
+
+
+def paint_background(window):
+    """Fill the window (behind the page) with the cut-out colour."""
+    from System import Action
+    from System.Drawing import Color
+    form = window.native
+    if form is None:
+        return False
+
+    def fill():
+        form.BackColor = Color.FromArgb(255, *KEY_RGB)
+        form.Invalidate()
+    form.Invoke(Action(fill))
+    return True
 
 
 def place(hwnd, rect):
@@ -83,6 +106,9 @@ class OverlayWindow:
         self.window = None
         self.rect = None
         self.click_through = True
+        # "transparent": a see-through page over the cut-out background.
+        # "opaque": the page itself is filled with the cut-out colour.
+        self.method = "transparent"
         self._lock = threading.Lock()
         self.available = sys.platform == "win32"
 
@@ -114,10 +140,11 @@ class OverlayWindow:
             if self.window:
                 return
             x, y, w, h = self._screen_rect()
+            key = "#%02x%02x%02x" % KEY_RGB
             self.window = webview.create_window(
                 self.title, f"http://127.0.0.1:{self.port}/overlay?fit=1", x=x, y=y, width=w, height=h,
-                transparent=True, frameless=True, easy_drag=False, on_top=True, focus=False,
-                resizable=False, shadow=False, background_color="#000000")
+                transparent=self.method == "transparent", frameless=True, easy_drag=False, on_top=True,
+                focus=False, resizable=False, shadow=False, background_color=key)
             self.window.events.closed += self._closed
             self.rect = None
             threading.Thread(target=self._keep_on_top, args=(self.window,), daemon=True).start()
@@ -135,12 +162,14 @@ class OverlayWindow:
     def _keep_on_top(self, window):
         """Size it to the screen, make it click-through, and keep it above
         League (which comes to the front whenever it's clicked)."""
+        painted = False
         while self.window is window:
             hwnd = _hwnd(self.title)
             if hwnd:
                 try:
-                    if self.click_through:
-                        make_click_through(hwnd)
+                    if not painted:
+                        painted = paint_background(window)
+                    make_click_through(hwnd, self.click_through)
                     rect = self._screen_rect()
                     if rect != self.rect:
                         self.rect = rect
@@ -160,7 +189,7 @@ def self_test(port, out_dir):
     import webview
     from PIL import ImageGrab
 
-    results, ok = [], True
+    results = []
     x, y, w, h = monitors()[0]
     bg = webview.create_window("overlay-test-red", html=(
         "<body style='margin:0;background:#ff0000;height:100vh' "
@@ -181,9 +210,10 @@ def self_test(port, out_dir):
         def update(self, d):
             self.data.update(d)
 
-    for name, click_through in (("click-through", True), ("plain", False)):
+    passed_methods = []
+    for name in ("transparent", "opaque"):
         ov = OverlayWindow(Config(), port, title=f"overlay-test-{name}")
-        ov.click_through = click_through
+        ov.method = name
         ov.open()
         time.sleep(8)
         shot = ImageGrab.grab(all_screens=False)
@@ -193,10 +223,14 @@ def self_test(port, out_dir):
         def px(fx, fy):
             return shot.getpixel((int(fx * w * sx), int(fy * h * sy)))[:3]
 
-        empty = px(0.5, 0.6)
-        hud = px(0.5, 35 / 1080)
-        see_through = empty[0] > 200 and empty[1] < 60 and empty[2] < 60
-        drawn = not (hud[0] > 200 and hud[1] < 60 and hud[2] < 60)
+        def red(p):
+            return p[0] > 200 and p[1] < 60 and p[2] < 60
+
+        empties = [px(fx, fy) for fx, fy in ((0.5, 0.6), (0.1, 0.5), (0.9, 0.9), (0.5, 0.2), (0.3, 0.4))]
+        huds = [px(fx, 35 / 1080) for fx in (0.45, 0.5, 0.55)]
+        see_through = all(red(p) for p in empties)
+        drawn = not any(red(p) for p in huds)
+        empty, hud = empties, huds
         # Click in the empty middle of the screen.
         before = bg.evaluate_js("window.clicks||0")
         ctypes.windll.user32.SetCursorPos(x + w // 2, y + int(h * 0.6))
@@ -206,12 +240,13 @@ def self_test(port, out_dir):
         after = bg.evaluate_js("window.clicks||0")
         passed = after > before
         results.append(f"{name}: see-through={see_through} {empty} hud-drawn={drawn} {hud} click-passes={passed}")
-        if click_through:
-            ok = ok and see_through and drawn and passed
+        if see_through and drawn and passed:
+            passed_methods.append(name)
         ov.close()
         time.sleep(2)
     bg.destroy()
-    results.append("PASSED" if ok else "FAILED")
+    ok = bool(passed_methods)
+    results.append(f"PASSED ({', '.join(passed_methods)})" if ok else "FAILED")
     with open(os.path.join(out_dir, "overlay-test.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(results) + "\n")
     return ok
