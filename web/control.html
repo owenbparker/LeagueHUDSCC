@@ -16,7 +16,9 @@
   .clock { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
   .badge { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; border-radius: 4px; background: #ffcf66; color: #1a1a1a; }
   .badge:empty { display: none; }
-  .version { font-size: 12px; color: var(--muted); cursor: pointer; }
+  .version { font-size: 12px; color: var(--muted); }
+  .update.check { background: #252a2f; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+  .update.check:hover { filter: none; border-color: var(--muted); }
   .update { background: var(--accent); color: #06231a; border: 0; font-weight: 700; padding: 6px 12px; }
   .update:hover { filter: brightness(1.1); }
   .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
@@ -233,6 +235,7 @@
   </section>
 </aside>
 </div>
+<script src="update.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let state = null;
@@ -553,31 +556,7 @@ $("screen-test").onclick = async () => {
 };
 
 // Updates: a button in the top bar when GitHub has a newer version.
-let versionNoteUntil = 0;
-function showUpdate(u) {
-  const b = $("update");
-  if (Date.now() > versionNoteUntil) $("version").textContent = u.current === "dev" ? "dev build" : u.current;
-  b.classList.remove("error");
-  b.disabled = false;
-  if (u.status === "downloading") { b.hidden = false; b.disabled = true; b.textContent = `Downloading update ${u.progress}%`; }
-  else if (u.status === "installing") { b.hidden = false; b.disabled = true; b.textContent = "Installing - restarting…"; }
-  else if (u.status === "error") { b.hidden = false; b.classList.add("error"); b.textContent = "Update failed - retry"; b.title = u.error; }
-  else if (u.available && u.can_install) { b.hidden = false; b.textContent = `⬆ Update to ${u.latest}`; b.title = u.notes; }
-  else b.hidden = true;
-}
-$("update").onclick = () => {
-  const u = state.app.update;
-  const notes = u.notes ? `\n\nWhat's new:\n${u.notes.slice(0, 600)}` : "";
-  const failed = u.status === "error" ? `The last attempt failed: ${u.error}\n\n` : "";
-  if (confirm(`${failed}Install League HUD ${u.latest} now?\n\nThe app will close and reopen (about 10 seconds); the overlay and data feed pause while it restarts. Your settings, logos and output files are kept.${notes}`))
-    post("/api/update/install", {});
-};
-$("version").onclick = async () => {
-  $("version").textContent = "checking…";
-  await post("/api/update/check", {});
-  const u = state.app.update;
-  if (!u.available) { $("version").textContent = `${u.current} - up to date`; versionNoteUntil = Date.now() + 4000; }
-};
+const showUpdate = updateButton($("update"), $("version"));
 
 // Header: game source.
 document.querySelectorAll("#mode button").forEach(b => b.addEventListener("click", () => {

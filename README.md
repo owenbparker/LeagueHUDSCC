@@ -35,7 +35,7 @@ Running the installer again reinstalls the latest version and keeps your setting
 
 Prefer no installer? Download **LeagueHUD-windows.zip** from the latest release, extract it anywhere and run `LeagueHUD.exe`.
 
-**Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. Click the version number next to it to check again.
+**Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. **Check for updates** (in the same place on every screen) checks again.
 
 The app opens on a choice of client (switch any time with **Change client** in the top right). Updates can be installed from all three screens:
 

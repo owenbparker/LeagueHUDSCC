@@ -48,6 +48,7 @@ class Updater:
         self.notes = ""
         self.asset = None
         self.status = "idle"      # idle, checking, downloading, installing, error
+        self.check_error = None   # why the last check for updates failed
         self.progress = 0
         self.error = None
         # Only the packaged app can replace itself.
@@ -60,7 +61,7 @@ class Updater:
         return {"current": self.current, "latest": self.latest, "notes": self.notes,
                 "available": bool(self.latest and self.asset and is_newer(self.latest, self.current)),
                 "can_install": self.can_install, "status": self.status,
-                "progress": self.progress, "error": self.error}
+                "progress": self.progress, "error": self.error, "check_error": self.check_error}
 
     # --- checking --------------------------------------------------------
 
@@ -68,7 +69,7 @@ class Updater:
         threading.Thread(target=self.check, daemon=True).start()
 
     def check(self):
-        self.status, self.error = "checking", None
+        self.status, self.error, self.check_error = "checking", None, None
         try:
             request = urllib.request.Request(LATEST_URL, headers={
                 "Accept": "application/vnd.github+json", "User-Agent": f"LeagueHUD/{self.current}"})
@@ -79,11 +80,13 @@ class Updater:
             if e.code == 404:
                 log("No releases published on GitHub yet")
             else:
+                self.check_error = f"GitHub said {e.code}"
                 log(f"Couldn't check for updates (GitHub said {e.code})", "warn")
             return
         except Exception as e:
             self.status = "idle"
-            log(f"Couldn't check for updates ({getattr(e, 'reason', e)})", "warn")
+            self.check_error = str(getattr(e, "reason", e))
+            log(f"Couldn't check for updates ({self.check_error})", "warn")
             return
         self.latest = release.get("tag_name")
         self.notes = (release.get("body") or "").strip()
