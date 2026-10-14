@@ -142,3 +142,35 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(focus, {"left": 3, "right": 2})
         tag = next(p for p in seen if p["side"] == "right")
         self.assertEqual((tag["x"], tag["y"]), (1030, 507))   # centre of the tag, in screen pixels
+
+
+class HttpsTests(unittest.TestCase):
+    def test_certificate_made_once_and_remade_for_a_new_address(self):
+        import tempfile
+        from lolhud.tls import ensure_cert
+        with tempfile.TemporaryDirectory() as d:
+            cert, key = ensure_cert(d, ["localhost", "127.0.0.1", "192.168.2.40"])
+            first = open(cert, "rb").read()
+            self.assertEqual(open(ensure_cert(d, ["192.168.2.40", "localhost", "127.0.0.1"])[0], "rb").read(), first)
+            self.assertNotEqual(open(ensure_cert(d, ["localhost", "127.0.0.1", "10.0.0.5"])[0], "rb").read(), first)
+
+    def test_cam_page_over_https(self):
+        import ssl
+        import tempfile
+        import urllib.request
+        from lolhud.app import HudApp, start
+        from lolhud.config import Config
+        with tempfile.TemporaryDirectory() as d:
+            config = Config(os.path.join(d, "config.json"))
+            config.update({"http_port": 8811, "output_dir": os.path.join(d, "out")})
+            app = HudApp(config)
+            app.updater.check_in_background = lambda: None
+            start(app)
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
+                with urllib.request.urlopen("https://127.0.0.1:8813/cam", context=ctx, timeout=5) as r:
+                    self.assertIn(b"SCC Player Cam", r.read())
+                self.assertEqual(app.app_info()["cam_url"], "https://localhost:8813/cam")
+            finally:
+                app.stop()

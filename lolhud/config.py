@@ -30,6 +30,9 @@ DEFAULTS = {
     "poll_interval": 1.0,
     "http_host": "127.0.0.1",
     "http_port": 8777,
+    # The same over https, for players' browsers to send their cams from
+    # (0 = http_port + 2, so 8779).
+    "https_port": 0,
     # Let other PCs on your network read the overlay and data (changes can
     # still only be made on this PC).
     "allow_network": False,

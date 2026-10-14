@@ -82,7 +82,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
           # Leave no test leftovers in the download.
           Remove-Item "$app\smoke-test.txt", "$app\config.json" -ErrorAction SilentlyContinue
-          Remove-Item "$app\output", "$app\_update" -Recurse -ErrorAction SilentlyContinue
+          Remove-Item "$app\output", "$app\_update", "$app\certs" -Recurse -ErrorAction SilentlyContinue
 
       - name: Check the HUD-on-game window (see-through and click-through)
         # Puts a red window on screen with the HUD window over it, then checks
@@ -108,7 +108,7 @@ jobs:
           }
           Set-ItemProperty $key AppsUseLightTheme 1 -Type DWord
           Remove-Item "$app\config.json" -ErrorAction SilentlyContinue
-          Remove-Item "$app\output", "$app\_update" -Recurse -ErrorAction SilentlyContinue
+          Remove-Item "$app\output", "$app\_update", "$app\certs" -Recurse -ErrorAction SilentlyContinue
           if ($failed) { throw "HUD window check failed in $($failed -join ', ') mode" }
 
       - uses: actions/upload-artifact@v4
@@ -126,6 +126,18 @@ jobs:
           name: LeagueHUD-windows
           path: dist/LeagueHUD
 
+      - name: Build PlayerCam.exe (the players' webcam app)
+        run: pyinstaller --noconfirm PlayerCam.spec
+
+      - name: Smoke test the Player Cam app
+        shell: pwsh
+        run: |
+          $app = "dist\PlayerCam"
+          $p = Start-Process "$app\PlayerCam.exe" -ArgumentList '--smoke-test' -PassThru -Wait
+          Get-Content "$app\smoke-test.txt"
+          if ($p.ExitCode -ne 0) { throw "Player Cam smoke test failed (exit code $($p.ExitCode))" }
+          Remove-Item "$app\smoke-test.txt" -ErrorAction SilentlyContinue
+
       - name: Build the installer
         if: "!contains(github.event.head_commit.message, '[no release]')"
         shell: pwsh
@@ -134,6 +146,8 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Null }
           & $iscc "/DAppVersion=$($env:VERSION.TrimStart('v'))" installer\SCC-LoL-HUD.iss
           if ($LASTEXITCODE) { exit 1 }
+          & $iscc "/DAppVersion=$($env:VERSION.TrimStart('v'))" installer\SCC-Player-Cam.iss
+          if ($LASTEXITCODE) { exit 1 }
 
       - name: Publish release
         if: "!contains(github.event.head_commit.message, '[no release]')"
@@ -141,22 +155,29 @@ jobs:
         # always has both (the installer link never 404s mid-build).
         shell: pwsh
         run: |
+          # Never ship a test run's settings or https certificate (it has a private key).
+          foreach ($f in "config.json", "certs", "webview") {
+            if ((Test-Path "dist\LeagueHUD\$f") -or (Test-Path "dist\PlayerCam\$f")) { throw "Test leftover in the app: $f" }
+          }
           Compress-Archive -Path dist\LeagueHUD\* -DestinationPath LeagueHUD-windows.zip
+          Compress-Archive -Path dist\PlayerCam\* -DestinationPath PlayerCam-windows.zip
           $notes = git log -1 --format=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' }
           $notes = ($notes -join "`n").Trim()
-          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
+          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe PlayerCam-windows.zip dist\SCC-Player-Cam-Setup.exe --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Test the installer (silent; installs the release just published)
+      - name: Test the installers (silent; they install the release just published)
         if: "!contains(github.event.head_commit.message, '[no release]')"
         shell: pwsh
         run: |
-          $dir = "$env:RUNNER_TEMP\SCC LoL HUD test"
-          $installArgs = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"", '/MERGETASKS="!desktopicon"', '/LOG=install.log'
-          $p = Start-Process dist\SCC-LoL-HUD-Setup.exe -ArgumentList $installArgs -PassThru -Wait
-          Get-Content install.log -Tail 25
-          if ($p.ExitCode -ne 0) { throw "Installer failed (exit code $($p.ExitCode))" }
-          if (-not (Test-Path "$dir\LeagueHUD.exe")) { throw "LeagueHUD.exe wasn't installed" }
-          if (-not (Test-Path "$dir\_internal")) { throw "_internal wasn't installed" }
-          Write-Host "Installed OK to $dir"
+          foreach ($t in @(@{ setup = "SCC-LoL-HUD-Setup.exe"; exe = "LeagueHUD.exe" }, @{ setup = "SCC-Player-Cam-Setup.exe"; exe = "PlayerCam.exe" })) {
+            $dir = "$env:RUNNER_TEMP\$($t.exe) test"
+            $installArgs = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"", '/MERGETASKS="!desktopicon"', '/LOG=install.log'
+            $p = Start-Process "dist\$($t.setup)" -ArgumentList $installArgs -PassThru -Wait
+            Get-Content install.log -Tail 25
+            if ($p.ExitCode -ne 0) { throw "$($t.setup) failed (exit code $($p.ExitCode))" }
+            if (-not (Test-Path "$dir\$($t.exe)")) { throw "$($t.exe) wasn't installed" }
+            if (-not (Test-Path "$dir\_internal")) { throw "_internal wasn't installed" }
+            Write-Host "$($t.setup) installed OK to $dir"
+          }

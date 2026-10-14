@@ -42,7 +42,11 @@ def is_newer(latest, current):
 
 
 class Updater:
-    def __init__(self):
+    """asset/exe/name: the release zip, the program in it, and what to call
+    it (the League HUD, or the Player Cam app built from the same repo)."""
+
+    def __init__(self, asset=ASSET_NAME, exe="LeagueHUD.exe", name="League HUD"):
+        self.asset_name, self.exe, self.name = asset, exe, name
         self.current = VERSION
         self.latest = None
         self.notes = ""
@@ -58,7 +62,7 @@ class Updater:
         self._lock = threading.Lock()
 
     def info(self):
-        return {"current": self.current, "latest": self.latest, "notes": self.notes,
+        return {"name": self.name, "current": self.current, "latest": self.latest, "notes": self.notes,
                 "available": bool(self.latest and self.asset and is_newer(self.latest, self.current)),
                 "can_install": self.can_install, "status": self.status,
                 "progress": self.progress, "error": self.error, "check_error": self.check_error}
@@ -72,7 +76,7 @@ class Updater:
         self.status, self.error, self.check_error = "checking", None, None
         try:
             request = urllib.request.Request(LATEST_URL, headers={
-                "Accept": "application/vnd.github+json", "User-Agent": f"LeagueHUD/{self.current}"})
+                "Accept": "application/vnd.github+json", "User-Agent": f"SCC-HUD/{self.current}"})
             with urllib.request.urlopen(request, timeout=10) as r:
                 release = json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
@@ -90,12 +94,12 @@ class Updater:
             return
         self.latest = release.get("tag_name")
         self.notes = (release.get("body") or "").strip()
-        self.asset = next((a for a in release.get("assets", []) if a.get("name") == ASSET_NAME), None)
+        self.asset = next((a for a in release.get("assets", []) if a.get("name") == self.asset_name), None)
         self.status = "idle"
         if self.info()["available"]:
             log(f"Update available: {self.latest} (you have {self.current})")
         else:
-            log(f"League HUD {self.current} is up to date")
+            log(f"{self.name} {self.current} is up to date")
 
     # --- installing ------------------------------------------------------
 
@@ -116,7 +120,7 @@ class Updater:
             self.status = "installing"
             new_dir = self._unpack(zip_path)
             script = self._write_script(new_dir)
-            log(f"Installing {self.latest} - League HUD will restart")
+            log(f"Installing {self.latest} - {self.name} will restart")
             # Hidden console, own process group so it outlives the app.
             subprocess.Popen(["cmd", "/c", script], cwd=os.path.dirname(os.path.abspath(sys.executable)),
                              creationflags=0x08000000 | 0x00000200)
@@ -133,11 +137,11 @@ class Updater:
             shutil.rmtree(os.path.join(UPDATE_DIR, old), ignore_errors=True)
         self.work_dir = os.path.join(UPDATE_DIR, f"{self.latest}-{int(time.time())}")
         os.makedirs(self.work_dir)
-        path = os.path.join(self.work_dir, ASSET_NAME)
+        path = os.path.join(self.work_dir, self.asset_name)
         total = self.asset.get("size") or 0
         digest = hashlib.sha256()
         request = urllib.request.Request(self.asset["browser_download_url"],
-                                         headers={"User-Agent": f"LeagueHUD/{self.current}"})
+                                         headers={"User-Agent": f"SCC-HUD/{self.current}"})
         with urllib.request.urlopen(request, timeout=30) as r, open(path, "wb") as f:
             done = 0
             while True:
@@ -163,8 +167,8 @@ class Updater:
                 if not target.startswith(os.path.normpath(new_dir) + os.sep):
                     raise ValueError(f"Unexpected file in update: {name}")
             z.extractall(new_dir)
-        if not os.path.isfile(os.path.join(new_dir, "LeagueHUD.exe")):
-            raise ValueError("The update doesn't contain LeagueHUD.exe")
+        if not os.path.isfile(os.path.join(new_dir, self.exe)):
+            raise ValueError(f"The update doesn't contain {self.exe}")
         return new_dir
 
     def _write_script(self, new_dir):
@@ -172,13 +176,13 @@ class Updater:
         script = os.path.join(self.work_dir, "apply-update.bat")
         with open(script, "w", encoding="utf-8") as f:
             f.write(f"""@echo off
-rem League HUD updater: waits for the app to close, copies in the new
+rem {self.name} updater: waits for the app to close, copies in the new
 rem version (settings, logos and output are left alone), then restarts it.
 :wait
 tasklist /FI "PID eq {os.getpid()}" 2>nul | find "{os.getpid()}" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)
 robocopy "{new_dir}\\_internal" "{app_dir}\\_internal" /MIR /R:3 /W:1 /NFL /NDL /NJH /NJS /NP >nul
 robocopy "{new_dir}" "{app_dir}" /XD _internal /R:3 /W:1 /NFL /NDL /NJH /NJS /NP >nul
-start "" "{app_dir}\\LeagueHUD.exe"
+start "" "{app_dir}\\{self.exe}"
 """)
         return script
 

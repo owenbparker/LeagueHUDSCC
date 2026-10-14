@@ -36,7 +36,10 @@ function updateButton(button, version) {
     if ((u.available && u.can_install) || u.status === "error") {
       const notes = u.notes ? `\n\nWhat's new:\n${u.notes.slice(0, 600)}` : "";
       const failed = u.status === "error" ? `The last attempt failed: ${u.error}\n\n` : "";
-      if (confirm(`${failed}Install League HUD ${u.latest} now?\n\nThe app will close and reopen (about 10 seconds); the HUD pauses while it restarts. Your settings, logos and output files are kept.${notes}`))
+      const name = u.name || "League HUD";
+      const kept = name === "League HUD" ? "the HUD pauses while it restarts. Your settings, logos and output files are kept."
+                                         : "your settings are kept.";
+      if (confirm(`${failed}Install ${name} ${u.latest} now?\n\nThe app will close and reopen (about 10 seconds); ${kept}${notes}`))
         post("/api/update/install");
       return;
     }

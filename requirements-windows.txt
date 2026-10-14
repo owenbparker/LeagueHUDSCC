@@ -11,3 +11,5 @@ winrt-Windows.Media.Ocr
 winrt-Windows.Storage.Streams
 # Importing HUD designs from Photoshop files.
 psd-tools
+# The https certificate for players' browser cams.
+cryptography

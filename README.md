@@ -37,11 +37,10 @@ Prefer no installer? Download **LeagueHUD-windows.zip** from the latest release,
 
 **Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. **Check for updates** (in the same place on every screen) checks again.
 
-The app opens on a choice of client (switch any time with **Change client** in the top right). Updates can be installed from every screen:
+The app opens on a choice of client (switch any time with **Change client** in the top right). Updates can be installed from both screens:
 
 - **GFX Controller:** runs the HUD (everything below). Use it on the PC that makes the graphics.
 - **Observer Client:** for an observer PC. Type the GFX PC's address (shown on the GFX PC under **Outputs -> From another PC**, e.g. `http://192.168.2.40:8777/overlay`) and click **Show HUD on game** to draw that PC's HUD over League here. On the GFX PC, tick **Let other PCs on the network read the HUD**. The observer client doesn't read the game itself; the GFX PC does. It can read this PC's screen to switch the webcams (see [Webcams](#webcams)).
-- **Player Cam:** for a player's PC. Sends their webcam straight to the HUD (see [Webcams](#webcams)).
 
 **Show HUD on game** (in both clients) opens the HUD in a borderless, see-through window covering a whole screen, on top of League. Only the HUD shows, and clicks pass through to the game. Run League in **Borderless** or **Windowed** mode (exclusive Fullscreen draws over every other window). With more than one screen, a drop-down next to the button picks which. The HUD scales to the screen's size. It works with Windows in light or dark mode; if the window ever isn't see-through or doesn't cover the screen, the GFX Controller's Log says which step failed.
 
@@ -143,8 +142,11 @@ Settings are saved to `config.json` and survive restarts.
 Each team gets a player cam along the bottom of the HUD, spaced like the LEC's: left cam at x 288-462, right cam at x 1458-1632, from y 821 to the bottom (174x259 each, set in `cams.slots` in `config.json`). Each one shows the player the action is on. The rest of the bottom section is left for your own design.
 
 **Getting the cams in** (control panel -> **Webcams**, a row per player):
-- **Player Cam (least delay):** on the player's PC, install League HUD, open it and choose **Player Cam**. Then enter the GFX PC's address (from **Outputs -> From another PC**), pick the team and role, and choose the camera. Windows asks once to allow the camera. The video goes straight from the player's PC to each overlay showing it, peer to peer over the local network (WebRTC), so there's no relay delay. The GFX PC must tick **Let other PCs on the network read the HUD**. Same network only. The window can be minimised while they play. **Swap teams left/right** moves the cams with their teams.
-- **Link:** paste a VDO.Ninja view link (or any page that shows just the cam) in the player's box. It works from anywhere, with VDO.Ninja's delay. For VDO.Ninja links the HUD adds `&cover&cleanoutput&noaudio`, so the cam fills its space without controls or sound. A link takes over from a Player Cam in the same seat.
+- **Player cam link, in a browser (least delay):** send players the **Player cam link** shown in the Webcams section (`https://<GFX PC>:8779/cam`; the plain `http://<GFX PC>:8777/cam` forwards there). They open it in Chrome or Edge, allow the camera, and pick their team and role. It's https because browsers only allow the camera on secure pages. The HUD makes its own certificate, so the first visit shows "Your connection isn't private": **Advanced -> Continue**.
+- **SCC Player Cam app:** the same thing as a small app of its own, for players who'd rather not use a browser. Install it with **[SCC-Player-Cam-Setup.exe](https://github.com/owenbparker/LeagueHUDSCC/releases/latest/download/SCC-Player-Cam-Setup.exe)** (to `C:\SCC Player Cam`, with a desktop shortcut). Players enter the GFX PC's address (e.g. `192.168.2.40`). There's no certificate warning, it remembers their address, team, role and camera, and it updates itself like the HUD.
+
+  Either way, the video goes straight from the player's PC to each overlay showing it, peer to peer over the local network (WebRTC), so there's no relay delay. The GFX PC must tick **Let other PCs on the network read the HUD**. Same network only. The tab or window can be minimised while they play. **Swap teams left/right** moves the cams with their teams.
+- **Link:** paste a VDO.Ninja view link (or any page that shows just the cam) in the player's box. It works from anywhere, with VDO.Ninja's delay. For VDO.Ninja links the HUD adds `&cover&cleanoutput&noaudio`, so the cam fills its space without controls or sound. A link takes over from a player cam in the same seat.
 
 The green dot shows which players have a cam. The row of the player on air is highlighted.
 
@@ -191,6 +193,8 @@ lolhud/          the app (Python standard library; the desktop window also uses 
   gold.py          gold estimate + Data Dragon prices/icons
   ocr.py           reads team gold off the spectator top bar (Windows text recognition)
   cams.py          webcams: connects player cams to overlays, picks who's on camera, reads name tags
+  tls.py           the https certificate for the player cam link
+  camapp.py        the SCC Player Cam app (PlayerCam.py / PlayerCam.spec, installer/SCC-Player-Cam.iss)
   updater.py       checks GitHub releases and installs updates; version.py holds the build's version
   profiles.py      HUD profiles (built-in in web/profiles/, imported in profiles/)
   psd_import.py    turns a PSD into a HUD profile
@@ -201,7 +205,7 @@ lolhud/          the app (Python standard library; the desktop window also uses 
 web/overlay.html   the broadcast overlay
 web/control.html   the control panel
 web/overlay_cams.js the webcams in the overlay
-web/cam.html       the Player Cam client
+web/cam.html       the player cam page (browser link and Player Cam app)
 web/assets/        images exported from the PSD (bar, its background lines, team panels, logos, pips)
 tools/split_bar.py rebuilds the bar and line images from design/hud_bar.png
 web/fonts/         Heathergreen, Inter

@@ -51,6 +51,16 @@ def smoke_test(port):
             ok = False
             results.append(f"FAIL {path}: {e}")
     try:
+        # The player cam page over https (its certificate is made on the spot).
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
+        with urllib.request.urlopen(f"https://127.0.0.1:{port + 2}/cam", timeout=5, context=ctx) as r:
+            results.append(f"OK   https /cam ({len(r.read())} bytes)")
+    except Exception as e:
+        ok = False
+        results.append(f"FAIL https /cam: {e}")
+    try:
         import webview  # noqa: F401
         if sys.platform == "win32":
             import webview.platforms.winforms  # noqa: F401  (loads the Edge WebView2 bridge)

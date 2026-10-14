@@ -92,6 +92,7 @@
   .cam-row input { padding: 6px 8px; font-size: 12px; }
   .cam-row button { padding: 5px 6px; font-size: 12px; }
   .cam-row button.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
+  .note a { color: var(--accent); }
   #cams-test-result img { width: 100%; margin-top: 10px; border-radius: 6px; border: 1px solid var(--line); }
   .preview iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; }
   code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all; }
@@ -227,9 +228,13 @@
       <button type="button" id="cams-test" style="flex:0 0 auto">Test screen read</button>
     </div>
     <div id="cams-test-result"></div>
+    <div class="out" style="margin-top:12px"><span>Player cam link (players open it in Chrome or Edge on their PC)</span>
+      <div class="row"><code id="cams-link"></code><button data-copy="cams-link" id="cams-link-copy">Copy</button></div></div>
     <details class="note"><summary>How players connect their cams</summary>
       <ul>
-        <li><b>Player Cam (least delay):</b> on the player's PC, open League HUD and choose <b>Player Cam</b>, enter this PC's address (<span id="cams-lan">tick "Let other PCs on the network read the HUD" under Outputs first</span>), and pick their team and role. Leave that player's link blank. Same network only.</li>
+        <li><b>In a browser:</b> send players the link above. The first time, the browser warns that the connection isn't private (the HUD makes its own certificate): <b>Advanced -> Continue</b>. Then allow the camera and pick their team and role. Their cam goes straight to the HUD, peer to peer, for the least delay.</li>
+        <li><b>SCC Player Cam app:</b> the same, as its own small app: <a href="https://github.com/owenbparker/LeagueHUDSCC/releases/latest/download/SCC-Player-Cam-Setup.exe" target="_blank" rel="noopener">SCC-Player-Cam-Setup.exe</a>. Players enter <span id="cams-lan">this PC's address</span> instead of using the link. No certificate warning, and it remembers their choices.</li>
+        <li>Both need "Let other PCs on the network read the HUD" ticked (Outputs) and the players on this network. Leave those players' link boxes blank.</li>
         <li><b>Link:</b> paste a VDO.Ninja view link (or any page showing just the cam) in the player's box. Works from anywhere, with a little more delay.</li>
         <li><b>Who's on camera:</b> with "Read this PC's screen" on, the cams follow the player name tags nearest the middle of the screen (Windows, League in Borderless or Windowed). Otherwise they follow the latest kill. <b>Pin</b> keeps a team's cam on one player.</li>
       </ul>
@@ -745,7 +750,10 @@ function applyCams(s) {
   const on = side => focus[side] ? `${ROLES[focus[side] - 1]}${why[side] ? " (" + why[side] + ")" : ""}` : "nobody yet";
   $("cams-status").innerHTML = `On the cams: left ${esc(on("left"))} · right ${esc(on("right"))}`
     + (cams.director ? `<br>Screen: ${esc(s.app.director || "")}` : "");
-  $("cams-lan").textContent = s.app.lan_url ? s.app.lan_url : 'tick "Let other PCs on the network read the HUD" under Outputs first';
+  $("cams-lan").textContent = s.app.lan_url ? s.app.lan_url.replace(/^http:\/\//, "").replace(/:\d+$/, "") : "this PC's address";
+  $("cams-link").textContent = !s.app.network ? 'Tick "Let other PCs on the network read the HUD" under Outputs first'
+    : s.app.cam_url || "Unavailable: see the Log";
+  $("cams-link-copy").disabled = !(s.app.network && s.app.cam_url);
 }
 
 // localStorage can be missing or blocked; the panel still works without it.

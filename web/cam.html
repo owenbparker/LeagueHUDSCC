@@ -4,11 +4,16 @@
 <meta charset="utf-8">
 <link rel="icon" href="assets/app_icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>League HUD Player Cam</title>
-<!-- Player Cam client: sends this PC's webcam straight to the HUD on the GFX
-     PC (peer to peer over the local network, for the least delay). Runs in
-     the desktop app: browsers only allow the camera on secure pages, and the
-     app's own page (http://127.0.0.1) counts as one. -->
+<title>SCC Player Cam</title>
+<!-- Player Cam: sends a player's webcam straight to the HUD on the GFX PC
+     (peer to peer over the local network, for the least delay).
+
+     Two ways in:
+       - in a browser, from the GFX PC: https://<GFX PC>:8779/cam (browsers
+         only allow the camera on secure pages, so it's https; plain http
+         links forward there);
+       - in the SCC Player Cam app (/cam?app=1, served by the app on this PC),
+         which asks for the GFX PC's address. -->
 <style>
   @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
   :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b; --accent: #31c392; }
@@ -46,6 +51,7 @@
                    letter-spacing: .06em; background: rgba(0,0,0,.6); color: var(--muted); }
   .preview .live.on { background: #d6243a; color: #fff; }
   .note { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+  body:not(.app) .app-only { display: none !important; }
   .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
   .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
   .update.error { background: #6b2a2a; color: #fff; }
@@ -55,18 +61,17 @@
 </head>
 <body>
 <header>
-  <h1>League HUD</h1><span>Player Cam</span>
-  <div class="right">
+  <h1>SCC Player Cam</h1><span id="hud-name"></span>
+  <div class="right app-only">
     <button id="update" class="update" hidden></button>
     <span class="version" id="version"></span>
-    <a href="/start">Change client</a>
   </div>
 </header>
 <main>
   <div class="wrap">
     <section>
-      <label for="gfx">GFX PC address</label>
-      <input id="gfx" spellcheck="false" placeholder="http://192.168.2.40:8777">
+      <label for="gfx" class="app-only">GFX PC address</label>
+      <input id="gfx" class="app-only" spellcheck="false" placeholder="192.168.2.40">
       <label>Team</label>
       <div class="seg" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
       <label>Player</label>
@@ -74,8 +79,9 @@
       <label for="camera">Camera</label>
       <select id="camera"></select>
       <div class="status" id="status"></div>
-      <p class="note">Ask the GFX operator to tick "Let other PCs on the network read the HUD". Keep this window open
-        while you play (it can be minimised). Your cam shows on the HUD when the action is on you.</p>
+      <p class="note"><span class="app-only">Ask the GFX operator to tick "Let other PCs on the network read the HUD".</span>
+        Keep this <span id="window-word">window</span> open while you play (it can be minimised). Your cam shows on the
+        HUD when the action is on you.</p>
     </section>
     <section>
       <div class="preview"><video id="preview" autoplay muted playsinline></video><span class="live" id="live">OFF AIR</span></div>
@@ -85,6 +91,11 @@
 <script src="update.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+// In the app, this page is served on this PC and talks to the GFX PC's
+// address; in a browser, it comes from the GFX PC itself.
+const APP = new URLSearchParams(location.search).has("app");
+document.body.classList.toggle("app", APP);
+if (!APP) $("window-word").textContent = "tab";
 const ROLES = ["Top", "Jungle", "Mid", "Bot", "Support"];
 const showUpdate = updateButton($("update"), $("version"));
 const store = (k, v) => { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
@@ -136,7 +147,7 @@ for (const b of $("team").children) b.onclick = () => pickSeat(b.dataset.side, s
 // --- the camera --------------------------------------------------------------
 async function openCamera(deviceId) {
   if (!window.isSecureContext || !navigator.mediaDevices) {
-    status("The camera only works in the League HUD app: open it on this PC and choose Player Cam.", "bad");
+    status(APP ? "This app can't use the camera." : "The camera needs the https link to this page: ask the GFX operator for it.", "bad");
     return;
   }
   try {
@@ -218,7 +229,7 @@ function handle(r) {
 
 async function loop() {
   for (;;) {
-    base = gfxBase($("gfx").value);
+    base = APP ? gfxBase($("gfx").value) : location.origin;
     if (!base) {
       status("Enter the GFX PC's address (shown in its Outputs under \"From another PC\").");
       await new Promise(r => (wakeUp = r));
@@ -250,15 +261,30 @@ addEventListener("pagehide", () => {
     navigator.sendBeacon(base + "/api/cam/poll", new Blob([JSON.stringify({ id: ME, seat: "", claim: true, wait: 0 })], { type: "text/plain" }));
 });
 
-$("gfx").value = new URLSearchParams(location.search).get("gfx") || stored("camGfx") || "";
-$("gfx").addEventListener("change", () => { store("camGfx", $("gfx").value.trim()); claim = !!seat; wake(); });
-drawSeat();
-openCamera(stored("camDevice"));
-loop();
-(async function updates() {
-  try { showUpdate((await (await fetch("/api/state")).json()).app.update); } catch (e) {}
-  setTimeout(updates, 5000);
-})();
+async function start() {
+  if (!APP && !window.isSecureContext) {
+    // Opened by its http address from another PC: the camera needs the https one.
+    try {
+      const url = (await (await fetch("/api/state")).json()).app.cam_url;
+      if (url) {
+        // Same address the player used, on the https port.
+        const u = new URL(url);
+        u.hostname = location.hostname;
+        return location.replace(u.toString());
+      }
+    } catch (e) { /* fall through to the message below */ }
+  }
+  $("gfx").value = new URLSearchParams(location.search).get("gfx") || stored("camGfx") || "";
+  $("gfx").addEventListener("change", () => { store("camGfx", $("gfx").value.trim()); claim = !!seat; wake(); });
+  drawSeat();
+  openCamera(stored("camDevice"));
+  loop();
+  if (APP) (async function updates() {
+    try { showUpdate((await (await fetch("/api/state")).json()).app.update); } catch (e) {}
+    setTimeout(updates, 5000);
+  })();
+}
+start();
 </script>
 </body>
 </html>

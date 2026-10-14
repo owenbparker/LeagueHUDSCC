@@ -16,6 +16,7 @@ hidden, datas, binaries = [], [(os.path.join(root, "web"), "web")], []
 if sys.platform == "win32":
     # pywebview's Windows window (Edge WebView2) is loaded at runtime.
     hidden += ["webview.platforms.winforms", "webview.platforms.edgechromium", "clr"]
+    hidden += ["cryptography"]  # https certificate for players' browser cams
     # Windows text recognition (reading gold off the screen).
     for package in ("winrt", "psd_tools"):  # text recognition; PSD import
         d, b, h = collect_all(package)
