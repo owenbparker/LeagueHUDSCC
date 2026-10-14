@@ -47,10 +47,17 @@
   .status { display: flex; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: #c0392b; }
   .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding: 16px; align-content: start; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; padding: 16px; align-content: start; align-items: start; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
   section.wide { grid-column: 1 / -1; }
   h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  /* Click a section's title to fold it away to just the title and its arrow. */
+  section > h2 { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  section > h2:hover { color: var(--text); }
+  section > h2 .fold { margin-left: auto; flex: 0 0 auto; width: 16px; height: 16px; transition: transform .15s; }
+  section.collapsed > h2 { margin-bottom: 0; }
+  section.collapsed > h2 .fold { transform: rotate(-90deg); }
+  section.collapsed > :not(h2) { display: none !important; }
   label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
   input, select { width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
   input[type=checkbox] { width: auto; }
@@ -68,7 +75,10 @@
   .wins { display: flex; align-items: center; gap: 8px; }
   .wins b { font-size: 22px; min-width: 28px; text-align: center; }
   .wins button { flex: 0 0 40px; font-size: 18px; padding: 4px; }
-  .preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #2f3d2c url("assets/preview_bg.jpg") center/cover; border-radius: 6px; overflow: hidden; }
+  /* Just the HUD, on a dark checkerboard that shows where it's see-through. */
+  .preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: repeating-conic-gradient(#1a1e22 0 25%, #121518 0 50%) 0 0 / 20px 20px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+  .preview.bar { aspect-ratio: 934 / 122; }
+  .preview-mode { margin-bottom: 10px; }
   .preview iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; }
   code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all; }
   .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; font-size: 12px; max-height: 320px; overflow: auto; }
@@ -112,6 +122,7 @@
     <button id="update" class="update" hidden></button>
     <span class="version" id="version" title="Check for updates"></span>
     <span class="badge" id="mode-badge"></span><span id="clock" class="clock">00:00</span>
+    <button id="fold-all" title="Fold every section down to its title, or open them all again">Collapse all</button>
     <a href="/start" class="version" style="text-decoration:none" title="Back to the GFX Controller / Observer Client choice">Change client</a>
   </div>
 </header>
@@ -224,6 +235,9 @@
 <aside>
   <section>
     <h2>Preview</h2>
+    <div class="seg preview-mode" id="preview-mode" role="group" aria-label="Preview size">
+      <button data-view="bar">Top bar</button><button data-view="full">Full 16:9</button>
+    </div>
     <div class="preview" id="preview"><iframe src="/overlay" title="Overlay preview"></iframe></div>
   </section>
 
@@ -616,12 +630,57 @@ async function pollLog() {
 }
 pollLog();
 
+// localStorage can be missing or blocked; the panel still works without it.
+function stored(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; } }
+function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not saved */ } }
+
+// Preview: the whole 1920x1080 HUD, or just the top bar (x 495-1429, y 0-122).
+const BAR = { x: 495, w: 934 };
+let previewView = stored("previewView", "full");
 function fitPreview() {
-  const box = $("preview");
-  box.querySelector("iframe").style.transform = `scale(${box.clientWidth / 1920})`;
+  const box = $("preview"), bar = previewView === "bar";
+  box.classList.toggle("bar", bar);
+  const k = box.clientWidth / (bar ? BAR.w : 1920);
+  box.querySelector("iframe").style.transform = bar ? `scale(${k}) translateX(${-BAR.x}px)` : `scale(${k})`;
+  document.querySelectorAll("#preview-mode button").forEach(b => b.classList.toggle("on", b.dataset.view === previewView));
 }
+document.querySelectorAll("#preview-mode button").forEach(b => b.onclick = () => {
+  previewView = b.dataset.view; store("previewView", previewView); fitPreview();
+});
 new ResizeObserver(fitPreview).observe($("preview"));
 fitPreview();
+
+// Collapsible sections, remembered by title.
+const folded = new Set(stored("foldedSections", []));
+const sections = [...document.querySelectorAll("section")].filter(s => s.firstElementChild?.tagName === "H2");
+const sectionKey = s => s.firstElementChild.firstChild.textContent.trim();
+function setFolded(sec, fold) {
+  sec.classList.toggle("collapsed", fold);
+  sec.firstElementChild.setAttribute("aria-expanded", String(!fold));
+  fold ? folded.add(sectionKey(sec)) : folded.delete(sectionKey(sec));
+}
+function syncFoldAll() {
+  const all = sections.every(s => s.classList.contains("collapsed"));
+  $("fold-all").textContent = all ? "Expand all" : "Collapse all";
+  store("foldedSections", [...folded]);
+}
+sections.forEach(sec => {
+  const h = sec.firstElementChild;
+  h.insertAdjacentHTML("beforeend", '<svg class="fold" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  h.setAttribute("role", "button");
+  h.tabIndex = 0;
+  const toggle = () => { setFolded(sec, !sec.classList.contains("collapsed")); syncFoldAll(); if (!sec.classList.contains("collapsed")) fitPreview(); };
+  h.onclick = toggle;
+  h.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
+  setFolded(sec, folded.has(sectionKey(sec)));
+});
+$("fold-all").onclick = () => {
+  const fold = !sections.every(s => s.classList.contains("collapsed"));
+  sections.forEach(s => setFolded(s, fold));
+  syncFoldAll();
+  fitPreview();
+};
+syncFoldAll();
 
 async function poll() {
   try { apply(await (await fetch("/api/state", { cache: "no-store" })).json()); }
