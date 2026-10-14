@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="assets/app_icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>League HUD Player Cam</title>
+<!-- Player Cam client: sends this PC's webcam straight to the HUD on the GFX
+     PC (peer to peer over the local network, for the least delay). Runs in
+     the desktop app: browsers only allow the camera on secure pages, and the
+     app's own page (http://127.0.0.1) counts as one. -->
+<style>
+  @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b; --accent: #31c392; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  header span { color: var(--muted); }
+  header .right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  header a:hover { color: var(--text); }
+  main { min-height: calc(100% - 54px); display: grid; place-items: center; padding: 16px; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 420px); gap: 16px; width: min(880px, 100%); }
+  @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+  label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 12px; }
+  label:first-child { margin-top: 0; }
+  input, select { width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; padding: 10px 8px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: #06231a; font-weight: 600; }
+  .roles button { font-size: 12px; padding: 8px 4px; line-height: 1.25; }
+  .roles small { display: block; font-size: 11px; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status { min-height: 20px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .status.ok { color: var(--accent); }
+  .status.bad { color: #ffcf66; }
+  .preview { position: relative; aspect-ratio: 174 / 259; max-height: 60vh; margin: 0 auto; background: #000; border-radius: 8px; overflow: hidden; }
+  .preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .preview .live { position: absolute; top: 10px; left: 10px; padding: 3px 8px; border-radius: 4px; font: 700 11px "Inter", sans-serif;
+                   letter-spacing: .06em; background: rgba(0,0,0,.6); color: var(--muted); }
+  .preview .live.on { background: #d6243a; color: #fff; }
+  .note { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+  .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
+  .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
+  .update.error { background: #6b2a2a; color: #fff; }
+  .version { font-size: 12px; color: var(--muted); }
+  .update.check { background: #252a2f; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>League HUD</h1><span>Player Cam</span>
+  <div class="right">
+    <button id="update" class="update" hidden></button>
+    <span class="version" id="version"></span>
+    <a href="/start">Change client</a>
+  </div>
+</header>
+<main>
+  <div class="wrap">
+    <section>
+      <label for="gfx">GFX PC address</label>
+      <input id="gfx" spellcheck="false" placeholder="http://192.168.2.40:8777">
+      <label>Team</label>
+      <div class="seg" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
+      <label>Player</label>
+      <div class="seg roles" id="role"></div>
+      <label for="camera">Camera</label>
+      <select id="camera"></select>
+      <div class="status" id="status"></div>
+      <p class="note">Ask the GFX operator to tick "Let other PCs on the network read the HUD". Keep this window open
+        while you play (it can be minimised). Your cam shows on the HUD when the action is on you.</p>
+    </section>
+    <section>
+      <div class="preview"><video id="preview" autoplay muted playsinline></video><span class="live" id="live">OFF AIR</span></div>
+    </section>
+  </div>
+</main>
+<script src="update.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const ROLES = ["Top", "Jungle", "Mid", "Bot", "Support"];
+const showUpdate = updateButton($("update"), $("version"));
+const store = (k, v) => { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+const stored = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const ME = Math.random().toString(16).slice(2, 18);
+let base = "", seat = stored("camSeat") || "", claim = !!seat, stream = null, teams = null, online = false;
+const viewers = {};  // overlay id -> RTCPeerConnection
+
+// "192.168.2.40", "http://192.168.2.40:8777/overlay" -> "http://192.168.2.40:8777"
+function gfxBase(text) {
+  text = (text || "").trim();
+  if (!text) return "";
+  if (!/^https?:\/\//i.test(text)) text = "http://" + text;
+  try {
+    const u = new URL(text);
+    return `${u.protocol}//${u.hostname}:${u.port || 8777}`;
+  } catch (e) { return ""; }
+}
+
+function status(text, kind) { $("status").textContent = text; $("status").className = "status " + (kind || ""); }
+
+function drawSeat() {
+  const [side, slot] = seat ? seat.split("-") : ["", ""];
+  for (const b of $("team").children) {
+    b.classList.toggle("on", b.dataset.side === side);
+    const t = teams && teams[b.dataset.side];
+    b.textContent = t ? `${t.name} (${t.tricode})` : (b.dataset.side === "left" ? "Left team" : "Right team");
+  }
+  const names = (teams && side && teams[side].players) || [];
+  $("role").innerHTML = ROLES.map((r, i) =>
+    `<button data-slot="${i + 1}" class="${String(i + 1) === slot ? "on" : ""}">${r}<small>${names[i] || "&nbsp;"}</small></button>`).join("");
+  for (const b of $("role").children) b.onclick = () => pickSeat(side || "left", b.dataset.slot);
+  const viewing = Object.values(viewers).filter(pc => pc.connectionState === "connected").length;
+  $("live").classList.toggle("on", viewing > 0);
+  $("live").textContent = viewing ? "ON THE HUD" : "OFF AIR";
+}
+
+function pickSeat(side, slot) {
+  seat = `${side}-${slot || (seat.split("-")[1] || 1)}`;
+  claim = true;
+  store("camSeat", seat);
+  drawSeat();
+  wake();
+}
+for (const b of $("team").children) b.onclick = () => pickSeat(b.dataset.side, seat.split("-")[1]);
+
+// --- the camera --------------------------------------------------------------
+async function openCamera(deviceId) {
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    status("The camera only works in the League HUD app: open it on this PC and choose Player Cam.", "bad");
+    return;
+  }
+  try {
+    const next = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+      deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } });
+    const track = next.getVideoTracks()[0];
+    for (const pc of Object.values(viewers)) {
+      for (const sender of pc.getSenders()) if (sender.track && sender.track.kind === "video") sender.replaceTrack(track);
+    }
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = next;
+    $("preview").srcObject = stream;
+    store("camDevice", track.getSettings().deviceId || "");
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    $("camera").innerHTML = devices.map((d, i) => `<option value="${d.deviceId}">${d.label || "Camera " + (i + 1)}</option>`).join("");
+    $("camera").value = track.getSettings().deviceId || "";
+  } catch (e) {
+    status(`Couldn't open the camera: ${e.message || e.name}. Allow camera access, or close other apps using it.`, "bad");
+  }
+}
+$("camera").onchange = e => openCamera(e.target.value);
+
+// --- talking to the HUD ----------------------------------------------------
+async function post(path, body) {
+  const r = await fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.status);
+  return data;
+}
+
+function gathered(pc) {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise(resolve => {
+    pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") resolve(); });
+    setTimeout(resolve, 2500);
+  });
+}
+
+async function answer(m) {
+  for (let i = 0; !stream && i < 50; i++) await sleep(200);
+  if (!stream) return;
+  if (viewers[m.from]) viewers[m.from].close();
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  viewers[m.from] = pc;
+  pc.onconnectionstatechange = () => {
+    if (["failed", "closed"].includes(pc.connectionState) && viewers[m.from] === pc) delete viewers[m.from];
+    drawSeat();
+  };
+  for (const t of stream.getVideoTracks()) pc.addTrack(t, stream);
+  await pc.setRemoteDescription({ type: "offer", sdp: m.sdp });
+  await pc.setLocalDescription(await pc.createAnswer());
+  // Plenty for a cam this size on screen, and easy on the network.
+  for (const sender of pc.getSenders()) {
+    const p = sender.getParameters();
+    p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
+    p.encodings[0].maxBitrate = 2500000;
+    sender.setParameters(p).catch(() => {});
+  }
+  await gathered(pc);
+  await post("/api/cam/send", { to: m.from, from: ME, data: { type: "answer", sdp: pc.localDescription.sdp } });
+}
+
+let wakeUp = null;
+function wake() { if (wakeUp) wakeUp(); }
+
+function handle(r) {
+  claim = false;
+  online = true;
+  teams = r.teams;
+  if (r.seat !== undefined && r.seat !== null && r.seat !== seat) { seat = r.seat; store("camSeat", seat); }
+  status(seat ? `Connected to the HUD at ${base}` : "Connected. Pick your team and role.", "ok");
+  for (const m of r.messages) {
+    if (m.type === "offer") answer(m).catch(() => {});
+    else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
+    else if (m.type === "replaced") status("Another camera took this player's seat on the HUD.", "bad");
+  }
+  drawSeat();
+}
+
+async function loop() {
+  for (;;) {
+    base = gfxBase($("gfx").value);
+    if (!base) {
+      status("Enter the GFX PC's address (shown in its Outputs under \"From another PC\").");
+      await new Promise(r => (wakeUp = r));
+      continue;
+    }
+    try {
+      // A poll cut short by a change of seat or address still gets handled.
+      const pending = post("/api/cam/poll", { id: ME, seat, claim, label: cameraLabel(), wait: online && !claim ? 20 : 0 })
+        .then(handle);
+      const woken = new Promise(res => (wakeUp = () => res("woken")));
+      await Promise.race([pending, woken]);
+    } catch (e) {
+      online = false;
+      status(`Can't reach the HUD at ${base}. Check the address and that the GFX PC lets other PCs read the HUD.`, "bad");
+      await Promise.race([sleep(3000), new Promise(r => (wakeUp = r))]);
+    }
+  }
+}
+
+function cameraLabel() {
+  const t = stream && stream.getVideoTracks()[0];
+  return t ? t.label : "";
+}
+
+// Closing the window frees the seat straight away. (Plain text, so the
+// browser sends it to another PC without asking first.)
+addEventListener("pagehide", () => {
+  if (base && navigator.sendBeacon)
+    navigator.sendBeacon(base + "/api/cam/poll", new Blob([JSON.stringify({ id: ME, seat: "", claim: true, wait: 0 })], { type: "text/plain" }));
+});
+
+$("gfx").value = new URLSearchParams(location.search).get("gfx") || stored("camGfx") || "";
+$("gfx").addEventListener("change", () => { store("camGfx", $("gfx").value.trim()); claim = !!seat; wake(); });
+drawSeat();
+openCamera(stored("camDevice"));
+loop();
+(async function updates() {
+  try { showUpdate((await (await fetch("/api/state")).json()).app.update); } catch (e) {}
+  setTimeout(updates, 5000);
+})();
+</script>
+</body>
+</html>

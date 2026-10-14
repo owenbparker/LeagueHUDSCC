@@ -35,8 +35,11 @@ DEFAULTS = {
     "allow_network": False,
     "output_dir": "output",
 
-    "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0, "color": "#0a6d4c"},
-    "right": {"name": "Team Right", "tricode": "SCC", "logo": "assets/logo_right.png", "wins": 0, "color": "#bd1313"},
+    "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0, "color": "#0a6d4c",
+             # Webcam links (e.g. VDO.Ninja view links) for players 1-5: top, jungle, mid, bot, support.
+             "cam_links": ["", "", "", "", ""]},
+    "right": {"name": "Team Right", "tricode": "SCC", "logo": "assets/logo_right.png", "wins": 0, "color": "#bd1313",
+              "cam_links": ["", "", "", "", ""]},
     # Size and position tweaks per logo file: {"assets/logos/x.png": {"scale": 1.2, "x": 0, "y": -2}}.
     # Stored per logo, so a team's logo keeps its tweak whichever side it is on.
     "logo_adjust": {},
@@ -57,6 +60,27 @@ DEFAULTS = {
     "overlay_screen": 0,
     # Observer client: the GFX PC whose HUD to show, e.g. http://192.168.2.40:8777/overlay
     "observer_url": "",
+    # Player webcams along the bottom of the HUD: one per team, showing the
+    # player the action is on. Each player's cam is a link (VDO.Ninja etc.,
+    # in the team's cam_links) or a cam connected straight to the HUD from
+    # the player's PC (Player Cam client).
+    "cams": {
+        "enabled": True,
+        # Switch each team's cam to their player closest to the action.
+        "auto": True,
+        # Shortest time a cam stays on one player before switching (seconds).
+        "hold": 3.0,
+        # Keep a team's cam on one player (1-5), or 0 to switch automatically.
+        "pin": {"left": 0, "right": 0},
+        # Read this PC's League screen (the player name tags) to see who's on
+        # camera. Run it on the PC whose game goes to air (GFX or observer).
+        "director": False,
+        # Where to look for name tags on a 1920x1080 screen: x, y, w, h (keeps
+        # clear of the HUD at the top and the scoreboard at the bottom).
+        "director_area": [120, 110, 1680, 690],
+        # Where the cams sit on the 1920x1080 overlay: x, y, w, h.
+        "slots": {"left": [288, 821, 174, 259], "right": [1458, 821, 174, 259]},
+    },
     # Overlay animations that can be switched off in the control panel.
     "animations": {"first_blood": True},
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).

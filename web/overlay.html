@@ -14,6 +14,7 @@
     diff=0     hide the gold-lead tab
     dragons=1  show each team's dragons as coloured dots
     idle=0     hide the whole HUD while no game is running
+    cams=0     hide the player webcams
     fit=1      scale the HUD to the window, centred at the top (used by the
                desktop app's window over the game, whatever the screen size)
 -->
@@ -84,10 +85,12 @@
   <g id="stage"></g>
 </svg>
 <div id="fx"></div>
+<script src="overlay_cams.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
-const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true) };
+const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true),
+               cams: opt("cams", true) };
 const $ = id => document.getElementById(id);
 if (opt("fit", false)) {
   // Scales with the screen's height like League's own top bar does.
@@ -588,6 +591,7 @@ function render(s) {
   }
   drawTimers(f, cfg.objective_timers || {});
   checkAnimations(s);
+  renderCams(s, SHOW.cams);
   setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer.

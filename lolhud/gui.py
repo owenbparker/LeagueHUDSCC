@@ -1,5 +1,5 @@
 """The desktop app: runs the HUD and shows the control panel in its own
-1280x720 window (no command prompt).
+window (no command prompt).
 
     LeagueHUD.exe            the built app
     python -m lolhud.gui     the same, from source (needs: pip install pywebview)
@@ -42,7 +42,7 @@ def smoke_test(port):
     """Used by the build: check the packaged app serves its pages and can load
     its window library. Writes smoke-test.txt next to the app."""
     results, ok = [], True
-    for path in ("/start", "/control", "/observer", "/overlay", "/update.js", "/api/state", "/api/log", "/hud.csv",
+    for path in ("/start", "/control", "/observer", "/overlay", "/cam", "/overlay_cams.js", "/update.js", "/api/state", "/api/log", "/hud.csv",
                  "/assets/hud_base.png", "/assets/hud_lines.png", "/fonts/Inter.ttf", "/fonts/Heathergreen.otf"):
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
@@ -135,7 +135,7 @@ def main():
     try:
         import webview
         from .overlay_window import OverlayWindow
-        window = webview.create_window(f"{TITLE} {app.updater.current}", url, width=1280, height=720,
+        window = webview.create_window(f"{TITLE} {app.updater.current}", url, width=1340, height=810,
                                        min_size=(960, 600), background_color="#0e1012", text_select=True)
         if own_server:
             app.overlay_window = OverlayWindow(app.config, port)

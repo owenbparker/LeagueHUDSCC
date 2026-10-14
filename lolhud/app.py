@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import outputs
+from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from .log import log, since
@@ -55,6 +56,13 @@ class HudApp:
         # "gfx" runs the HUD; "observer" only shows another PC's HUD over the
         # game here, so it stops reading the game. None until one is picked.
         self.role = None
+        # Player webcams: connections to player cams, and which player each
+        # team's cam shows. The director reads this PC's screen for that.
+        self.cams = CamHub()
+        self.director = Director(config, self._director_roster, self._director_send)
+        self.director.enabled = lambda: (bool(self.config.get()["cams"].get("director"))
+                                         and self.role in ("gfx", "observer"))
+        self._gfx_roster = (0.0, None)
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._was_connected = None
@@ -125,21 +133,77 @@ class HudApp:
                     # Include one example, so the HUD can learn to use it.
                     log(f"New game event not used yet: {name} {json.dumps(events.get(name, {}))}", "warn")
 
+    def _gfx_base(self):
+        from .overlay_window import gfx_base_url
+        return gfx_base_url(self.config.get().get("observer_url") or "")
+
+    def _director_roster(self):
+        """Who's playing: from this PC's game, or the GFX PC's on an observer."""
+        if self.role != "observer":
+            with self._lock:
+                return self.state["detail"].get("roster")
+        at, roster = self._gfx_roster
+        if time.time() - at > 2:
+            try:
+                roster = get_json(self._gfx_base() + "/api/state")["detail"].get("roster")
+            except Exception:
+                roster = None
+            self._gfx_roster = (time.time(), roster)
+        return roster
+
+    def _director_send(self, focus, seen):
+        if self.role == "observer":
+            try:
+                post_json(self._gfx_base() + "/api/cams/focus", {"focus": focus, "seen": seen})
+            except Exception as e:
+                raise RuntimeError(f"Couldn't reach the GFX PC: {getattr(e, 'reason', e)}")
+        else:
+            self.cams.report(focus, seen)
+
+    def director_test(self):
+        """One read of the name tags, with a picture of what was found."""
+        import io
+        try:
+            focus, seen, image, lines = self.director.read_once()
+        except Exception as e:
+            return {"ok": False, "error": str(e) or repr(e)}
+        from PIL import ImageDraw
+        shot = image.convert("RGB")
+        draw = ImageDraw.Draw(shot)
+        for _, (x, y, w, h) in lines:
+            draw.rectangle([x - 2, y - 2, x + w + 2, y + h + 2], outline=(255, 210, 0), width=2)
+        for p in seen:
+            colour = (49, 195, 146) if p["side"] == "left" else (227, 71, 90)
+            draw.ellipse([p["x"] - 14, p["y"] - 14, p["x"] + 14, p["y"] + 14], outline=colour, width=4)
+        shot.thumbnail((960, 540))
+        buf = io.BytesIO()
+        shot.save(buf, "JPEG", quality=80)
+        return {"ok": True, "focus": focus, "seen": seen, "lines": [t for t, _ in lines][:40],
+                "image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()}
+
+    def swap_teams(self):
+        cfg = self.config.get()
+        pin = cfg["cams"].get("pin") or {}
+        self.config.update({"left": cfg["right"], "right": cfg["left"],
+                            "cams": {"pin": {"left": pin.get("right", 0), "right": pin.get("left", 0)}}})
+        self.cams.swap_sides()
+        log("Swapped teams left/right")
+
     def set_role(self, role):
-        if role not in ("gfx", "observer", None):
+        if role not in ("gfx", "observer", "player", None):
             raise ValueError(f"Unknown client: {role}")
         if role != self.role and self.overlay_window and self.overlay_window.window:
             self.overlay_window.close()
         if self.overlay_window:
             self.overlay_window.url = None
         self.role = role
-        self.screen_gold.paused = role == "observer"
+        self.screen_gold.paused = role in ("observer", "player")
         if role:
-            log({"gfx": "GFX Controller", "observer": "Observer Client"}[role] + " started")
+            log({"gfx": "GFX Controller", "observer": "Observer Client", "player": "Player Cam"}[role] + " started")
 
     def run_poller(self):
         while not self._stop.is_set():
-            if self.role == "observer":  # the GFX PC reads the game, not this one
+            if self.role in ("observer", "player"):  # the GFX PC reads the game, not this one
                 self._stop.wait(1)
                 continue
             try:
@@ -151,6 +215,7 @@ class HudApp:
     def stop(self):
         self._stop.set()
         self.screen_gold.stop()
+        self.director.stop()
         if self.server:
             self.server.stop()
 
@@ -165,12 +230,16 @@ class HudApp:
         return {"mode": self.mode, "role": self.role, "demo_speed": self.demo_speed, "network": network, "port": port,
                 "screen_gold": screen, "update": self.updater.info(),
                 "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
+                "director": self.director.status,
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
     def snapshot(self):
+        cfg = self.config.get()
         with self._lock:
-            return {"fields": self.state["fields"], "detail": self.state["detail"],
-                    "updated_at": self.updated_at, "config": self.config.get(),
+            detail = self.state["detail"]
+            return {"fields": self.state["fields"], "detail": detail,
+                    "cams": self.cams.info(cfg, detail),
+                    "updated_at": self.updated_at, "config": cfg,
                     "profiles_version": profiles.version(), "preview": self.preview,
                     "output_dir": self.config.output_dir(), "app": self.app_info()}
 
@@ -342,7 +411,7 @@ def make_handler(app):
                 if not _is_local(self.client_address[0]):
                     return self._send('{"error":"forbidden"}', status=403)
                 self._send(json.dumps(check_gfx((parse_qs(url.query).get("url") or [""])[0])))
-            elif path in ("/overlay", "/control", "/start", "/observer"):
+            elif path in ("/overlay", "/control", "/start", "/observer", "/cam"):
                 self._static(path[1:] + ".html")
             elif path == "/api/state":
                 self._send(json.dumps(app.snapshot()))
@@ -366,14 +435,51 @@ def make_handler(app):
             else:
                 self._static(path.lstrip("/"))
 
+        def do_OPTIONS(self):
+            # Player cams post here from their own PC's page.
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _cam_post(self, path, body):
+            """Webcam messages: also taken from other PCs on the network."""
+            if path == "/api/cam/poll":
+                result = app.cams.poll(str(body.get("id") or ""), body.get("seat"), bool(body.get("claim")),
+                                       body.get("label"), body.get("wait", 20))
+                cfg = app.config.get()
+                with app._lock:
+                    roster = app.state["detail"].get("roster")
+                result["teams"] = {s: {"name": cfg[s]["name"], "tricode": cfg[s]["tricode"],
+                                       "players": [p["name"] for p in (roster or {}).get(s, [])]} for s in ("left", "right")}
+                return result
+            if path == "/api/cam/send":
+                app.cams.send(str(body.get("to") or ""), str(body.get("from") or ""), body.get("data"))
+                return {"ok": True}
+            if path == "/api/cams/focus":
+                focus = body.get("focus") or {}
+                app.cams.report({s: focus.get(s) if focus.get(s) in (1, 2, 3, 4, 5) else None
+                                 for s in ("left", "right")}, body.get("seen") or [])
+                return {"ok": True}
+            return None
+
         def do_POST(self):
+            url = urlparse(self.path)
+            path = url.path
+            length = int(self.headers.get("Content-Length") or 0)
+            if path in ("/api/cam/poll", "/api/cam/send", "/api/cams/focus"):
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    return self._send(json.dumps(self._cam_post(path, body)))
+                except (ValueError, TypeError, AttributeError) as e:
+                    return self._send(json.dumps({"error": str(e)}), status=400)
             # Other PCs may read the HUD (when allowed), but only this PC can
             # change it.
             if not _is_local(self.client_address[0]):
                 return self._send('{"error":"Changes can only be made on the HUD PC"}', status=403)
-            url = urlparse(self.path)
-            path = url.path
-            length = int(self.headers.get("Content-Length") or 0)
             if path == "/api/media":
                 # A background video, sent as raw bytes (too big for JSON).
                 try:
@@ -437,6 +543,10 @@ def make_handler(app):
                     app.preview = {"name": body["name"], "side": body["side"], "id": time.time()}
                 elif path == "/api/role":
                     app.set_role(body.get("role"))
+                elif path == "/api/teams/swap":
+                    app.swap_teams()
+                elif path == "/api/cams/test":
+                    return self._send(json.dumps(app.director_test()))
                 elif path == "/api/screen-gold/test":
                     return self._send(json.dumps(app.screen_gold.test()))
                 else:
@@ -481,6 +591,7 @@ def start(app):
     port = app.config.get()["http_port"]
     app.server = Server(app, app.host(), port)
     app.screen_gold.start()
+    app.director.start()
     clean_up_old_update()
     app.updater.check_in_background()
     threading.Thread(target=app.run_poller, daemon=True).start()

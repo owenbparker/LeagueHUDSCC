@@ -123,6 +123,18 @@ class WindowsOcr:
     def read(self, image):
         return self.recognize(image).text
 
+    def read_lines(self, image):
+        """[(text, (x, y, w, h)), ...] for every line of text found."""
+        lines = []
+        for line in self.recognize(image).lines:
+            rects = [w.bounding_rect for w in line.words]
+            if not rects:
+                continue
+            x0, y0 = min(r.x for r in rects), min(r.y for r in rects)
+            x1, y1 = max(r.x + r.width for r in rects), max(r.y + r.height for r in rects)
+            lines.append((line.text, (x0, y0, x1 - x0, y1 - y0)))
+        return lines
+
     def read_words(self, image):
         """[(text, x_centre), ...] for every word found."""
         words = []
@@ -191,8 +203,9 @@ def _bitmap_to_image(ctypes, gdi32, mdc, bmp, width, height):
     return Image.frombuffer("RGB", (width, height), buf.raw, "raw", "BGRX", 0, 1)
 
 
-def capture_league():
-    """The League window's client area as an image, or (None, reason)."""
+def capture_league(full=False):
+    """The League window's client area as an image (just the top bar unless
+    full), or (None, reason)."""
     ctypes, wintypes, user32, gdi32 = _win32()
     hwnd = user32.FindWindowW(None, WINDOW_TITLE) or user32.FindWindowW(WINDOW_CLASS, None)
     if not hwnd:
@@ -204,23 +217,23 @@ def capture_league():
     width, height = rect.right, rect.bottom
     if width < 100 or height < 100:
         return None, "League window is too small"
-    # Only the top bar is needed.
-    strip = max(1, int(height * 0.05) + 2)
+    # Only the top bar is needed for the gold.
+    strip = height if full else max(1, int(height * 0.05) + 2)
 
     screen = user32.GetDC(None)
     mdc = gdi32.CreateCompatibleDC(screen)
     try:
         # 1) Ask the window to draw itself (works even if other windows cover it).
-        full = gdi32.CreateCompatibleBitmap(screen, width, height)
-        old = gdi32.SelectObject(mdc, full)
+        whole = gdi32.CreateCompatibleBitmap(screen, width, height)
+        old = gdi32.SelectObject(mdc, whole)
         image = None
         if user32.PrintWindow(hwnd, mdc, 3):  # PW_CLIENTONLY | PW_RENDERFULLCONTENT
-            image = _bitmap_to_image(ctypes, gdi32, mdc, full, width, strip)
+            image = _bitmap_to_image(ctypes, gdi32, mdc, whole, width, strip)
             if max(image.convert("L").getextrema()) < 16:
                 image = None  # came back black: some fullscreen modes don't support it
         gdi32.SelectObject(mdc, old)
-        gdi32.DeleteObject(full)
-        # 2) Otherwise copy it from the screen (the top bar must be visible).
+        gdi32.DeleteObject(whole)
+        # 2) Otherwise copy it from the screen (it must be visible).
         if image is None:
             point = wintypes.POINT(0, 0)
             user32.ClientToScreen(hwnd, ctypes.byref(point))

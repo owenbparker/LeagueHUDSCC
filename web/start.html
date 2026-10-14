@@ -5,8 +5,9 @@
 <link rel="icon" href="assets/app_icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>League HUD</title>
-<!-- First screen of the desktop app: pick the GFX controller (runs the HUD)
-     or the observer client (shows a GFX PC's HUD over the game). -->
+<!-- First screen of the desktop app: pick the GFX controller (runs the HUD),
+     the observer client (shows a GFX PC's HUD over the game) or the player
+     cam (sends a player's webcam to the HUD). -->
 <style>
   @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
   :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b; --accent: #31c392; }
@@ -15,8 +16,8 @@
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif;
          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; }
   h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: .01em; text-align: center; }
-  .choices { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; }
-  .choice { width: 260px; height: 190px; display: grid; place-items: center; background: var(--panel);
+  .choices { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; }
+  .choice { width: 240px; height: 180px; display: grid; place-items: center; background: var(--panel);
             border: 2px solid var(--line); border-radius: 12px; color: var(--text); font: 700 22px "Inter", system-ui, sans-serif;
             cursor: pointer; transition: transform .22s cubic-bezier(.2,.9,.3,1.2), box-shadow .22s ease, border-color .22s ease; }
   .choice:hover, .choice:focus-visible { transform: scale(1.06); border-color: var(--accent); outline: none;
@@ -40,6 +41,7 @@
   <div class="choices">
     <button class="choice" data-role="gfx">GFX Controller</button>
     <button class="choice" data-role="observer">Observer Client</button>
+    <button class="choice" data-role="player">Player Cam</button>
   </div>
   <div class="updates">
     <button id="update" class="update" hidden></button>
@@ -63,7 +65,7 @@ for (const b of document.querySelectorAll(".choice")) {
     try {
       await fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) });
     } catch (e) {}
-    location.href = role === "gfx" ? "/control" : "/observer";
+    location.href = { gfx: "/control", observer: "/observer", player: "/cam" }[role];
   };
 }
 </script>

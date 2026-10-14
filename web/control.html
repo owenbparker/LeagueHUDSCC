@@ -79,6 +79,20 @@
   .preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: repeating-conic-gradient(#1a1e22 0 25%, #121518 0 50%) 0 0 / 20px 20px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
   .preview.bar { aspect-ratio: 934 / 122; }
   .preview-mode { margin-bottom: 10px; }
+  .cam-opts { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+  .cam-opts .toggle { margin: 4px 0; }
+  .cam-team h3 { margin: 0 0 6px; font-size: 13px; padding-top: 8px; border-top: 4px solid var(--left); }
+  .cam-team[data-side=right] h3 { border-top-color: var(--right); }
+  .cam-row { display: grid; grid-template-columns: 112px minmax(0, 1fr) 48px; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 6px; border: 1px solid transparent; }
+  .cam-row.live { border-color: var(--accent); background: rgba(49,195,146,.08); }
+  .cam-row .who b { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .cam-row .who b i { width: 8px; height: 8px; border-radius: 50%; background: #3a4047; flex: 0 0 8px; }
+  .cam-row .who b i.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .cam-row .who small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cam-row input { padding: 6px 8px; font-size: 12px; }
+  .cam-row button { padding: 5px 6px; font-size: 12px; }
+  .cam-row button.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
+  #cams-test-result img { width: 100%; margin-top: 10px; border-radius: 6px; border: 1px solid var(--line); }
   .preview iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; }
   code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; word-break: break-all; }
   .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; font-size: 12px; max-height: 320px; overflow: auto; }
@@ -194,6 +208,32 @@
       <button type="button" id="preview-fb-right">Preview: right team</button>
     </div>
     <p class="note">When a team draws first blood, a stinger wipes across their side of the top bar, which fills with their colour and logo and "FIRST BLOOD", then wipes back (under 3 seconds). Preview plays it on the overlay now.</p>
+  </section>
+
+  <section class="wide">
+    <h2>Webcams</h2>
+    <div class="cam-opts">
+      <label class="toggle"><input type="checkbox" id="cams-on"> Show webcams on the HUD</label>
+      <label class="toggle"><input type="checkbox" id="cams-auto"> Switch to the players in the action</label>
+      <label class="toggle" title="Reads the player name tags on this PC's League screen. Turn it on on the PC whose game goes to air (here, or in the Observer Client)."><input type="checkbox" id="cams-director"> Read this PC's screen to see who's on camera</label>
+      <label class="toggle">Stay on a player at least <input type="number" id="cams-hold" min="0" max="30" step="0.5" style="width:64px;padding:4px 6px"> s</label>
+    </div>
+    <div class="teams cam-teams">
+      <div class="cam-team" data-side="left"><h3></h3></div>
+      <div class="cam-team" data-side="right"><h3></h3></div>
+    </div>
+    <div class="row" style="margin-top:12px;align-items:flex-start">
+      <div id="cams-status" class="note" style="margin:0"></div>
+      <button type="button" id="cams-test" style="flex:0 0 auto">Test screen read</button>
+    </div>
+    <div id="cams-test-result"></div>
+    <details class="note"><summary>How players connect their cams</summary>
+      <ul>
+        <li><b>Player Cam (least delay):</b> on the player's PC, open League HUD and choose <b>Player Cam</b>, enter this PC's address (<span id="cams-lan">tick "Let other PCs on the network read the HUD" under Outputs first</span>), and pick their team and role. Leave that player's link blank. Same network only.</li>
+        <li><b>Link:</b> paste a VDO.Ninja view link (or any page showing just the cam) in the player's box. Works from anywhere, with a little more delay.</li>
+        <li><b>Who's on camera:</b> with "Read this PC's screen" on, the cams follow the player name tags nearest the middle of the screen (Windows, League in Borderless or Windowed). Otherwise they follow the latest kill. <b>Pin</b> keeps a team's cam on one player.</li>
+      </ul>
+    </details>
   </section>
 
   <section>
@@ -454,7 +494,7 @@ $("font-file").addEventListener("change", async e => {
   if (file) await post("/api/profiles/font", { id: $("profile").value, filename: file.name, data: await readFile(file) });
 });
 
-$("swap-teams").onclick = () => post("/api/config", { left: state.config.right, right: state.config.left });
+$("swap-teams").onclick = () => post("/api/teams/swap", {});
 $("swap-sides").onchange = e => post("/api/config", { swap_sides: e.target.checked });
 $("best-of").onchange = e => post("/api/config", { best_of: Number(e.target.value) });
 $("gold-mode").onchange = e => post("/api/config", { gold_mode: e.target.value });
@@ -513,6 +553,7 @@ function apply(s) {
   $("swap-sides").checked = cfg.swap_sides;
   $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
   $("anim-first-blood").checked = (cfg.animations || {}).first_blood !== false;
+  applyCams(s);
   $("counters").querySelectorAll("input").forEach(box => box.checked = (cfg.strip_counters || {})[box.dataset.counter] !== false);
   if (!$("bg-name").textContent.startsWith("Copying"))
     $("bg-name").textContent = cfg.bg_video === DEFAULT_BG ? "Default SCC loop" : cfg.bg_video ? cfg.bg_video.split("/").pop() : "None chosen: showing the static lines";
@@ -633,6 +674,79 @@ async function pollLog() {
   setTimeout(pollLog, 1000);
 }
 pollLog();
+
+// Webcams: a row per player, with their cam link, what's connected, and a pin.
+const ROLES = ["Top", "Jungle", "Mid", "Bot", "Support"];
+for (const box of document.querySelectorAll(".cam-team")) {
+  const side = box.dataset.side;
+  ROLES.forEach((role, i) => {
+    const row = document.createElement("div");
+    row.className = "cam-row";
+    row.dataset.slot = i + 1;
+    row.innerHTML = `<div class="who"><b><i></i>${role}</b><small></small></div>
+      <input class="cam-link" spellcheck="false">
+      <button type="button" class="pin" title="Keep this team's cam on this player">Pin</button>`;
+    row.querySelector("input").onchange = e => {
+      const links = [...(state.config[side].cam_links || ["", "", "", "", ""])];
+      links[i] = e.target.value.trim();
+      post("/api/config", { [side]: { cam_links: links } });
+    };
+    row.querySelector(".pin").onclick = () => {
+      const pinned = (state.config.cams.pin || {})[side] === i + 1;
+      post("/api/config", { cams: { pin: { [side]: pinned ? 0 : i + 1 } } });
+    };
+    box.appendChild(row);
+  });
+}
+$("cams-on").onchange = e => post("/api/config", { cams: { enabled: e.target.checked } });
+$("cams-auto").onchange = e => post("/api/config", { cams: { auto: e.target.checked } });
+$("cams-director").onchange = e => post("/api/config", { cams: { director: e.target.checked } });
+$("cams-hold").onchange = e => post("/api/config", { cams: { hold: Math.max(0, Number(e.target.value) || 0) } });
+$("cams-test").onclick = async () => {
+  $("cams-test-result").innerHTML = '<p class="note">Reading the screen…</p>';
+  try {
+    const r = await (await fetch("/api/cams/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+    if (!r.ok) { $("cams-test-result").innerHTML = `<p class="note warn">${esc(r.error)}</p>`; return; }
+    const found = r.seen.map(p => `${p.side} ${ROLES[p.slot - 1]}`).join(", ") || "no player name tags";
+    $("cams-test-result").innerHTML = `<p class="note">Found: ${esc(found)}. Text read (yellow boxes): ${esc(r.lines.join(" · ") || "none")}</p><img src="${r.image}" alt="What was read">`;
+  } catch (e) { $("cams-test-result").innerHTML = '<p class="note warn">Couldn\'t read the screen</p>'; }
+};
+function esc(t) { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; }
+
+function applyCams(s) {
+  const cfg = s.config, cams = cfg.cams || {}, info = s.cams || {}, pubs = info.publishers || {};
+  $("cams-on").checked = cams.enabled !== false;
+  $("cams-auto").checked = cams.auto !== false;
+  $("cams-director").checked = !!cams.director;
+  setIfIdle($("cams-hold"), cams.hold ?? 3);
+  const focus = info.focus || {};
+  for (const box of document.querySelectorAll(".cam-team")) {
+    const side = box.dataset.side;
+    box.querySelector("h3").textContent = `${cfg[side].name} (${cfg[side].tricode})`;
+    const roster = (s.detail.roster || {})[side] || [];
+    box.querySelectorAll(".cam-row").forEach(row => {
+      const slot = Number(row.dataset.slot), seat = `${side}-${slot}`;
+      const link = (cfg[side].cam_links || [])[slot - 1] || "";
+      const p = roster[slot - 1];
+      row.querySelector("small").textContent = p ? `${p.name} · ${p.champion_name}` : "";
+      const input = row.querySelector("input");
+      setIfIdle(input, link);
+      // A Player Cam shows in the box while it's empty (a link takes over).
+      input.placeholder = pubs[seat] ? `Player Cam connected${pubs[seat].label ? ": " + pubs[seat].label : ""}`
+                                     : "VDO.Ninja link";
+      const dot = row.querySelector("i");
+      dot.classList.toggle("on", !!(link || pubs[seat]));
+      dot.title = link ? "Cam link" : pubs[seat] ? "Player Cam connected" : "No cam";
+      row.querySelector(".pin").classList.toggle("on", (cams.pin || {})[side] === slot);
+      row.classList.toggle("live", focus[side] === slot && cams.enabled !== false);
+    });
+  }
+  const why = focus.why || {};
+  const on = side => focus[side] ? `${ROLES[focus[side] - 1]}${why[side] ? " (" + why[side] + ")" : ""}` : "nobody yet";
+  $("cams-status").innerHTML = `On the cams: left ${esc(on("left"))} · right ${esc(on("right"))}`
+    + (cams.director ? `<br>Screen: ${esc(s.app.director || "")}` : "");
+  $("cams-lan").textContent = s.app.lan_url ? s.app.lan_url : 'tick "Let other PCs on the network read the HUD" under Outputs first';
+}
 
 // localStorage can be missing or blocked; the panel still works without it.
 function stored(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; } }

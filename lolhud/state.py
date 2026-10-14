@@ -304,8 +304,37 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
             f[f"P{n} DEAD"] = int(bool(p.get("isDead")))
             f[f"P{n} RESPAWN"] = int(p.get("respawnTimer") or 0) if p.get("isDead") else ""
 
+    # Who's in each seat (1 top ... 5 support), for the webcams, and the
+    # players in the latest kill, which the webcams follow when nothing
+    # better says who's on screen.
+    seat_of = {}
+    roster = {}
+    for side in SIDES:
+        roster[side] = []
+        for i, p in enumerate(team_players[side][:5], 1):
+            names = [p.get(k) for k in ("riotIdGameName", "summonerName", "riotId") if p.get(k)]
+            names = list(dict.fromkeys([n.split("#")[0] for n in names] + names))
+            for n in names:
+                seat_of[n.lower()] = (side, i)
+            roster[side].append({"slot": i, "name": names[0] if names else "", "names": names,
+                                 "champion": p.get("rawChampionName", "").replace("game_character_displayname_", "")
+                                 or p.get("championName", ""),
+                                 "champion_name": p.get("championName", ""), "dead": bool(p.get("isDead"))})
+    fight = None
+    for e in reversed(events):
+        if e.get("EventName") == "ChampionKill":
+            fight = {"time": float(e.get("EventTime") or 0), "left": None, "right": None}
+            for key in ("VictimName", "KillerName"):  # the killer wins a tie
+                name = str(e.get(key) or "")
+                seat = seat_of.get(name.lower()) or seat_of.get(name.split("#")[0].lower())
+                if seat:
+                    fight[seat[0]] = seat[1]
+            break
+
     detail = {
         "connected": connected,
+        "roster": roster,
+        "fight": fight,
         "game_time": game_time,
         "side_team": side_team,
         "dragons": {side: obj[side_team[side]]["dragons"] for side in SIDES},

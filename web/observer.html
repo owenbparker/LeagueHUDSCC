@@ -34,6 +34,13 @@
   #show.on { background: var(--accent); color: #06231a; border-color: var(--accent); }
   #screen { width: auto; }
   .note { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+  .cams { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .check { display: flex; gap: 10px; align-items: center; color: var(--text); font-size: 14px; margin: 0; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .cams .status { margin: 6px 0 10px; }
+  .small { padding: 8px 12px; background: #252a2f; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
+  #director-result img { width: 100%; margin-top: 10px; border-radius: 6px; }
+  main { overflow-y: auto; }
   .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
   .update:hover { filter: brightness(1.1); }
   .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
@@ -62,6 +69,12 @@
       <select id="screen" title="Which screen the HUD covers" hidden></select>
     </div>
     <p class="note" id="note"></p>
+    <div class="cams">
+      <label class="check"><input type="checkbox" id="director"> Switch the HUD's webcams to the players on this PC's screen</label>
+      <div class="status" id="director-status"></div>
+      <button id="director-test" class="small">Test screen read</button>
+      <div id="director-result"></div>
+    </div>
   </section>
 </main>
 <script src="update.js"></script>
@@ -91,6 +104,10 @@ function apply(s) {
   const opts = (ow.screens || []).map((label, i) => `<option value="${i}">${label}</option>`).join("");
   if ($("screen").dataset.opts !== opts) { $("screen").innerHTML = opts; $("screen").dataset.opts = opts; }
   $("screen").hidden = (ow.screens || []).length < 2;
+  $("director").checked = !!(s.config.cams || {}).director;
+  $("director-status").textContent = (s.config.cams || {}).director
+    ? s.app.director + " (League in Borderless or Windowed on this PC)"
+    : "Reads the player name tags nearest the middle of the screen and tells the GFX PC whose cam to show.";
   if (document.activeElement !== $("screen")) $("screen").value = String(ow.screen || 0);
   if (first) {
     check();
@@ -122,6 +139,21 @@ $("show").onclick = () => {
 };
 $("screen").onchange = e => post("/api/overlay-window",
   { open: state.app.overlay_window.open, screen: Number(e.target.value), url: $("url").value.trim() });
+
+$("director").onchange = e => post("/api/config", { cams: { director: e.target.checked } });
+$("director-test").onclick = async () => {
+  const box = $("director-result");
+  box.textContent = "Reading the screen…";
+  try {
+    const r = await (await fetch("/api/cams/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+    box.textContent = "";
+    const p = document.createElement("p");
+    p.className = "note";
+    p.textContent = r.ok ? "Found: " + (r.seen.map(x => `${x.side} player ${x.slot}`).join(", ") || "no player name tags") : r.error;
+    box.appendChild(p);
+    if (r.ok) { const img = document.createElement("img"); img.src = r.image; box.appendChild(img); }
+  } catch (e) { box.textContent = "Couldn't read the screen"; }
+};
 
 async function poll() {
   try { apply(await (await fetch("/api/state")).json()); } catch (e) {}
