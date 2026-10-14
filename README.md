@@ -159,6 +159,8 @@ The green dot shows which players have a cam. The row of the player on air is hi
 
 Add `?cams=0` to the overlay URL to leave the cams out of an overlay.
 
+Cam links (VDO.Ninja) only play in a "secure" page: the overlay from this PC (`http://localhost:8777/overlay`) or over https. The Observer Client's HUD window uses the GFX PC's https address for this by itself. A browser source on another PC should use `https://<GFX PC>:8779/overlay`, not the `http://` one.
+
 ## Animations
 
 **Animations** in the control panel:

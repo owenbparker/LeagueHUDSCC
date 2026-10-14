@@ -24,6 +24,9 @@ from .log import log
 from .updater import Updater, clean_up_old_update
 
 TITLE = "SCC Player Cam"
+# Set once the window lets the page use the camera (the page waits for it).
+STATUS = {"camera_ready": False}
+_handlers = []  # .NET event handlers, kept alive
 # Only these files are served (and bundled into the app).
 FILES = {"/cam": "cam.html", "/update.js": "update.js", "/fonts/Inter.ttf": "fonts/Inter.ttf",
          "/assets/app_icon.png": "assets/app_icon.png"}
@@ -45,7 +48,7 @@ def make_handler(updater):
             self.wfile.write(body)
 
         def _state(self):
-            return json.dumps({"app": {"update": updater.info()}})
+            return json.dumps({"app": {"update": updater.info(), **STATUS}})
 
         def do_GET(self):
             path = urlparse(self.path).path
@@ -81,6 +84,33 @@ def serve(updater, port=0):
     httpd.daemon_threads = True
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd
+
+
+def allow_camera(window):
+    """Let the page in this window use the camera without asking.
+
+    The window is Edge WebView2, which pywebview leaves to its default for
+    camera requests; depending on the WebView2 version that can refuse them
+    outright, leaving the page with no camera. The window only ever shows
+    this app's own page, so camera (and microphone) requests are allowed."""
+    try:
+        from System import Action
+        from Microsoft.Web.WebView2.Core import CoreWebView2PermissionKind, CoreWebView2PermissionState
+        form = window.native
+
+        def on_request(sender, args):
+            if args.PermissionKind in (CoreWebView2PermissionKind.Camera, CoreWebView2PermissionKind.Microphone):
+                args.State = CoreWebView2PermissionState.Allow
+
+        def attach():
+            form.webview.CoreWebView2.PermissionRequested += on_request
+
+        _handlers.append(on_request)
+        form.Invoke(Action(attach))  # WebView2 is only touched on its own thread
+    except Exception as e:
+        log(f"Couldn't set up camera access ({e!r})", "warn")
+    finally:
+        STATUS["camera_ready"] = True
 
 
 def smoke_test(port):
@@ -127,16 +157,25 @@ def main():
     clean_up_old_update()
     updater.check_in_background()
     url = f"http://127.0.0.1:{port}/cam?app=1"
+    # Belt and braces with allow_camera(): WebView2 answers camera prompts
+    # with yes (the real camera; only the prompt is skipped).
+    os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = "--use-fake-ui-for-media-stream"
     try:
         import webview
         window = webview.create_window(f"{TITLE} {updater.current}", url, width=960, height=680,
                                        min_size=(520, 560), background_color="#0e1012")
         updater.on_exit = window.destroy
+
+        def loaded():
+            if not STATUS["camera_ready"]:
+                allow_camera(window)
+        window.events.loaded += loaded
         # Not private: remembers the GFX address, seat, camera and the
         # camera permission between runs.
         webview.start(debug=args.debug, private_mode=False, storage_path=os.path.join(DATA_DIR, "webview"))
     except Exception as e:
         log(f"Couldn't open the app window ({e!r})", "warn")
+        STATUS["camera_ready"] = True
         import webbrowser
         webbrowser.open(url)
         text = "Player Cam has opened in your web browser. It keeps running until you close this box."

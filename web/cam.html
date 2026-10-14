@@ -51,6 +51,10 @@
                    letter-spacing: .06em; background: rgba(0,0,0,.6); color: var(--muted); }
   .preview .live.on { background: #d6243a; color: #fff; }
   .note { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+  .cam-line { align-items: center; }
+  .cam-line .status:empty { display: none; }
+  .retry { flex: 0 0 auto !important; margin-top: 12px; padding: 6px 12px; background: #252a2f; color: var(--text);
+           border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
   body:not(.app) .app-only { display: none !important; }
   .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
   .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
@@ -78,6 +82,7 @@
       <div class="seg roles" id="role"></div>
       <label for="camera">Camera</label>
       <select id="camera"></select>
+      <div class="row cam-line"><div class="status" id="cam-status"></div><button id="cam-retry" class="retry" hidden>Try again</button></div>
       <div class="status" id="status"></div>
       <p class="note"><span class="app-only">Ask the GFX operator to tick "Let other PCs on the network read the HUD".</span>
         Keep this <span id="window-word">window</span> open while you play (it can be minimised). Your cam shows on the
@@ -145,30 +150,62 @@ function pickSeat(side, slot) {
 for (const b of $("team").children) b.onclick = () => pickSeat(b.dataset.side, seat.split("-")[1]);
 
 // --- the camera --------------------------------------------------------------
+function camStatus(text, kind) {
+  $("cam-status").textContent = text || "";
+  $("cam-status").className = "status " + (kind || "");
+  $("cam-retry").hidden = kind !== "bad";
+}
+
+async function listCameras(current) {
+  try {
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    $("camera").innerHTML = devices.length
+      ? devices.map((d, i) => `<option value="${d.deviceId}">${d.label || "Camera " + (i + 1)}</option>`).join("")
+      : '<option value="">No camera found</option>';
+    if (current) $("camera").value = current;
+    return devices;
+  } catch (e) { return []; }
+}
+
 async function openCamera(deviceId) {
   if (!window.isSecureContext || !navigator.mediaDevices) {
-    status(APP ? "This app can't use the camera." : "The camera needs the https link to this page: ask the GFX operator for it.", "bad");
+    camStatus(APP ? "This app can't use the camera." : "The camera needs the https link to this page: ask the GFX operator for it.", "bad");
     return;
   }
-  try {
-    const next = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-      deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } });
-    const track = next.getVideoTracks()[0];
-    for (const pc of Object.values(viewers)) {
-      for (const sender of pc.getSenders()) if (sender.track && sender.track.kind === "video") sender.replaceTrack(track);
+  camStatus("Opening the camera…");
+  const video = id => ({ audio: false, video: { deviceId: id ? { exact: id } : undefined,
+                                                 width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } });
+  let next = null, error = null;
+  try { next = await navigator.mediaDevices.getUserMedia(video(deviceId)); }
+  catch (e) {
+    error = e;
+    // The camera picked last time may be unplugged: take any camera instead.
+    if (deviceId && (e.name === "OverconstrainedError" || e.name === "NotFoundError")) {
+      try { next = await navigator.mediaDevices.getUserMedia(video("")); error = null; } catch (e2) { error = e2; }
     }
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    stream = next;
-    $("preview").srcObject = stream;
-    store("camDevice", track.getSettings().deviceId || "");
-    const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
-    $("camera").innerHTML = devices.map((d, i) => `<option value="${d.deviceId}">${d.label || "Camera " + (i + 1)}</option>`).join("");
-    $("camera").value = track.getSettings().deviceId || "";
-  } catch (e) {
-    status(`Couldn't open the camera: ${e.message || e.name}. Allow camera access, or close other apps using it.`, "bad");
   }
+  if (!next) {
+    const devices = await listCameras();
+    const why = { NotAllowedError: "camera access was blocked. Allow it, then Try again.",
+                  NotReadableError: "another app is using it (Teams, Discord, OBS...). Close that, then Try again.",
+                  NotFoundError: "no camera is plugged in." }[error && error.name];
+    camStatus(`Couldn't open the camera: ${why || `${error && (error.message || error.name)}. Check Windows Settings > Privacy & security > Camera lets desktop apps use it`}`
+              + (devices.length ? "" : " (Windows sees no camera)"), "bad");
+    return;
+  }
+  const track = next.getVideoTracks()[0];
+  for (const pc of Object.values(viewers)) {
+    for (const sender of pc.getSenders()) if (sender.track && sender.track.kind === "video") sender.replaceTrack(track);
+  }
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = next;
+  $("preview").srcObject = stream;
+  store("camDevice", track.getSettings().deviceId || "");
+  await listCameras(track.getSettings().deviceId || "");
+  camStatus("");
 }
 $("camera").onchange = e => openCamera(e.target.value);
+$("cam-retry").onclick = () => openCamera($("camera").value || stored("camDevice"));
 
 // --- talking to the HUD ----------------------------------------------------
 async function post(path, body) {
@@ -277,6 +314,13 @@ async function start() {
   $("gfx").value = new URLSearchParams(location.search).get("gfx") || stored("camGfx") || "";
   $("gfx").addEventListener("change", () => { store("camGfx", $("gfx").value.trim()); claim = !!seat; wake(); });
   drawSeat();
+  if (APP) {
+    // The app allows this page the camera once its window is ready.
+    for (let i = 0; i < 25; i++) {
+      try { if ((await (await fetch("/api/state")).json()).app.camera_ready) break; } catch (e) {}
+      await sleep(200);
+    }
+  }
   openCamera(stored("camDevice"));
   loop();
   if (APP) (async function updates() {

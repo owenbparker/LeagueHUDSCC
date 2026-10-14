@@ -172,5 +172,9 @@ class HttpsTests(unittest.TestCase):
                 with urllib.request.urlopen("https://127.0.0.1:8813/cam", context=ctx, timeout=5) as r:
                     self.assertIn(b"SCC Player Cam", r.read())
                 self.assertEqual(app.app_info()["cam_url"], "https://localhost:8813/cam")
+                # The observer client finds it, to show the HUD over https.
+                from lolhud.overlay_window import secure_base
+                self.assertEqual(secure_base("http://127.0.0.1:8811"), "https://127.0.0.1:8813")
+                self.assertIsNone(secure_base("http://127.0.0.1:8899"))
             finally:
                 app.stop()
