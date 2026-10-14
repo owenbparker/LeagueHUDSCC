@@ -37,7 +37,7 @@ Prefer no installer? Download **LeagueHUD-windows.zip** from the latest release,
 
 **Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. Click the version number next to it to check again.
 
-The app opens on a choice of client (switch any time with **Change client** in the top right):
+The app opens on a choice of client (switch any time with **Change client** in the top right). Updates can be installed from all three screens:
 
 - **GFX Controller:** runs the HUD (everything below). Use it on the PC that makes the graphics.
 - **Observer Client:** for an observer PC. Type the GFX PC's address (shown on the GFX PC under **Outputs -> From another PC**, e.g. `http://192.168.2.40:8777/overlay`) and click **Show HUD on game** to draw that PC's HUD over League here. On the GFX PC, tick **Let other PCs on the network read the HUD**. The observer client doesn't read the game itself; the GFX PC does.

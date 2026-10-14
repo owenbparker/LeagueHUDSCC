@@ -15,7 +15,8 @@
   header { display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
   header h1 { margin: 0; font-size: 16px; font-weight: 700; }
   header span { color: var(--muted); }
-  header a { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 13px; }
+  header .right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 13px; }
   header a:hover { color: var(--text); }
   main { height: calc(100% - 54px); display: grid; place-items: center; padding: 16px; }
   section { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
@@ -33,12 +34,22 @@
   #show.on { background: var(--accent); color: #06231a; border-color: var(--accent); }
   #screen { width: auto; }
   .note { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+  .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
+  .update:hover { filter: brightness(1.1); }
+  .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
+  .update.error { background: #6b2a2a; color: #fff; }
+  .version { font-size: 12px; color: var(--muted); cursor: pointer; }
+  .version:hover { color: var(--text); }
 </style>
 </head>
 <body>
 <header>
   <h1>League HUD</h1><span>Observer Client</span>
-  <a href="/start" id="switch">Change client</a>
+  <div class="right">
+    <button id="update" class="update" hidden></button>
+    <span class="version" id="version"></span>
+    <a href="/start" id="switch">Change client</a>
+  </div>
 </header>
 <main>
   <section>
@@ -52,8 +63,10 @@
     <p class="note" id="note"></p>
   </section>
 </main>
+<script src="update.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+const showUpdate = updateButton($("update"), $("version"));
 let state = null, checkTimer = null, checking = 0;
 
 async function post(url, body) {
@@ -65,6 +78,7 @@ async function post(url, body) {
 function apply(s) {
   const first = !state;
   state = s;
+  showUpdate(s.app.update);
   if (first || document.activeElement !== $("url")) $("url").value = s.config.observer_url || "";
   const ow = s.app.overlay_window;
   $("show").disabled = !ow.available;
