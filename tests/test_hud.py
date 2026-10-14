@@ -367,6 +367,20 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(again["left"]["tricode"], "DSG")
             self.assertEqual(again["left"]["wins"], 0)
 
+    def test_default_background_loop(self):
+        from lolhud.config import web_file
+        self.assertTrue(web_file(DEFAULTS["bg_video"]), "the default loop ships with the app")
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "config.json")
+            # Settings saved before the loop shipped get it once...
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"bg_video": ""}, f)
+            c = Config(path)
+            self.assertEqual(c.get()["bg_video"], DEFAULTS["bg_video"])
+            # ...and removing it afterwards sticks.
+            c.update({"bg_video": ""})
+            self.assertEqual(Config(path).get()["bg_video"], "")
+
 
 class DemoTests(unittest.TestCase):
     def test_demo_estimate_is_close(self):

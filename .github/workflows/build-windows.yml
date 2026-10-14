@@ -1,5 +1,5 @@
 # Builds the League HUD desktop app (LeagueHUD.exe) on Windows and publishes
-# it as a GitHub release (v1.0.<run number>) with LeagueHUD-windows.zip.
+# it as a GitHub release (v1.0.<run number>, or the next free one) with LeagueHUD-windows.zip.
 # The app checks the latest release on launch and offers to update itself.
 # Each release also gets SCC-LoL-HUD-Setup.exe, an installer that downloads
 # the latest release from GitHub when it runs.
@@ -20,10 +20,19 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      VERSION: v1.0.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pick the version
+        # v1.0.<run number>, moved past any release already published by hand
+        # with that number.
+        shell: pwsh
+        run: |
+          $tags = git ls-remote --tags origin | ForEach-Object { ($_ -split 'refs/tags/')[1] }
+          $n = ${{ github.run_number }}
+          while ($tags -contains "v1.0.$n") { $n++ }
+          "VERSION=v1.0.$n" >> $env:GITHUB_ENV
+          Write-Host "Version v1.0.$n"
 
       - uses: actions/setup-python@v5
         with:

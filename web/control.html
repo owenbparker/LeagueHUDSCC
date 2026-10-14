@@ -141,6 +141,7 @@
       <div class="row">
         <div><label>Background video</label><div id="bg-name" class="note" style="margin:0"></div></div>
         <button type="button" id="bg-choose" style="flex:0 0 auto">Choose video…</button>
+        <button type="button" id="bg-default" style="flex:0 0 auto" hidden title="The SCC background loop that comes with the app">Use default loop</button>
         <button type="button" id="bg-remove" style="flex:0 0 auto" hidden>Remove</button>
         <input type="file" id="bg-file" accept="video/mp4,video/webm,.mp4,.webm,.m4v" hidden>
       </div>
@@ -390,8 +391,10 @@ function showProfile(id) {
   if (add) add.onclick = () => $("font-file").click();
 }
 // Background video (profiles with a video area, like SCC 2026).
+const DEFAULT_BG = "profiles/scc-2026/bg_loop.mp4";
 $("bg-choose").onclick = () => $("bg-file").click();
 $("bg-remove").onclick = () => post("/api/config", { bg_video: "" });
+$("bg-default").onclick = () => post("/api/config", { bg_video: DEFAULT_BG });
 $("bg-file").addEventListener("change", e => {
   const file = e.target.files[0];
   e.target.value = "";
@@ -512,8 +515,9 @@ function apply(s) {
   $("anim-first-blood").checked = (cfg.animations || {}).first_blood !== false;
   $("counters").querySelectorAll("input").forEach(box => box.checked = (cfg.strip_counters || {})[box.dataset.counter] !== false);
   if (!$("bg-name").textContent.startsWith("Copying"))
-    $("bg-name").textContent = cfg.bg_video ? cfg.bg_video.split("/").pop() : "None chosen: showing the static lines";
+    $("bg-name").textContent = cfg.bg_video === DEFAULT_BG ? "Default SCC loop" : cfg.bg_video ? cfg.bg_video.split("/").pop() : "None chosen: showing the static lines";
   $("bg-remove").hidden = !cfg.bg_video;
+  $("bg-default").hidden = cfg.bg_video === DEFAULT_BG;
   $("bg-tint").checked = cfg.bg_tint !== false;
   if (document.activeElement !== $("bg-bright")) {
     $("bg-bright").value = cfg.bg_brightness ?? 1;

@@ -45,7 +45,8 @@ DEFAULTS = {
     "profile": "scc-2026",
     # Background loop for profiles that have one (e.g. "SCC 2026"): a video
     # chosen in the control panel (stored in media/), and its playback speed.
-    "bg_video": "",
+    # "" shows the static lines instead.
+    "bg_video": "profiles/scc-2026/bg_loop.mp4",
     "bg_speed": 1.0,
     # Tint the video with the team colours, blending left to right like the
     # static lines (off: the video's own colours).
@@ -123,13 +124,23 @@ def _merge(base, extra):
     return out
 
 
+# The background loop that ships with the app.
+DEFAULT_BG_VIDEO = DEFAULTS["bg_video"]
+
+
 class Config:
     def __init__(self, path=CONFIG_PATH):
         self.path = path
         self.data = copy.deepcopy(DEFAULTS)
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
-                self.data = _merge(DEFAULTS, json.load(f))
+                saved = json.load(f)
+            # Settings saved before the app shipped a loop have no video:
+            # give them the default once (removing it afterwards sticks).
+            if not saved.get("bg_default_given") and not saved.get("bg_video"):
+                saved["bg_video"] = DEFAULT_BG_VIDEO
+            self.data = _merge(DEFAULTS, saved)
+        self.data["bg_default_given"] = True
 
     def get(self):
         with _lock:
