@@ -464,7 +464,7 @@ function playFirstBlood(side, cfg) {
   const other = panelOf(L ? "right" : "left");
   // The other team's panel artwork fades in from its inner edge; its colour
   // really starts about a third of the way in, just before their name.
-  const SLANT = 26, REACH = .33;
+  const SLANT = 26, REACH = .38, FADE = 28;
   const inner = other ? (L ? other.x + other.w * REACH - A.x : other.x + other.w * (1 - REACH) - A.x) : A.w / 2;
   const start = L ? 0 : inner, width = L ? inner : A.w - inner;
   const el = (cls, css) => { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {}); return d; };
@@ -473,8 +473,9 @@ function playFirstBlood(side, cfg) {
     left: start + "px", width: width + "px",
     clipPath: L ? `polygon(0 0, 100% 0, calc(100% - ${SLANT}px) 100%, 0 100%)`
                 : `polygon(0 0, 100% 0, 100% 100%, ${SLANT}px 100%)`,
-    maskImage: `linear-gradient(${L ? 90 : 270}deg, #000 calc(100% - 70px), transparent)`,
-    webkitMaskImage: `linear-gradient(${L ? 90 : 270}deg, #000 calc(100% - 70px), transparent)` });
+    // Solid over everything up to the other team's colour, then a short fade.
+    maskImage: `linear-gradient(${L ? 90 : 270}deg, #000 calc(100% - ${FADE}px), transparent)`,
+    webkitMaskImage: `linear-gradient(${L ? 90 : 270}deg, #000 calc(100% - ${FADE}px), transparent)` });
   const panel = el("panel", { background: `linear-gradient(${L ? 90 : 270}deg, ${shade(color, -.2)}, ${color} 40%, ${shade(color, -.35)})` });
   // "FIRST BLOOD" in the space between the logo and the inner edge.
   const logoEnd = logoOf ? (L ? logoOf.x + logoOf.w - A.x - start : start + width - (logoOf.x - A.x)) : H;
@@ -528,7 +529,9 @@ function playFirstBlood(side, cfg) {
   // The words ease in from the logo side and settle; a light sweep crosses them.
   text.animate([{ transform: `translateX(${L ? -36 : 36}px)`, opacity: 0, letterSpacing: ".18em" },
                 { transform: "translateX(0)", opacity: 1, letterSpacing: ".04em" }], opts(300, 620, "cubic-bezier(.2,.8,.2,1)", "both"));
-  if (crest) crest.animate([{ scale: "1" }, { scale: "1.18" }, { scale: "1" }], opts(420, 520, "ease-in-out"));
+  // The logo swells and settles back, slowly and evenly.
+  if (crest) crest.animate([{ scale: "1" }, { scale: "1.16", offset: .45 }, { scale: "1" }],
+                           opts(450, 1300, "cubic-bezier(.45,0,.55,1)", "both"));
   shine.animate([{ transform: `translateX(${L ? -120 : width + 20}px) skewX(-24deg)` },
                  { transform: `translateX(${L ? width + 20 : -120}px) skewX(-24deg)` }], opts(1050, 800, ease));
   setTimeout(() => { fx.style.display = "none"; fx.innerHTML = ""; fxBusy = false; }, FX_MS);
