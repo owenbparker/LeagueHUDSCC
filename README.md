@@ -42,7 +42,7 @@ The app opens on a choice of client (switch any time with **Change client** in t
 - **GFX Controller:** runs the HUD (everything below). Use it on the PC that makes the graphics.
 - **Observer Client:** for an observer PC. Type the GFX PC's address (shown on the GFX PC under **Outputs -> From another PC**, e.g. `http://192.168.2.40:8777/overlay`) and click **Show HUD on game** to draw that PC's HUD over League here. On the GFX PC, tick **Let other PCs on the network read the HUD**. The observer client doesn't read the game itself; the GFX PC does.
 
-**Show HUD on game** (in both clients) opens the HUD in a borderless, see-through window covering a whole screen, on top of League. Only the HUD shows, and clicks pass through to the game. Run League in **Borderless** or **Windowed** mode (exclusive Fullscreen draws over every other window). With more than one screen, a drop-down next to the button picks which. The HUD scales to the screen's size.
+**Show HUD on game** (in both clients) opens the HUD in a borderless, see-through window covering a whole screen, on top of League. Only the HUD shows, and clicks pass through to the game. Run League in **Borderless** or **Windowed** mode (exclusive Fullscreen draws over every other window). With more than one screen, a drop-down next to the button picks which. The HUD scales to the screen's size. It works with Windows in light or dark mode; if the window ever isn't see-through or doesn't cover the screen, the GFX Controller's Log says which step failed.
 
 The GFX Controller has everything that used to be in the command window built in:
 
