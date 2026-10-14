@@ -110,6 +110,16 @@ def paint_background(window):
     return True
 
 
+def no_backdrop(hwnd):
+    """Windows 11 in dark mode: the window library gives windows a dark Mica
+    backdrop, which DWM draws behind the page and the cut-out, so the HUD
+    window shows dark grey. Turn it (and dark mode) off for this window."""
+    dwm = ctypes.windll.dwmapi
+    for attr, value in ((38, 1), (20, 0)):  # SYSTEMBACKDROP_TYPE = none, IMMERSIVE_DARK_MODE = off
+        v = ctypes.c_int(value)
+        dwm.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), 4)
+
+
 def place(hwnd, rect):
     x, y, w, h = rect
     ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW)
@@ -130,6 +140,7 @@ class OverlayWindow:
         # "transparent": a see-through page over the cut-out background.
         # "opaque": the page itself is filled with the cut-out colour.
         self.method = "transparent"
+        self.fix_backdrop = True  # off only in the build's self-test, to show the problem
         self._lock = threading.Lock()
         self.available = sys.platform == "win32"
 
@@ -193,23 +204,38 @@ class OverlayWindow:
         log("HUD window closed")
 
     def _keep_on_top(self, window):
-        """Size it to the screen, make it click-through, and keep it above
-        League (which comes to the front whenever it's clicked)."""
-        painted = False
+        """Size it to the screen, cut out its background, make it
+        click-through, and keep it above League (which comes to the front
+        whenever it's clicked). Each step on its own, so one failing doesn't
+        stop the rest; each problem is logged once."""
+        painted, reported, ready = False, set(), False
+
+        def step(name, fn, *a):
+            try:
+                return fn(*a)
+            except Exception as e:
+                if name not in reported:
+                    reported.add(name)
+                    log(f"HUD window ({name}): {e!r}", "warn")
+
         while self.window is window:
             hwnd = _hwnd(self.title)
+            if not hwnd and window.native is not None:
+                hwnd = step("handle", lambda: window.native.Handle.ToInt64()) or 0
             if hwnd:
-                try:
-                    if not painted:
-                        painted = paint_background(window)
-                    make_click_through(hwnd, self.click_through)
-                    rect = self._screen_rect()
-                    if rect != self.rect:
-                        self.rect = rect
-                    place(hwnd, rect)
-                except Exception as e:
-                    log(f"HUD window: {e!r}", "warn")
-            time.sleep(0.5 if self.rect is None else 2)
+                if self.fix_backdrop:
+                    step("backdrop", no_backdrop, hwnd)
+                if not painted:
+                    painted = bool(step("background", paint_background, window))
+                step("click-through", make_click_through, hwnd, self.click_through)
+                rect = self._screen_rect()
+                if rect != self.rect:
+                    self.rect = rect
+                step("position", place, hwnd, rect)
+                if not ready and painted:
+                    ready = True
+                    log(f"HUD window ready: {rect[2]}x{rect[3]} at {rect[0]},{rect[1]}")
+            time.sleep(0.5 if not ready else 2)
 
 
 def self_test(port, out_dir):
@@ -244,9 +270,10 @@ def self_test(port, out_dir):
             self.data.update(d)
 
     passed_methods = []
-    for name in ("transparent",):
+    # "without-fix" only shows whether this PC has the dark backdrop problem.
+    for name in ("without-fix", "transparent"):
         ov = OverlayWindow(Config(), port, title=f"overlay-test-{name}")
-        ov.method = name
+        ov.fix_backdrop = name != "without-fix"
         ov.open()
         time.sleep(8)
         shot = ImageGrab.grab(all_screens=False)
@@ -273,7 +300,7 @@ def self_test(port, out_dir):
         after = bg.evaluate_js("window.clicks||0")
         passed = after > before
         results.append(f"{name}: see-through={see_through} {empty} hud-drawn={drawn} {hud} click-passes={passed}")
-        if see_through and drawn and passed:
+        if see_through and drawn and passed and name != "without-fix":
             passed_methods.append(name)
         ov.close()
         time.sleep(2)
