@@ -54,6 +54,8 @@ DEFAULTS = {
     "bg_brightness": 1.0,
     # Which screen the "HUD on the game" window covers (0 = main screen).
     "overlay_screen": 0,
+    # Observer client: the GFX PC whose HUD to show, e.g. http://192.168.2.40:8777/overlay
+    "observer_url": "",
     # Claimed-objective counters in the HUD (dragons, heralds, grubs).
     "strip_counters": {"dragons": True, "heralds": True, "grubs": True},
     # By default the left of the HUD is blue side (ORDER). Turn this on when

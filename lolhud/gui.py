@@ -42,7 +42,7 @@ def smoke_test(port):
     """Used by the build: check the packaged app serves its pages and can load
     its window library. Writes smoke-test.txt next to the app."""
     results, ok = [], True
-    for path in ("/control", "/overlay", "/api/state", "/api/log", "/hud.csv",
+    for path in ("/start", "/control", "/observer", "/overlay", "/api/state", "/api/log", "/hud.csv",
                  "/assets/hud_base.png", "/assets/hud_lines.png", "/fonts/Inter.ttf", "/fonts/Heathergreen.otf"):
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
@@ -130,7 +130,8 @@ def main():
         app.stop()
         return 0 if result.get("ok") else 1
 
-    url = f"http://127.0.0.1:{port}/control"
+    # Opens on the choice between the GFX Controller and the Observer Client.
+    url = f"http://127.0.0.1:{port}/start"
     try:
         import webview
         from .overlay_window import OverlayWindow

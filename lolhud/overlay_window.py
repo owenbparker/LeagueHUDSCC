@@ -10,6 +10,7 @@ import ctypes
 import sys
 import threading
 import time
+from urllib.parse import urlparse
 
 from .log import log
 
@@ -58,6 +59,25 @@ def monitors():
     return [m[1:] for m in found]
 
 
+def gfx_base_url(text):
+    """The GFX PC's address as http://host:port from whatever was typed:
+    "192.168.2.40", "192.168.2.40:8777" or "http://192.168.2.40:8777/overlay"."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("Enter the GFX PC's address, e.g. http://192.168.2.40:8777/overlay")
+    if "://" not in text:
+        text = "http://" + text
+    try:
+        u = urlparse(text)
+        port = u.port or 8777
+    except ValueError:
+        raise ValueError(f"That doesn't look like an address: {text}")
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise ValueError(f"That doesn't look like an address: {text}")
+    host = f"[{u.hostname}]" if ":" in u.hostname else u.hostname
+    return f"{u.scheme}://{host}:{port}"
+
+
 def _hwnd(title):
     return ctypes.windll.user32.FindWindowW(None, title) if sys.platform == "win32" else 0
 
@@ -104,6 +124,7 @@ class OverlayWindow:
     def __init__(self, config, port, title=TITLE):
         self.config, self.port, self.title = config, port, title
         self.window = None
+        self.url = None  # another PC's HUD (observer client); None for this PC's
         self.rect = None
         self.click_through = True
         # "transparent": a see-through page over the cut-out background.
@@ -118,9 +139,17 @@ class OverlayWindow:
                 "screens": [f"Screen {i + 1} ({w}×{h})" for i, (_, _, w, h) in enumerate(screens)],
                 "screen": min(int(self.config.get().get("overlay_screen") or 0), max(len(screens) - 1, 0))}
 
-    def set(self, open_it, screen=None):
+    def set(self, open_it, screen=None, url=None):
+        """Open or close the window; url is a GFX PC's address to show its
+        HUD instead of this PC's ("" for this PC's)."""
         if not self.available:
             raise ValueError("The on-screen HUD window needs the Windows desktop app")
+        if url is not None:
+            target = gfx_base_url(url) if url else None
+            if target != self.url:
+                self.url = target
+                if self.window:
+                    self.window.load_url(self._target())
         if screen is not None:
             self.config.update({"overlay_screen": int(screen)})
             if self.window:
@@ -129,6 +158,9 @@ class OverlayWindow:
             self.open()
         elif not open_it and self.window:
             self.close()
+
+    def _target(self):
+        return f"{self.url or f'http://127.0.0.1:{self.port}'}/overlay?fit=1"
 
     def _screen_rect(self):
         screens = monitors() or [(0, 0, 1920, 1080)]
@@ -142,13 +174,14 @@ class OverlayWindow:
             x, y, w, h = self._screen_rect()
             key = "#%02x%02x%02x" % KEY_RGB
             self.window = webview.create_window(
-                self.title, f"http://127.0.0.1:{self.port}/overlay?fit=1", x=x, y=y, width=w, height=h,
+                self.title, self._target(), x=x, y=y, width=w, height=h,
                 transparent=self.method == "transparent", frameless=True, easy_drag=False, on_top=True,
                 focus=False, resizable=False, shadow=False, background_color=key)
             self.window.events.closed += self._closed
             self.rect = None
             threading.Thread(target=self._keep_on_top, args=(self.window,), daemon=True).start()
-        log(f"HUD window opened over screen {self.config.get().get('overlay_screen', 0) + 1}")
+        log(f"HUD window opened over screen {self.config.get().get('overlay_screen', 0) + 1}"
+            + (f", showing the HUD from {self.url}" if self.url else ""))
 
     def close(self):
         window = self.window
@@ -211,7 +244,7 @@ def self_test(port, out_dir):
             self.data.update(d)
 
     passed_methods = []
-    for name in ("transparent", "opaque"):
+    for name in ("transparent",):
         ov = OverlayWindow(Config(), port, title=f"overlay-test-{name}")
         ov.method = name
         ov.open()

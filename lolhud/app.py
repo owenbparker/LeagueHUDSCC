@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -50,6 +51,9 @@ class HudApp:
         self.screen_gold = ScreenGold(config)
         self.updater = Updater()
         self.overlay_window = None  # the desktop app's HUD-over-the-game window
+        # "gfx" runs the HUD; "observer" only shows another PC's HUD over the
+        # game here, so it stops reading the game. None until one is picked.
+        self.role = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._was_connected = None
@@ -120,8 +124,23 @@ class HudApp:
                     # Include one example, so the HUD can learn to use it.
                     log(f"New game event not used yet: {name} {json.dumps(events.get(name, {}))}", "warn")
 
+    def set_role(self, role):
+        if role not in ("gfx", "observer", None):
+            raise ValueError(f"Unknown client: {role}")
+        if role != self.role and self.overlay_window and self.overlay_window.window:
+            self.overlay_window.close()
+        if self.overlay_window:
+            self.overlay_window.url = None
+        self.role = role
+        self.screen_gold.paused = role == "observer"
+        if role:
+            log({"gfx": "GFX Controller", "observer": "Observer Client"}[role] + " started")
+
     def run_poller(self):
         while not self._stop.is_set():
+            if self.role == "observer":  # the GFX PC reads the game, not this one
+                self._stop.wait(1)
+                continue
             try:
                 self.refresh()
             except Exception as e:  # keep the HUD alive whatever the game sends
@@ -142,7 +161,7 @@ class HudApp:
         sg = self.screen_gold
         screen = {"available": sg.available, "status": sg.status, "values": sg.fresh(),
                   "age": round(time.time() - sg.read_at, 1) if sg.read_at else None}
-        return {"mode": self.mode, "demo_speed": self.demo_speed, "network": network, "port": port,
+        return {"mode": self.mode, "role": self.role, "demo_speed": self.demo_speed, "network": network, "port": port,
                 "screen_gold": screen, "update": self.updater.info(),
                 "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
@@ -224,6 +243,27 @@ def parse_range(header, size):
     return (start, end) if start <= end < size else None
 
 
+def check_gfx(text):
+    """Observer client: is the GFX PC's HUD reachable at this address?"""
+    from .overlay_window import gfx_base_url
+    try:
+        base = gfx_base_url(text)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    try:
+        # Straight to the GFX PC on the network, never through a web proxy.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(base + "/api/state", timeout=3) as r:
+            ok = "fields" in json.loads(r.read())
+    except Exception as e:
+        reason = getattr(e, "reason", e)
+        return {"ok": False, "error": f"Can't reach the HUD at {base} ({reason}). Check the address, that League HUD is "
+                                      "running there, and that \"Let other PCs on the network read the HUD\" is ticked."}
+    if not ok:
+        return {"ok": False, "error": f"{base} isn't a League HUD"}
+    return {"ok": True, "overlay": base + "/overlay"}
+
+
 def lan_ip():
     """This PC's address on the local network (no traffic is sent)."""
     try:
@@ -296,7 +336,12 @@ def make_handler(app):
                 self.send_response(302)
                 self.send_header("Location", "/control")
                 self.end_headers()
-            elif path in ("/overlay", "/control"):
+            elif path == "/api/observer/check":
+                # Observer client: can this PC reach the GFX PC's HUD?
+                if not _is_local(self.client_address[0]):
+                    return self._send('{"error":"forbidden"}', status=403)
+                self._send(json.dumps(check_gfx((parse_qs(url.query).get("url") or [""])[0])))
+            elif path in ("/overlay", "/control", "/start", "/observer"):
                 self._static(path[1:] + ".html")
             elif path == "/api/state":
                 self._send(json.dumps(app.snapshot()))
@@ -382,7 +427,11 @@ def make_handler(app):
                 elif path == "/api/overlay-window":
                     if not app.overlay_window:
                         raise ValueError("The HUD window is only available in the desktop app")
-                    app.overlay_window.set(bool(body.get("open")), body.get("screen"))
+                    if body.get("url") is not None:
+                        app.config.update({"observer_url": body["url"]})
+                    app.overlay_window.set(bool(body.get("open")), body.get("screen"), body.get("url"))
+                elif path == "/api/role":
+                    app.set_role(body.get("role"))
                 elif path == "/api/screen-gold/test":
                     return self._send(json.dumps(app.screen_gold.test()))
                 else:

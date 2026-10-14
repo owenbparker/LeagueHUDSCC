@@ -110,6 +110,7 @@
     <button id="update" class="update" hidden></button>
     <span class="version" id="version" title="Check for updates"></span>
     <span class="badge" id="mode-badge"></span><span id="clock" class="clock">00:00</span>
+    <a href="/start" class="version" style="text-decoration:none" title="Back to the GFX Controller / Observer Client choice">Change client</a>
   </div>
 </header>
 <div class="layout">
@@ -502,6 +503,8 @@ function apply(s) {
     : sg.values ? `<span class="ok">Reading: blue ${fmt(sg.values.blue)} · red ${fmt(sg.values.red)}</span>`
     : `<span class="warn">Using the estimate - ${sg.status}</span>`;
   const app = s.app;
+  // Opened directly (not from the start screen): this PC is the GFX PC.
+  if (first && app.role !== "gfx") fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"role":"gfx"}' }).catch(() => {});
   showUpdate(app.update);
   if (first) {
     $("url-overlay").textContent = `http://localhost:${app.port}/overlay`;

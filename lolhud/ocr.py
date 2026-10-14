@@ -417,6 +417,7 @@ class ScreenGold:
         self.ocr = None
         self._pending = {"blue": None, "red": None}
         self._stop = threading.Event()
+        self.paused = False  # observer client: the GFX PC reads the screen
         self.available, self.reason = self._check()
 
     def _check(self):
@@ -510,7 +511,7 @@ class ScreenGold:
     def _run(self):
         last_reason = None
         while not self._stop.is_set():
-            if self.config.get().get("gold_mode") == "screen":
+            if self.config.get().get("gold_mode") == "screen" and not self.paused:
                 try:
                     result, reason = self.read_once()
                     if result:

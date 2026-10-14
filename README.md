@@ -37,9 +37,16 @@ Prefer no installer? Download **LeagueHUD-windows.zip** from the latest release,
 
 **Updates:** every build is published as a GitHub release (v1.0.N). On launch the app checks for a newer one; when there is, an **Update to v1.0.N** button appears in the top bar. It downloads the release (checking GitHub's checksum), closes the app, swaps in the new files and reopens it in about 10 seconds. Settings, logos and output files are kept. Click the version number next to it to check again.
 
-The app opens in a 1280x720 window with everything that used to be in the command window built in:
+The app opens on a choice of client (switch any time with **Change client** in the top right):
 
-- **Live game / Demo game** switch (and demo speed) in the top bar.
+- **GFX Controller:** runs the HUD (everything below). Use it on the PC that makes the graphics.
+- **Observer Client:** for an observer PC. Type the GFX PC's address (shown on the GFX PC under **Outputs -> From another PC**, e.g. `http://192.168.2.40:8777/overlay`) and click **Show HUD on game** to draw that PC's HUD over League here. On the GFX PC, tick **Let other PCs on the network read the HUD**. The observer client doesn't read the game itself; the GFX PC does.
+
+**Show HUD on game** (in both clients) opens the HUD in a borderless, see-through window covering a whole screen, on top of League. Only the HUD shows, and clicks pass through to the game. Run League in **Borderless** or **Windowed** mode (exclusive Fullscreen draws over every other window). With more than one screen, a drop-down next to the button picks which. The HUD scales to the screen's size.
+
+The GFX Controller has everything that used to be in the command window built in:
+
+- **Live game / Demo game** switch (and demo speed) in the top bar, and **Show HUD on game**.
 - **Outputs:** copy the overlay and vMix URLs, open the output folder, and let other PCs on your network read the HUD (they can read it, but only this PC can change settings).
 - **Log:** game connected/disconnected, errors, new game events.
 

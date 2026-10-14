@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="assets/app_icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>League HUD Observer</title>
+<!-- Observer client: shows the HUD from the GFX PC over the game on this PC. -->
+<style>
+  @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b; --accent: #31c392; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  header span { color: var(--muted); }
+  header a { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 13px; }
+  header a:hover { color: var(--text); }
+  main { height: calc(100% - 54px); display: grid; place-items: center; padding: 16px; }
+  section { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+  label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+  input, select { width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .status { min-height: 20px; margin: 8px 0 20px; font-size: 12px; color: var(--muted); }
+  .status.ok { color: var(--accent); }
+  .status.bad { color: #ffcf66; }
+  .row { display: flex; gap: 10px; }
+  .row > :first-child { flex: 1; }
+  #show { width: 100%; padding: 14px; font: 700 16px "Inter", system-ui, sans-serif; border-radius: 8px; cursor: pointer;
+          background: #252a2f; color: var(--text); border: 1px solid var(--line); transition: background .15s, color .15s; }
+  #show:hover { border-color: var(--muted); }
+  #show.on { background: var(--accent); color: #06231a; border-color: var(--accent); }
+  #screen { width: auto; }
+  .note { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>League HUD</h1><span>Observer Client</span>
+  <a href="/start" id="switch">Change client</a>
+</header>
+<main>
+  <section>
+    <label for="url">GFX PC address</label>
+    <input id="url" spellcheck="false" placeholder="http://192.168.2.40:8777/overlay">
+    <div class="status" id="status"></div>
+    <div class="row">
+      <button id="show">Show HUD on game</button>
+      <select id="screen" title="Which screen the HUD covers" hidden></select>
+    </div>
+    <p class="note" id="note"></p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let state = null, checkTimer = null, checking = 0;
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (data.error) alert(data.error); else apply(data);
+}
+
+function apply(s) {
+  const first = !state;
+  state = s;
+  if (first || document.activeElement !== $("url")) $("url").value = s.config.observer_url || "";
+  const ow = s.app.overlay_window;
+  $("show").disabled = !ow.available;
+  $("show").classList.toggle("on", !!ow.open);
+  $("show").textContent = ow.open ? "HUD on game: on" : "Show HUD on game";
+  $("note").textContent = ow.available
+    ? "Run League in Borderless or Windowed mode. On the GFX PC, tick \"Let other PCs on the network read the HUD\"."
+    : "The HUD window needs the Windows desktop app.";
+  const opts = (ow.screens || []).map((label, i) => `<option value="${i}">${label}</option>`).join("");
+  if ($("screen").dataset.opts !== opts) { $("screen").innerHTML = opts; $("screen").dataset.opts = opts; }
+  $("screen").hidden = (ow.screens || []).length < 2;
+  if (document.activeElement !== $("screen")) $("screen").value = String(ow.screen || 0);
+  if (first) {
+    check();
+    if (s.app.role !== "observer") fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"role":"observer"}' }).catch(() => {});
+  }
+}
+
+// Can this PC reach the GFX PC's HUD?
+async function check() {
+  const url = $("url").value.trim();
+  const id = ++checking;
+  if (!url) { $("status").className = "status"; $("status").textContent = "Enter the address shown under Outputs > From another PC on the GFX PC."; return; }
+  $("status").className = "status"; $("status").textContent = "Connecting…";
+  try {
+    const r = await (await fetch(`/api/observer/check?url=${encodeURIComponent(url)}`)).json();
+    if (id !== checking) return;
+    $("status").className = "status " + (r.ok ? "ok" : "bad");
+    $("status").textContent = r.ok ? `Connected to the GFX PC (${r.overlay})` : r.error;
+  } catch (e) {
+    if (id === checking) { $("status").className = "status bad"; $("status").textContent = "Couldn't check the address"; }
+  }
+}
+
+$("url").addEventListener("input", () => { clearTimeout(checkTimer); checkTimer = setTimeout(check, 600); });
+$("url").addEventListener("change", () => post("/api/config", { observer_url: $("url").value.trim() }));
+$("show").onclick = () => {
+  const open = !state.app.overlay_window.open;
+  post("/api/overlay-window", { open, url: $("url").value.trim() });
+};
+$("screen").onchange = e => post("/api/overlay-window",
+  { open: state.app.overlay_window.open, screen: Number(e.target.value), url: $("url").value.trim() });
+
+async function poll() {
+  try { apply(await (await fetch("/api/state")).json()); } catch (e) {}
+  setTimeout(poll, 1500);
+}
+poll();
+setInterval(check, 10000);
+</script>
+</body>
+</html>

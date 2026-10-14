@@ -369,5 +369,17 @@ class DemoTests(unittest.TestCase):
             self.assertLess(abs(f[f"GOLD RAW {side}"] - truth) / truth, 0.15)
 
 
+class ObserverTests(unittest.TestCase):
+    def test_gfx_address_forms(self):
+        from lolhud.overlay_window import gfx_base_url
+        for typed in ("192.168.2.40", "192.168.2.40:8777", "http://192.168.2.40:8777/overlay",
+                      " http://192.168.2.40:8777/overlay?timers=0 "):
+            self.assertEqual(gfx_base_url(typed), "http://192.168.2.40:8777")
+        self.assertEqual(gfx_base_url("gfx-pc:9000"), "http://gfx-pc:9000")
+        for bad in ("", "ftp://x", "http://"):
+            with self.assertRaises(ValueError):
+                gfx_base_url(bad)
+
+
 if __name__ == "__main__":
     unittest.main()
