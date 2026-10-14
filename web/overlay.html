@@ -51,7 +51,7 @@
   #fx .panel { position: absolute; inset: 0; }
   #fx .stripe { position: absolute; top: -20%; height: 140%; transform: skewX(-24deg); }
   #fx .right .stripe { transform: skewX(24deg); }
-  #fx .words { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 18px; }
+  #fx .words { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; }
   #fx .words img { height: 74%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,.45)); }
   #fx .words span { font-family: "Heathergreen", "Inter", sans-serif; font-weight: 700; font-size: 58px; line-height: 1;
                     color: #fff; white-space: nowrap; text-shadow: 0 3px 8px rgba(0,0,0,.4); }
@@ -454,65 +454,81 @@ function fxSetup(profile) {
 function playFirstBlood(side, cfg) {
   if (fxBusy || !fxArea) return;
   fxBusy = true;
-  const color = cfg[side].color || "#888888", dark = shade(color, -.5), light = lighten(color, .45);
-  const fx = $("fx"), half = fxArea.w / 2, H = fxArea.h, L = side === "left";
+  const color = cfg[side].color || "#888888", light = lighten(color, .45), L = side === "left";
+  const fx = $("fx"), A = fxArea, H = A.h;
+  const els = profile.elements || [];
+  const panelOf = s => els.find(e => e.type === "team-panel" && e.side === s);
+  const logoOf = els.find(e => e.type === "logo" && e.side === side);
+  // The panel runs from this team's end of the bar almost to where the
+  // other team's colour starts, with a slanted, softened inner edge.
+  const other = panelOf(L ? "right" : "left");
+  const GAP = 14, SLANT = 26;
+  const inner = other ? (L ? other.x - A.x - GAP : other.x + other.w - A.x + GAP) : A.w / 2;
+  const start = L ? 0 : inner, width = L ? inner : A.w - inner;
   const el = (cls, css) => { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {}); return d; };
   fx.innerHTML = "";
-  // The team's half of the bar.
-  const box = el("half " + side, { left: (L ? 0 : half) + "px", width: half + "px" });
-  const panel = el("panel", { background: `linear-gradient(${L ? 270 : 90}deg, ${shade(color, -.15)}, ${color} 45%, ${shade(color, -.3)})` });
-  // Dark chevrons behind the crest, which sits at the centre end (where the
-  // score was), like the Premier League's goal graphic.
-  const crestX = L ? half - H * 1.05 : H * .15;
-  const chevrons = [0, 1, 2].map(i => el("stripe", {
-    background: shade(color, -.35 - i * .12), width: `${H * .55}px`, opacity: .85,
-    left: `${L ? crestX - H * (.55 + i * .62) : crestX + H * (1.15 + i * .62)}px`,
-    transform: `skewX(${L ? 24 : -24}deg)` }));
-  const crest = document.createElement("img");
-  crest.src = cfg[side].logo;  // relative to the page, like the HUD's own logos
-  Object.assign(crest.style, { position: "absolute", top: "8%", height: "84%", width: `${H * .9}px`, objectFit: "contain",
-                               left: `${crestX}px`, filter: "drop-shadow(0 2px 5px rgba(0,0,0,.5))" });
+  const box = el("half " + side, {
+    left: start + "px", width: width + "px",
+    clipPath: L ? `polygon(0 0, 100% 0, calc(100% - ${SLANT}px) 100%, 0 100%)`
+                : `polygon(0 0, 100% 0, 100% 100%, ${SLANT}px 100%)`,
+    maskImage: `linear-gradient(${L ? 90 : 270}deg, #000 calc(100% - 70px), transparent)`,
+    webkitMaskImage: `linear-gradient(${L ? 90 : 270}deg, #000 calc(100% - 70px), transparent)` });
+  const panel = el("panel", { background: `linear-gradient(${L ? 90 : 270}deg, ${shade(color, -.2)}, ${color} 40%, ${shade(color, -.35)})` });
+  // "FIRST BLOOD" in the space between the logo and the inner edge.
+  const logoEnd = logoOf ? (L ? logoOf.x + logoOf.w - A.x - start : start + width - (logoOf.x - A.x)) : H;
+  const words = el("words", { left: L ? logoEnd + 10 + "px" : "40px", right: L ? "40px" : logoEnd + 10 + "px" });
   const text = document.createElement("span");
   text.textContent = "FIRST BLOOD";
-  // The words fill the rest of the half, away from the crest.
-  const words = el("words", { width: `${half - H * 1.2}px`, left: L ? "0" : `${H * 1.2}px`, right: "auto" });
   words.append(text);
   const shine = el("shine");
-  // Stinger: a wide bright gradient band led by a white edge and the team colour.
-  const band = el("stripe", { width: `${half * .9}px`, background: `linear-gradient(${L ? 90 : 270}deg, ${dark}, ${color}, ${light}, #fff)` });
-  const edge = el("stripe", { width: "34px", background: "#fff" });
-  const flash = el("panel", { background: `linear-gradient(${L ? 90 : 270}deg, ${light}, #ffffff)`, opacity: 0 });
-  box.append(panel, ...chevrons, crest, words, shine, band, edge, flash);
+  box.append(panel, words, shine);
+  // The logo stays where the HUD shows it.
+  let crest = null;
+  if (logoOf) {
+    const adj = (cfg.logo_adjust || {})[cfg[side].logo] || {};
+    crest = document.createElement("img");
+    crest.src = cfg[side].logo;
+    Object.assign(crest.style, { position: "absolute", left: `${logoOf.x - A.x - start}px`, top: `${logoOf.y - A.y}px`,
+      width: `${logoOf.w}px`, height: `${logoOf.h}px`, objectFit: "contain",
+      transform: `translate(${adj.x || 0}px, ${adj.y || 0}px) scale(${adj.scale || 1})`,
+      filter: "drop-shadow(0 2px 4px rgba(0,0,0,.45))" });
+    box.append(crest);
+  }
+  // The transition, the same going in and coming out: a bright flash and
+  // a gradient band with a white edge sweeping from the team's end.
+  const band = el("stripe", { width: `${Math.min(420, width * .6)}px`,
+    background: `linear-gradient(${L ? 90 : 270}deg, transparent, ${color} 25%, ${light} 70%, #fff)` });
+  const edge = el("stripe", { width: "28px", background: "#fff" });
+  const flash = el("panel", { background: `linear-gradient(${L ? 90 : 270}deg, #fff, ${light})`, opacity: 0 });
+  box.append(band, edge, flash);
   fx.append(box);
   fx.style.display = "block";
 
-  const opts = (delay, duration, easing = "cubic-bezier(.6,0,.2,1)") => ({ delay, duration, easing, fill: "both" });
+  const ease = "cubic-bezier(.65,0,.35,1)";
+  // Later animations only take effect once they start ("forwards"), so the
+  // way out doesn't cover up the way in.
+  const opts = (delay, duration, easing = ease, fill = delay ? "forwards" : "both") => ({ delay, duration, easing, fill });
   const sk = `skewX(${L ? -24 : 24}deg)`;
-  const outside = L ? -half * 1.1 : half + 60, beyond = L ? half + 60 : -half * 1.1;
-  const sweep = (node, delay, duration, a, b) =>
-    node.animate([{ transform: `translateX(${a}px) ${sk}` }, { transform: `translateX(${b}px) ${sk}` }], opts(delay, duration));
-  // 0-0.5s: the band wipes across from the outer end; the panel fills in behind it.
-  sweep(band, 0, 520, outside, beyond);
-  sweep(edge, 60, 480, outside, beyond);
-  const closed = L ? "inset(0 100% 0 0)" : "inset(0 0 0 100%)", gone = L ? "inset(0 0 0 100%)" : "inset(0 100% 0 0)";
-  for (const n of [panel, ...chevrons, words]) {
-    n.animate([{ clipPath: closed }, { clipPath: "inset(0 0 0 0)" }], opts(120, 380));
-    n.animate([{ clipPath: "inset(0 0 0 0)" }, { clipPath: gone }], opts(2450, 360));
-  }
-  // The crest drops in, "FIRST BLOOD" slides in from the outer end.
-  crest.animate([{ transform: "scale(.2) rotate(-20deg)", opacity: 0 }, { transform: "scale(1.18) rotate(4deg)", opacity: 1, offset: .65 },
-                 { transform: "scale(1) rotate(0)", opacity: 1 }], opts(330, 420, "ease-out"));
-  crest.animate([{ opacity: 1 }, { opacity: 0 }], opts(2450, 250));
-  text.animate([{ transform: `translateX(${L ? -260 : 260}px)`, opacity: 0, filter: "blur(8px)" },
-                { transform: `translateX(${L ? 10 : -10}px)`, opacity: 1, filter: "blur(0)", offset: .8 },
-                { transform: "translateX(0)", opacity: 1, filter: "blur(0)" }], opts(480, 520, "cubic-bezier(.2,.8,.2,1)"));
-  // A light sweep across the words while they hold.
-  shine.animate([{ transform: `translateX(${L ? -120 : half + 20}px) skewX(-24deg)` },
-                 { transform: `translateX(${L ? half + 20 : -120}px) skewX(-24deg)` }], opts(1150, 650, "ease-in-out"));
-  // 2.3-2.95s: a bright flash and the band again, then the normal bar is back.
-  flash.animate([{ opacity: 0 }, { opacity: .85, offset: .5 }, { opacity: 0 }], opts(2300, 450, "ease-in-out"));
-  sweep(band, 2380, 520, outside, beyond);
-  sweep(edge, 2430, 480, outside, beyond);
+  const from = L ? -460 : width + 40, to = L ? width + 40 : -460;
+  const transition = (t0, reveal) => {
+    const f = reveal ? "both" : "forwards";
+    band.animate([{ transform: `translateX(${from}px) ${sk}` }, { transform: `translateX(${to}px) ${sk}` }], opts(t0, 560, ease, f));
+    edge.animate([{ transform: `translateX(${from}px) ${sk}` }, { transform: `translateX(${to}px) ${sk}` }], opts(t0 + 40, 520, ease, f));
+    const fill = reveal ? "both" : "forwards";
+    flash.animate([{ opacity: 0 }, { opacity: .8, offset: .45 }, { opacity: 0 }], opts(t0 + 60, 460, "ease-in-out", fill));
+    // The panel appears (or goes) just behind the band's white edge.
+    const hidden = L ? "inset(0 100% 0 0)" : "inset(0 0 0 100%)";
+    const keys = reveal ? [{ clipPath: hidden }, { clipPath: "inset(0 0 0 0)" }] : [{ clipPath: "inset(0 0 0 0)" }, { clipPath: hidden }];
+    for (const n of [panel, words, ...(crest ? [crest] : [])]) n.animate(keys, opts(t0 + 60, 470, ease, fill));
+  };
+  transition(0, true);          // in: 0 - 0.6s
+  transition(2330, false);      // out: 2.33 - 2.95s
+  // The words ease in from the logo side and settle; a light sweep crosses them.
+  text.animate([{ transform: `translateX(${L ? -36 : 36}px)`, opacity: 0, letterSpacing: ".18em" },
+                { transform: "translateX(0)", opacity: 1, letterSpacing: ".04em" }], opts(300, 620, "cubic-bezier(.2,.8,.2,1)", "both"));
+  if (crest) crest.animate([{ scale: "1" }, { scale: "1.18" }, { scale: "1" }], opts(420, 520, "ease-in-out"));
+  shine.animate([{ transform: `translateX(${L ? -120 : width + 20}px) skewX(-24deg)` },
+                 { transform: `translateX(${L ? width + 20 : -120}px) skewX(-24deg)` }], opts(1050, 800, ease));
   setTimeout(() => { fx.style.display = "none"; fx.innerHTML = ""; fxBusy = false; }, FX_MS);
 }
 

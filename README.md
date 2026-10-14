@@ -140,7 +140,7 @@ Settings are saved to `config.json` and survive restarts.
 ## Animations
 
 **Animations** in the control panel:
-- **First blood** (on by default): when a team draws first blood, a stinger wipes across their side of the top bar. Their side fills with the team colour, their logo drops in and "FIRST BLOOD" slides across. Then a flash wipes it away and the bar is back to normal, all in under 3 seconds. It's modelled on the Premier League's goal graphic.
+- **First blood** (on by default): when a team draws first blood, a flash and a bright band wipe across from their end of the top bar. Their side fills with the team colour, reaching almost to the other team's colour, and "FIRST BLOOD" eases in beside their logo. Then the same wipe takes it away and the bar is back to normal, all in under 3 seconds. It's modelled on the Premier League's goal graphic.
 - **Preview: left / right team:** plays it on the overlay right away, for checking the look before going live.
 
 The animation plays once per game, and not again if the overlay reloads.
