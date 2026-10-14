@@ -466,7 +466,12 @@ function playFirstBlood(side, cfg) {
   // really starts about a third of the way in, just before their name.
   const REACH = .42, BLEND = 150, FADE = 22;
   const inner = other ? (L ? other.x + other.w * REACH - A.x : other.x + other.w * (1 - REACH) - A.x) : A.w / 2;
-  const start = L ? 0 : inner, width = L ? inner : A.w - inner;
+  // Leave the series pips at this team's end uncovered.
+  const pipSlots = (els.find(e => e.type === "pips" && e.side === side) || {}).slots || [];
+  const outer = pipSlots.length
+    ? (L ? Math.max(...pipSlots.map(([x, , w]) => x + w)) - A.x + 3 : Math.min(...pipSlots.map(([x]) => x)) - A.x - 3)
+    : (L ? 0 : A.w);
+  const start = L ? outer : inner, width = L ? inner - outer : outer - inner;
   const el = (cls, css) => { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {}); return d; };
   fx.innerHTML = "";
   const box = el("half " + side, {
@@ -531,9 +536,6 @@ function playFirstBlood(side, cfg) {
   // The words ease in from the logo side and settle; a light sweep crosses them.
   text.animate([{ transform: `translateX(${L ? -36 : 36}px)`, opacity: 0, letterSpacing: ".18em" },
                 { transform: "translateX(0)", opacity: 1, letterSpacing: ".04em" }], opts(300, 620, "cubic-bezier(.2,.8,.2,1)", "both"));
-  // The logo swells and settles back, slowly and evenly.
-  if (crest) crest.animate([{ scale: "1" }, { scale: "1.16", offset: .45 }, { scale: "1" }],
-                           opts(450, 1300, "cubic-bezier(.45,0,.55,1)", "both"));
   shine.animate([{ transform: `translateX(${L ? -120 : width + 20}px) skewX(-24deg)` },
                  { transform: `translateX(${L ? width + 20 : -120}px) skewX(-24deg)` }], opts(1050, 800, ease));
   setTimeout(() => { fx.style.display = "none"; fx.innerHTML = ""; fxBusy = false; }, FX_MS);
