@@ -462,8 +462,10 @@ function playFirstBlood(side, cfg) {
   // The panel runs from this team's end of the bar almost to where the
   // other team's colour starts, with a slanted, softened inner edge.
   const other = panelOf(L ? "right" : "left");
-  const GAP = 14, SLANT = 26;
-  const inner = other ? (L ? other.x - A.x - GAP : other.x + other.w - A.x + GAP) : A.w / 2;
+  // The other team's panel artwork fades in from its inner edge; its colour
+  // really starts about a third of the way in, just before their name.
+  const SLANT = 26, REACH = .33;
+  const inner = other ? (L ? other.x + other.w * REACH - A.x : other.x + other.w * (1 - REACH) - A.x) : A.w / 2;
   const start = L ? 0 : inner, width = L ? inner : A.w - inner;
   const el = (cls, css) => { const d = document.createElement("div"); d.className = cls; Object.assign(d.style, css || {}); return d; };
   fx.innerHTML = "";
