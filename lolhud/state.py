@@ -172,7 +172,49 @@ def asset_path(rel):
 SCREEN_TEAM = {"ORDER": "blue", "CHAOS": "red"}
 
 
-def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
+class SeenObjectives:
+    """When the top bar's dragon / grub / herald counters went up.
+
+    The game's events miss objectives now and then (a spectator client that
+    joined mid-game, or one moved along its timeline, only reports what it
+    has seen). The counters on screen still go up, so the moment they do is
+    kept here, and starts the timer the event would have started. A count
+    that was already there when reading began has no known time (None)."""
+
+    KEYS = ("dragons", "grubs", "heralds")
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.counts = {k: None for k in self.KEYS}
+        self.times = {k: [] for k in self.KEYS}
+        self.game_time = None
+
+    def update(self, screen_counts, game_time):
+        if self.game_time is not None and game_time < self.game_time - 5:
+            self.reset()   # a new game, or the timeline moved back
+        self.game_time = max(game_time, self.game_time or 0)
+        for key in self.KEYS:
+            values = [(screen_counts.get(c) or {}).get(key) for c in ("blue", "red")]
+            if None in values:
+                continue   # only when both teams' counters read
+            total, before = sum(values), self.counts[key]
+            if before is None:
+                self.times[key] = [None] * total     # already taken when reading began
+            elif total > before:
+                self.times[key] += [game_time] * (total - before)
+            elif total < before:
+                self.times[key] = self.times[key][:total]   # a misread corrected
+            self.counts[key] = total
+
+    def latest(self, key):
+        """When the last one went up, if known."""
+        t = self.times[key]
+        return t[-1] if t else None
+
+
+def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, seen_objectives=None):
     """Return {"fields": flat dict for CSV/vMix, "detail": extra structure}.
 
     screen_gold: {"blue": 8000, "red": 8900} and screen_counts:
@@ -206,11 +248,24 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None):
             if seen.get("towers") is not None:
                 obj[team]["turrets_events"] = obj[team]["turrets"]
                 obj[team]["turrets"] = seen["towers"]
-        # Objectives the events missed still end their timers.
+        memo = seen_objectives
+        # Objectives the events missed still start (or end) their timers,
+        # from when their counter went up on screen (see SeenObjectives).
+        if memo is not None:
+            memo.update(screen_counts, game_time)
         grubs_seen = sum(obj[t]["grubs"] for t in obj)
-        last["grubs"] = last["grubs"] + [game_time] * max(0, grubs_seen - len(last["grubs"]))
+        missing = grubs_seen - len(last["grubs"])
+        if missing > 0:
+            known = [t for t in (memo.times["grubs"] if memo else [])[-missing:] if t is not None]
+            # (No known time: count them as taken now; a wave still ends.)
+            extra = (known + [game_time] * missing)[:missing]
+            last["grubs"] = sorted(last["grubs"] + extra)
+        dragons_seen = sum(dragon_count.values())
+        events_dragons = len(last["dragon_types"])
+        if dragons_seen > events_dragons and memo is not None and memo.latest("dragons") is not None:
+            last["dragon"] = max(last["dragon"] or 0.0, memo.latest("dragons"))
         if last["herald"] is None and any(obj[t]["heralds"] for t in obj):
-            last["herald"] = game_time
+            last["herald"] = (memo.latest("heralds") if memo else None) or game_time
 
     f = {"STATUS": "LIVE" if connected else "WAITING", "TIMER": fmt_clock(game_time),
          "GAME TIME SECONDS": int(game_time)}

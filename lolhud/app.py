@@ -28,7 +28,7 @@ from .ocr import ScreenGold
 from .updater import Updater, clean_up_old_update
 from . import profiles
 from .source import DemoSource, LiveClientSource
-from .state import build_state
+from .state import SeenObjectives, build_state
 
 mimetypes.add_type("font/otf", ".otf")
 mimetypes.add_type("font/ttf", ".ttf")
@@ -55,6 +55,7 @@ class HudApp:
         self.fetched_at = time.time()
         self.server = None
         self.screen_gold = ScreenGold(config)
+        self.seen_objectives = SeenObjectives()   # when the top bar's counters went up
         self.updater = Updater()
         self.overlay_window = None  # the desktop app's HUD-over-the-game window
         self.preview = None  # an animation the control panel asked to see
@@ -99,7 +100,7 @@ class HudApp:
         live = self.mode == "live"
         state = build_state(self.raw, self.config.get(), self.ddragon,
                             self.screen_gold.fresh() if live else None,
-                            self.screen_gold.fresh_counts() if live else None)
+                            self.screen_gold.fresh_counts() if live else None, self.seen_objectives)
         state["detail"]["error"] = self.source.last_error
         with self._lock:
             self.state = state
@@ -113,6 +114,7 @@ class HudApp:
         connected = state["detail"]["connected"]
         if connected != self._was_connected and not connected:
             self.screen_gold.reset()  # next game starts from scratch
+            self.seen_objectives.reset()
             self._tower_warned = False
         if connected != self._was_connected:
             if connected:

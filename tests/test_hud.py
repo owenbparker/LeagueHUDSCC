@@ -60,6 +60,40 @@ class StateTests(unittest.TestCase):
         self.assertEqual(f["NEXT DRAGON"], "01:26")
         self.assertEqual(f["NEXT BARON"], "03:46")
 
+    def test_objectives_the_events_missed_start_their_timers(self):
+        # The game's events have no dragon or grubs, but the top bar's counters
+        # go up: the timers run from when they did.
+        from lolhud.state import SeenObjectives
+        raw = load()
+        raw["events"]["Events"] = [e for e in raw["events"]["Events"]
+                                   if e.get("EventName") not in ("DragonKill", "HordeKill", "HeraldKill")]
+        seen = SeenObjectives()
+
+        def at(t, red_dragons, blue_grubs):
+            raw["gameData"]["gameTime"] = float(t)
+            counts = {"blue": {"dragons": 0, "heralds": 0, "grubs": blue_grubs, "towers": None},
+                      "red": {"dragons": red_dragons, "heralds": 0, "grubs": 0, "towers": None}}
+            return build_state(raw, cfg(), screen_counts=counts, seen_objectives=seen)["fields"]
+
+        at(600, 0, 0)
+        at(610, 1, 3)                       # dragon and a grub wave taken at 10:10
+        f = at(700, 1, 3)
+        self.assertEqual(f["NEXT DRAGON"], "03:30")    # 10:10 + 5:00, at 11:40
+        self.assertEqual(f["DRAGONS RIGHT"], 1)
+        first, later = at(700, 1, 3)["NEXT GRUBS"], at(710, 1, 3)["NEXT GRUBS"]
+        if first:                            # (the grubs may be gone for the game by now)
+            self.assertNotEqual(first, later)   # counts down, not stuck
+        # A dragon already taken when reading began has no known time: the
+        # timer isn't made up.
+        fresh = SeenObjectives()
+        raw["gameData"]["gameTime"] = 700.0
+        counts = {"blue": {"dragons": 0, "heralds": 0, "grubs": 0}, "red": {"dragons": 1, "heralds": 0, "grubs": 0}}
+        f = build_state(raw, cfg(), screen_counts=counts, seen_objectives=fresh)["fields"]
+        self.assertEqual(f["NEXT DRAGON"], "LIVE")
+        # Moving the timeline back starts over.
+        at(100, 0, 0)
+        self.assertEqual(seen.times["dragons"], [])
+
     def test_grubs_and_herald_timers(self):
         raw = load()
         raw["gameData"]["gameTime"] = 300.0
