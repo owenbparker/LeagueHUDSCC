@@ -31,6 +31,7 @@
   #show { width: 100%; padding: 14px; font: 700 16px "Inter", system-ui, sans-serif; border-radius: 8px; cursor: pointer;
           background: #252a2f; color: var(--text); border: 1px solid var(--line); transition: background .15s, color .15s; }
   #show:hover { border-color: var(--muted); }
+  #match-enable.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
   #show.on { background: var(--accent); color: #06231a; border-color: var(--accent); }
   #screen { width: auto; }
   .note { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
@@ -125,6 +126,11 @@ function apply(s) {
     : local.time !== undefined ? `This PC's game: ${Math.floor(local.time / 60)}:${String(Math.floor(local.time % 60)).padStart(2, "0")}${local.paused ? " (paused)" : ""}`
     : "";
   $("match-status").textContent = mt.status || "";
+  const on = mt.enabled === true;
+  $("match-enable").classList.toggle("on", on);
+  $("match-enable").textContent = on ? "Time control: on" : "Turn on time control";
+  $("match-enable").title = on ? "EnableReplayApi=1 is in League's game.cfg (restart League after turning it on)"
+    : mt.enabled === null ? "League's game.cfg wasn't found in the usual folders" : "";
   if (first) {
     check();
     if (s.app.role !== "observer") fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"role":"observer"}' }).catch(() => {});

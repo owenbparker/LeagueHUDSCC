@@ -265,7 +265,8 @@ class HudApp:
                 "screen_gold": screen, "update": self.updater.info(),
                 "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
                 "director": self.director.status,
-                "match_time": {"status": self.match_sync.status, "local": self.match_sync.local},
+                "match_time": {"status": self.match_sync.status, "local": self.match_sync.local,
+                               "enabled": self.match_sync.enabled},
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
     def snapshot(self):
@@ -594,6 +595,7 @@ def make_handler(app):
                     app.sync_gfx_to_me()
                 elif path == "/api/match/enable":
                     changed = enable_replay_api()
+                    app.match_sync.enabled = True
                     log(f"Time control turned on in {changed}: restart the League client" if changed
                         else "Time control was already on in League's game.cfg")
                     app.match_sync.status = ("Turned on: restart the League spectator client" if changed

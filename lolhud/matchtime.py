@@ -55,7 +55,11 @@ class ReplayClient:
         except urllib.error.HTTPError as e:
             raise ValueError(self.HELP if e.code in (403, 404) else f"League answered {e.code}")
         except (urllib.error.URLError, OSError) as e:
-            raise ValueError(self.HELP if "refused" in str(e).lower() or "10061" in str(e)
+            text = str(getattr(e, "reason", e)).lower()
+            if "timed out" in text:
+                raise ValueError("League didn't answer. Restart the League client after turning on time "
+                                 "control, and check it's spectating a game or playing a replay.")
+            raise ValueError(self.HELP if "refused" in text or "10061" in text
                              else f"Couldn't reach League's Replay API ({getattr(e, 'reason', e)})")
 
     def get(self):
@@ -100,6 +104,21 @@ def enable_replay_api(path=None):
     return changed
 
 
+def replay_api_enabled():
+    """Is EnableReplayApi=1 in League's game.cfg? None if it can't be found."""
+    found = [p for p in game_cfg_candidates() if os.path.isfile(p)]
+    if not found:
+        return None
+    for cfg in found:
+        try:
+            with open(cfg, encoding="utf-8-sig", errors="replace") as f:
+                if any(line.strip().lower() == "enablereplayapi=1" for line in f):
+                    return True
+        except OSError:
+            pass
+    return False
+
+
 class MatchSync:
     """Sync commands: held here on the GFX PC; followed from it on an observer."""
 
@@ -111,6 +130,7 @@ class MatchSync:
         self._best_rtt = None
         self.status = ""
         self.local = {}              # this PC's game: {"time", "paused"} or {"error"}
+        self.enabled = None          # EnableReplayApi=1 in game.cfg (None: game.cfg not found)
         self._lock = threading.Lock()
 
     # --- GFX side ----------------------------------------------------------
@@ -198,6 +218,10 @@ def run_follower(app, stop):
     while not stop.is_set():
         if time.time() - checked >= 1:   # this PC's own game time, for the panels
             checked = time.time()
+            try:
+                app.match_sync.enabled = replay_api_enabled()
+            except Exception:
+                pass
             try:
                 st = app.match_sync.replay.get()
                 app.match_sync.local = {"time": float(st.get("time") or 0), "paused": bool(st.get("paused"))}
