@@ -20,6 +20,7 @@ from . import outputs
 from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, WEB_DIR, web_file
 from .gold import DataDragon
+from . import companion
 from .log import log, since
 from .matchtime import MatchSync, ReplayClient, enable_replay_api, run_follower
 from .matchtime import fmt as fmt_time
@@ -271,7 +272,8 @@ class HudApp:
                                "local": {**self.match_sync.local,
                                          "age": round(time.time() - self.match_sync.local.get("at", time.time()), 3)},
                                "enabled": self.match_sync.enabled},
-                "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
+                "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR,
+                "companion": {"lan": bool(cfg.get("companion_lan")), "host": lan_ip() or "127.0.0.1", "port": port}}
 
     def snapshot(self):
         cfg = self.config.get()
@@ -330,7 +332,15 @@ class HudApp:
 
     def host(self):
         cfg = self.config.get()
-        return "0.0.0.0" if cfg.get("allow_network") else cfg["http_host"]
+        return "0.0.0.0" if cfg.get("allow_network") or cfg.get("companion_lan") else cfg["http_host"]
+
+    def set_companion_lan(self, enabled):
+        """Let Bitfocus Companion on another PC control this app."""
+        self.config.update({"companion_lan": bool(enabled)})
+        if self.server:
+            self.server.restart(self.host())
+        log("Companion on other PCs can now control this app" if enabled
+            else "Companion can only control this app from this PC")
 
     def open_folder(self, which):
         folders = {"output": self.config.output_dir(), "logos": LOGO_DIR, "app": DATA_DIR}
@@ -450,6 +460,10 @@ def make_handler(app):
                 self.end_headers()
             elif path == "/api/sync":
                 self._send(json.dumps(app.match_sync.public()))
+            elif path == "/api/companion":
+                self._send(json.dumps(companion.state(app)))
+            elif path == "/api/companion/describe":
+                self._send(json.dumps(companion.describe()))
             elif path == "/api/observer/check":
                 # Observer client: can this PC reach the GFX PC's HUD?
                 if not _is_local(self.client_address[0]):
@@ -514,6 +528,16 @@ def make_handler(app):
             url = urlparse(self.path)
             path = url.path
             length = int(self.headers.get("Content-Length") or 0)
+            if path == "/api/companion":
+                # Bitfocus Companion: from this PC, or from another PC when allowed.
+                if not _is_local(self.client_address[0]) and not app.config.get().get("companion_lan"):
+                    return self._send(json.dumps({"error": "Companion on another PC isn't allowed to control "
+                                                  "this app: tick it in the app's Companion section"}), status=403)
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    return self._send(json.dumps(companion.act(app, body)))
+                except (ValueError, TypeError, KeyError, OSError) as e:
+                    return self._send(json.dumps({"error": str(e)}), status=400)
             if path == "/api/sync":
                 # Observer clients: sync commands (all clients, or this PC's game).
                 try:
@@ -595,6 +619,8 @@ def make_handler(app):
                     app.preview = {"name": body["name"], "side": body["side"], "id": time.time()}
                 elif path == "/api/role":
                     app.set_role(body.get("role"))
+                elif path == "/api/companion/network":
+                    app.set_companion_lan(body.get("enabled"))
                 elif path == "/api/match/sync-all":
                     app.sync_all()
                 elif path == "/api/match/sync-gfx":

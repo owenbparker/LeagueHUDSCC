@@ -1,7 +1,8 @@
 # Builds the League HUD desktop app (LeagueHUD.exe) on Windows and publishes
 # it as a GitHub release (v1.0.<run number>, or the next free one) with LeagueHUD-windows.zip.
 # The app checks the latest release on launch and offers to update itself.
-# Each release also gets SCC-LoL-HUD-Setup.exe, an installer that downloads
+# Each release also gets SCC-LoL-Companion-module.tgz (the Bitfocus Companion
+# module, imported in Companion's Modules page) and SCC-LoL-HUD-Setup.exe, an installer that downloads
 # the latest release from GitHub when it runs.
 #
 # A commit with [no release] in its message builds and tests without publishing.
@@ -138,6 +139,23 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "Player Cam smoke test failed (exit code $($p.ExitCode))" }
           Remove-Item "$app\smoke-test.txt" -ErrorAction SilentlyContinue
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the Companion module (SCC-LoL-Companion-module.tgz)
+        shell: pwsh
+        working-directory: companion-module
+        run: |
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE) { exit 1 }
+          npm version --no-git-tag-version --allow-same-version $env:VERSION.TrimStart('v')
+          npm run check
+          if ($LASTEXITCODE) { exit 1 }
+          npx companion-module-build
+          if ($LASTEXITCODE) { exit 1 }
+          Move-Item scc-league-hud-*.tgz ..\SCC-LoL-Companion-module.tgz
+
       - name: Build the installer
         if: "!contains(github.event.head_commit.message, '[no release]')"
         shell: pwsh
@@ -163,7 +181,7 @@ jobs:
           Compress-Archive -Path dist\PlayerCam\* -DestinationPath PlayerCam-windows.zip
           $notes = git log -1 --format=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' }
           $notes = ($notes -join "`n").Trim()
-          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe PlayerCam-windows.zip dist\SCC-Player-Cam-Setup.exe --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
+          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe PlayerCam-windows.zip dist\SCC-Player-Cam-Setup.exe SCC-LoL-Companion-module.tgz --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
         env:
           GH_TOKEN: ${{ github.token }}
 

@@ -87,6 +87,12 @@
       <button id="match-enable" class="small">Turn on time control</button>
       <p class="note">"Sync all clients" jumps every League client (the GFX PC's and every observer's) to 0:00 together. "Sync GFX to my time" puts the GFX PC's League client half a second ahead of this one. Each PC needs League's Replay API: click "Turn on time control" once, then restart the League client.</p>
     </div>
+    <div class="cams">
+      <label>Companion</label>
+      <div class="status" id="companion-addr"></div>
+      <label class="check"><input type="checkbox" id="companion-lan"> Let Companion on another PC control this app</label>
+      <p class="note">Add an "SCC League HUD" connection in Companion with the address above to put this PC's buttons (HUD on game, Sync GFX to my time, Sync all clients) on a Stream Deck. The module, SCC-LoL-Companion-module.tgz, comes with each release.</p>
+    </div>
   </section>
 </main>
 <script src="update.js"></script>
@@ -138,6 +144,11 @@ function apply(s) {
   else if (!replayClock) $("match-local").textContent = "";
   tickClock();
   $("match-status").textContent = mt.status || "";
+  const cp = s.app.companion;
+  if (cp) {
+    $("companion-lan").checked = !!cp.lan;
+    $("companion-addr").textContent = `Address for Companion: ${cp.lan ? cp.host : "127.0.0.1"}, port ${cp.port}`;
+  }
   const on = mt.enabled === true;
   $("match-enable").classList.toggle("on", on);
   $("match-enable").textContent = on ? "Time control: on" : "Turn on time control";
@@ -150,6 +161,7 @@ function apply(s) {
 }
 
 // Can this PC reach the GFX PC's HUD?
+$("companion-lan").onchange = e => post("/api/companion/network", { enabled: e.target.checked });
 $("sync-all").onclick = () => post("/api/match/sync-all", {});
 $("sync-gfx").onclick = () => post("/api/match/sync-gfx", {});
 $("match-enable").onclick = () => post("/api/match/enable", {});

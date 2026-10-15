@@ -36,6 +36,8 @@ DEFAULTS = {
     # Let other PCs on your network read the overlay and data (changes can
     # still only be made on this PC).
     "allow_network": False,
+    # Let Bitfocus Companion on another PC control this app (see lolhud/companion.py).
+    "companion_lan": False,
     "output_dir": "output",
 
     "left": {"name": "Team Left", "tricode": "SCC", "logo": "assets/logo_left.png", "wins": 0, "color": "#0a6d4c",

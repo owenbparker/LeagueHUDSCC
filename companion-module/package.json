@@ -1,0 +1,24 @@
+{
+	"name": "scc-league-hud",
+	"version": "1.0.0",
+	"main": "src/main.js",
+	"private": true,
+	"scripts": {
+		"package": "companion-module-build",
+		"check": "node --check src/main.js && node --check src/definitions.js"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/owenbparker/LeagueHUDSCC.git"
+	},
+	"engines": {
+		"node": "^22.18"
+	},
+	"dependencies": {
+		"@companion-module/base": "~1.12.1"
+	},
+	"devDependencies": {
+		"@companion-module/tools": "^2.6.1"
+	}
+}

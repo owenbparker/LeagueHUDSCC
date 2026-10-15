@@ -1,0 +1,26 @@
+{
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"id": "scc-league-hud",
+	"name": "scc-league-hud",
+	"shortname": "scc-lol",
+	"description": "St. Clair Saints League of Legends broadcast HUD: toggles, match time sync and live values",
+	"version": "0.0.0",
+	"license": "MIT",
+	"repository": "git+https://github.com/owenbparker/LeagueHUDSCC.git",
+	"bugs": "https://github.com/owenbparker/LeagueHUDSCC/issues",
+	"maintainers": [
+		{
+			"name": "St. Clair Saints"
+		}
+	],
+	"runtime": {
+		"type": "node22",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../src/main.js"
+	},
+	"legacyIds": [],
+	"manufacturer": "St. Clair Saints",
+	"products": ["League HUD"],
+	"keywords": ["League of Legends", "HUD", "esports", "overlay"]
+}
