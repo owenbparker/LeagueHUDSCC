@@ -137,6 +137,12 @@ class StateTests(unittest.TestCase):
         # Herald taken: just baron.
         herald = [{"EventID": 9001, "EventName": "HeraldKill", "EventTime": 900.0, "KillerName": "x"}]
         self.assertEqual(shown(c["timers"]["grubs_despawn"] + 30, herald), (["BARON"], True))
+        # Just one, or all three.
+        c["objective_timers_auto_count"] = 1
+        self.assertEqual(shown(120), (["GRUBS"], True))
+        c["objective_timers_auto_count"] = 3
+        self.assertEqual(shown(120), (["GRUBS", "HERALD", "BARON"], True))
+        c["objective_timers_auto_count"] = 2
         # Off: all of them.
         c["objective_timers_auto"] = False
         self.assertEqual(shown(120), (["GRUBS", "HERALD", "BARON"], True))

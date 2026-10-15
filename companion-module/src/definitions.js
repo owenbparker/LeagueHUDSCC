@@ -9,7 +9,7 @@ const TOGGLES = {
 	counter_dragons: 'Claimed objectives: dragons',
 	counter_heralds: 'Claimed objectives: Rift Heralds',
 	counter_grubs: 'Claimed objectives: void grubs',
-	timers_auto: 'Objective timers: auto (only the next two)',
+	timers_auto: 'Objective timers: auto (only the next few)',
 	timer_grubs: 'Objective timer: Void Grubs',
 	timer_dragon: 'Objective timer: Dragon',
 	timer_herald: 'Objective timer: Rift Herald',
@@ -27,6 +27,7 @@ const STATES = {
 const VALUES = {
 	bg_speed: { name: 'Background video: playback speed', min: 0.1, max: 3, step: 0.05, unit: 'x' },
 	bg_brightness: { name: 'Background video: brightness', min: 0.2, max: 2.5, step: 0.05, unit: '' },
+	timers_auto_count: { name: 'Objective timers: how many auto shows (1-3)', min: 1, max: 3, step: 1, unit: '' },
 }
 
 const COMMANDS = {
@@ -44,6 +45,7 @@ const VARIABLES = {
 	role: 'Client (GFX or Observer)',
 	bg_speed: 'Background video playback speed',
 	bg_brightness: 'Background video brightness',
+	timers_auto_count: 'How many objective timers auto shows',
 	tricode_left: 'Left team tri-code',
 	tricode_right: 'Right team tri-code',
 	kills_left: 'Left team kills',

@@ -343,13 +343,17 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
         "baron": timers["baron_first"] if last["baron"] is None else last["baron"] + timers["baron_respawn"],
     }
     shown = cfg.get("objective_timers", {})
-    # Auto objective timers: of grubs, herald and baron, only the next two
-    # still to come this game (grubs + herald, then herald + baron, then
-    # baron). Dragon and elder follow their own switches.
+    # Auto objective timers: of grubs, herald and baron, only the next one,
+    # two or three still to come this game (with two: grubs + herald, then
+    # herald + baron, then baron). Dragon and elder follow their own switches.
     auto_hidden = set()
     if cfg.get("objective_timers_auto"):
+        try:
+            count = max(1, min(3, int(cfg.get("objective_timers_auto_count") or 2)))
+        except (TypeError, ValueError):
+            count = 2
         upcoming = [n for n in ("grubs", "herald", "baron") if spawns[n] is not None and shown.get(n, True)]
-        auto_hidden = set(upcoming[2:])
+        auto_hidden = set(upcoming[count:])
     for name, spawn_at in spawns.items():
         on = connected and shown.get(name, True) and name not in auto_hidden
         f[f"NEXT {name.upper()}"] = _countdown(spawn_at, game_time) if on else ""

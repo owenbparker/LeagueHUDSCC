@@ -128,15 +128,15 @@ class LeagueHudInstance extends InstanceBase {
 				callback: (e) => this.send({ action: e.options.mode, id: e.options.setting }),
 			},
 			value_set: {
-				name: 'Background video: set',
+				name: 'Set a value (background video, auto timers count)',
 				options: [
 					{ type: 'dropdown', id: 'value', label: 'Value', default: 'bg_speed', choices: valueChoices() },
-					{ type: 'number', id: 'amount', label: 'To (speed 0.1-3, brightness 0.2-2.5 = 20-250%)', default: 1, min: 0.1, max: 3, step: 0.05 },
+					{ type: 'number', id: 'amount', label: 'To (speed 0.1-3, brightness 0.2-2.5 = 20-250%, auto timers 1-3)', default: 1, min: 0.1, max: 3, step: 0.05 },
 				],
 				callback: (e) => this.send({ action: 'set', id: e.options.value, value: e.options.amount }),
 			},
 			value_adjust: {
-				name: 'Background video: nudge up / down',
+				name: 'Nudge a value up / down',
 				options: [
 					{ type: 'dropdown', id: 'value', label: 'Value', default: 'bg_speed', choices: valueChoices() },
 					{ type: 'number', id: 'step', label: 'By (negative to lower)', default: 0.05, min: -3, max: 3, step: 0.05 },
@@ -220,10 +220,10 @@ class LeagueHudInstance extends InstanceBase {
 			]) {
 				presets[`${id}_${dir}`] = {
 					type: 'button',
-					category: 'Background video',
+					category: id === 'timers_auto_count' ? 'Objective timers' : 'Background video',
 					name: `${v.name} ${dir}`,
-					style: style(`${id === 'bg_speed' ? 'Speed' : 'Bright'} ${sign < 0 ? '−' : '+'}\n$(${this.label}:${id})`),
-					steps: [{ down: [{ actionId: 'value_adjust', options: { value: id, step: sign * v.step * 2 } }], up: [] }],
+					style: style(`${{ bg_speed: 'Speed', bg_brightness: 'Bright', timers_auto_count: 'Auto timers' }[id]} ${sign < 0 ? '−' : '+'}\n$(${this.label}:${id})`),
+					steps: [{ down: [{ actionId: 'value_adjust', options: { value: id, step: sign * v.step * (v.step < 1 ? 2 : 1) } }], up: [] }],
 					feedbacks: [],
 				}
 			}

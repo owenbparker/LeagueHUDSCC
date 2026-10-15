@@ -255,7 +255,11 @@
 
   <section>
     <h2>Objective timers</h2>
-    <button type="button" id="timers-auto" style="width:100%;margin-bottom:10px">Auto objective timers</button>
+    <div class="row" style="margin-bottom:10px;align-items:center">
+      <button type="button" id="timers-auto" style="flex:1">Auto objective timers</button>
+      <select id="timers-auto-count" title="How many of Void Grubs, Rift Herald and Baron to show" style="flex:0 0 auto;width:auto">
+        <option value="1">Show next 1</option><option value="2">Show next 2</option><option value="3">Show next 3</option></select>
+    </div>
     <div id="objectives" class="checks"></div>
     <label for="next-dragon">Next dragon (its timer's icon)</label>
     <div class="row"><select id="next-dragon">
@@ -422,6 +426,7 @@ const OBJECTIVES = [["grubs", "Void Grubs", "grubs"], ["dragon", "Dragon", "drag
   ["herald", "Rift Herald", "herald"], ["elder", "Elder Drake", "elder"], ["baron", "Baron", "baron"]];
 $("objectives").innerHTML = OBJECTIVES.map(([key, name, icon]) =>
   `<label><input type="checkbox" data-obj="${key}"><img class="obj-icon" src="assets/objectives/${icon}.png" alt="">${name}</label>`).join("");
+$("timers-auto-count").onchange = e => post("/api/config", { objective_timers_auto_count: Number(e.target.value) });
 $("timers-auto").onclick = () => post("/api/config", { objective_timers_auto: !state.config.objective_timers_auto });
 $("next-dragon").onchange = e => post("/api/config", { next_dragon: e.target.value });
 $("anim-first-blood").onchange = e => post("/api/config", { animations: { first_blood: e.target.checked } });
@@ -630,8 +635,9 @@ function apply(s) {
   $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
   $("timers-auto").classList.toggle("on", !!cfg.objective_timers_auto);
   $("timers-auto").textContent = cfg.objective_timers_auto ? "Auto objective timers: on" : "Auto objective timers";
-  $("timers-auto").title = "Of Void Grubs, Rift Herald and Baron, show only the next two still to come "
-    + "(grubs + herald, then herald + baron, then baron). Dragon and Elder follow their own switches.";
+  setIfIdle($("timers-auto-count"), String(cfg.objective_timers_auto_count || 2));
+  $("timers-auto").title = "Of Void Grubs, Rift Herald and Baron, show only the next few still to come "
+    + "(with 2: grubs + herald, then herald + baron, then baron). Dragon and Elder follow their own switches.";
   setIfIdle($("next-dragon"), cfg.next_dragon || "");
   const dragon = cfg.next_dragon || s.detail.next_dragon;
   $("next-dragon-icon").src = `assets/objectives/dragon-${dragon ? dragon.toLowerCase() : "unknown"}.png`;

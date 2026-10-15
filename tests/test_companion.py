@@ -50,6 +50,9 @@ class CompanionTests(unittest.TestCase):
                 s = call(8851, {"action": "set", "id": "bg_brightness", "value": 9})
                 self.assertAlmostEqual(s["values"]["bg_brightness"], 2.5)   # kept in range
                 self.assertEqual(s["variables"]["bg_brightness"], "250%")
+                s = call(8851, {"action": "adjust", "id": "timers_auto_count", "value": 5})
+                self.assertEqual(config.get()["objective_timers_auto_count"], 3)
+                self.assertEqual(s["variables"]["timers_auto_count"], "3")
                 call(8851, {"action": "run", "id": "preview_fb_right"})
                 self.assertEqual(app.preview["side"], "right")
                 with self.assertRaises(urllib.error.HTTPError) as e:

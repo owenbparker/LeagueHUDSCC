@@ -40,7 +40,7 @@ TOGGLES = {
     "counter_dragons": ("Claimed objectives: dragons", ("strip_counters", "dragons"), True),
     "counter_heralds": ("Claimed objectives: Rift Heralds", ("strip_counters", "heralds"), True),
     "counter_grubs": ("Claimed objectives: void grubs", ("strip_counters", "grubs"), True),
-    "timers_auto": ("Objective timers: auto (only the next two)", ("objective_timers_auto",), False),
+    "timers_auto": ("Objective timers: auto (only the next few)", ("objective_timers_auto",), False),
     "timer_grubs": ("Objective timer: Void Grubs", ("objective_timers", "grubs"), True),
     "timer_dragon": ("Objective timer: Dragon", ("objective_timers", "dragon"), True),
     "timer_herald": ("Objective timer: Rift Herald", ("objective_timers", "herald"), True),
@@ -58,6 +58,7 @@ STATES = {
 VALUES = {
     "bg_speed": ("Background video: playback speed", "bg_speed", 1.0, 0.1, 3.0),
     "bg_brightness": ("Background video: brightness", "bg_brightness", 1.0, 0.2, 2.5),
+    "timers_auto_count": ("Objective timers: how many auto shows (1-3)", "objective_timers_auto_count", 2, 1, 3),
 }
 COMMANDS = {
     "sync_all": "Match time: sync all clients to 0:00",
@@ -98,6 +99,7 @@ def state(app):
         "role": {"gfx": "GFX", "observer": "Observer"}.get(app.role, ""),
         "bg_speed": f"{values['bg_speed']:.2f}x",
         "bg_brightness": f"{round(values['bg_brightness'] * 100)}%",
+        "timers_auto_count": str(int(values["timers_auto_count"])),
     }
     for side in ("left", "right"):
         S = side.upper()
@@ -134,7 +136,8 @@ def act(app, body):
         value = float(body.get("value") or 0)
         if action == "adjust":
             value += float(cfg.get(ckey) if cfg.get(ckey) is not None else default)
-        app.config.update({ckey: round(max(lo, min(hi, value)), 2)})
+        value = round(max(lo, min(hi, value)), 2)
+        app.config.update({ckey: int(round(value)) if key == "timers_auto_count" else value})
     elif action == "run":
         if key == "sync_all":
             app.sync_all()
