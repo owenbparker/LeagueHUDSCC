@@ -18,6 +18,12 @@ on:
 permissions:
   contents: write
 
+# One build at a time: two at once would both pick the same next version and
+# the second couldn't publish. A newer push waits for the one running.
+concurrency:
+  group: build-windows
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: windows-latest
