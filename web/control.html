@@ -247,7 +247,12 @@
     <p class="note">Shown in turn in the box, in this order. Saving puts them on the HUD now and makes them the rotation every time the app starts.</p>
     <div class="row" style="margin-top:12px">
       <div><label>Logo size <span id="sb-size-val"></span></label><input type="range" id="sb-size" min="0.2" max="1" step="0.05"></div>
-      <div><label>Background loop</label><select id="sb-video"><option value="">Default loop</option><option value="hud">Same video as the HUD's lines</option></select></div>
+      <div><label>Background</label>
+        <div class="row"><select id="sb-video"><option value="">Default loop</option><option value="hud">Same video as the HUD's lines</option>
+          <option value="image">Static image</option><option value="colours">Team colours only</option></select>
+          <button type="button" id="sb-image-pick" style="flex:0 0 auto" hidden>Choose image…</button>
+          <input type="file" id="sb-image-file" accept=".png,.jpg,.jpeg,.webp,.gif,.svg" hidden></div>
+        <div class="note" id="sb-image-name" style="margin:4px 0 0"></div></div>
     </div>
     <div class="row">
       <div><label>Playback speed <span id="sb-speed-val"></span></label><input type="range" id="sb-speed" min="0.1" max="3" step="0.05"></div>
@@ -687,7 +692,21 @@ const sbPost = changes => post("/api/config", { sponsor_box: changes });
 $("sb-on").onchange = e => sbPost({ enabled: e.target.checked });
 $("sb-tint").onchange = e => sbPost({ bg_tint: e.target.checked });
 $("sb-outline").onchange = e => sbPost({ outline: e.target.checked });
-$("sb-video").onchange = e => sbPost({ bg_video: e.target.value });
+$("sb-video").onchange = e => {
+  sbPost({ bg_video: e.target.value });
+  if (e.target.value === "image" && !(state.config.sponsor_box || {}).bg_image) $("sb-image-file").click();
+};
+$("sb-image-pick").onclick = () => $("sb-image-file").click();
+$("sb-image-file").onchange = async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.readAsDataURL(file); });
+  const r = await (await fetch("/api/sponsor", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ filename: file.name, data }) })).json();
+  if (r.error) return alert(r.error);
+  sbPost({ bg_video: "image", bg_image: r.path });
+};
 for (const [id, key] of [["sb-size", "logo_size"], ["sb-speed", "bg_speed"], ["sb-bright", "bg_brightness"]]) {
   let t = null;
   $(id).addEventListener("input", e => { clearTimeout(t); t = setTimeout(() => sbPost({ [key]: Number(e.target.value) }), 120); });
@@ -706,7 +725,13 @@ function applySponsorBox(cfg) {
   $("sb-on").checked = b.enabled !== false;
   $("sb-tint").checked = b.bg_tint !== false;
   $("sb-outline").checked = !!b.outline;
-  setIfIdle($("sb-video"), b.bg_video === "hud" ? "hud" : "");
+  const mode = ["hud", "image", "colours"].includes(b.bg_video) ? b.bg_video : "";
+  setIfIdle($("sb-video"), mode);
+  $("sb-image-pick").hidden = mode !== "image";
+  $("sb-image-name").textContent = mode === "image"
+    ? (b.bg_image ? `Image: ${b.bg_image.split("/").pop()}` : "Choose an image (until then, the team colours show).") : "";
+  // Speed only matters for a video.
+  $("sb-speed").disabled = mode === "image" || mode === "colours";
   for (const [id, key, d, fmt] of [["sb-size", "logo_size", .75, v => Math.round(v * 100) + "%"],
                                    ["sb-speed", "bg_speed", 1, v => v.toFixed(2) + "×"],
                                    ["sb-bright", "bg_brightness", 1, v => Math.round(v * 100) + "%"]]) {

@@ -65,9 +65,10 @@ DEFAULTS = {
     # The sponsor box: covers the spectator's observer controls (camera mode
     # and fog of war, bottom left) with the background loop, tinted in both
     # teams' colours, and sponsor logos in turn. rect is x, y, w, h on the
-    # 1920x1080 overlay. bg_video "" is the default loop.
+    # 1920x1080 overlay. bg_video: "" the default loop, "hud" the HUD's video,
+    # "image" a still picture (bg_image), "colours" just the team colours.
     "sponsor_box": {"enabled": True, "rect": [0, 964, 304, 116], "sponsors": [], "seconds": 5,
-                    "bg_video": "", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
+                    "bg_video": "", "bg_image": "", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
                     "logo_size": 0.75, "outline": False},
     # Which screen the "HUD on the game" window covers (0 = main screen).
     "overlay_screen": 0,

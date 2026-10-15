@@ -8,7 +8,7 @@
   const style = document.createElement("style");
   style.textContent = `
     #sponsor-box { position: absolute; overflow: hidden; display: none; isolation: isolate; background: #0b0d10; }
-    #sponsor-box video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    #sponsor-box video, #sponsor-box .still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     #sponsor-box .tint { position: absolute; inset: 0; mix-blend-mode: multiply; }
     #sponsor-box .logo { position: absolute; inset: 0; margin: auto; object-fit: contain; opacity: 0;
                          transition: opacity .6s ease; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
@@ -17,11 +17,13 @@
   document.head.appendChild(style);
   const video = document.createElement("video");
   video.muted = video.loop = video.autoplay = video.playsInline = true;
+  const still = document.createElement("img");   // a static background instead of the loop
+  still.className = "still";
   const tint = document.createElement("div");
   tint.className = "tint";
   const logos = [document.createElement("img"), document.createElement("img")];
   for (const l of logos) l.className = "logo";
-  box.append(video, tint, ...logos);
+  box.append(video, still, tint, ...logos);
   document.body.appendChild(box);
 
   const urlOf = p => "/" + String(p).split("/").map(encodeURIComponent).join("/");
@@ -58,20 +60,38 @@
     const [x, y, w, h] = b.rect || [0, 964, 304, 116];
     Object.assign(box.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
     box.classList.toggle("outline", !!b.outline);
-    // The loop: the default one, or the same video as the HUD's lines ("hud").
+    // The background: the default loop, the HUD's video ("hud"), a still
+    // image ("image", b.bg_image) or just the team colours ("colours").
     const DEFAULT = "profiles/scc-2026/bg_loop.mp4";
-    const src = b.bg_video === "hud" ? cfg.bg_video || DEFAULT : b.bg_video || DEFAULT;
-    const url = urlOf(src);
-    if (video.dataset.src !== url) { video.dataset.src = url; video.src = url; video.play().catch(() => {}); }
-    else if (video.paused) video.play().catch(() => {});
-    const rate = Math.min(4, Math.max(0.0625, Number(b.bg_speed) || 1));
-    if (video.playbackRate !== rate) video.playbackRate = rate;
-    const tinted = b.bg_tint !== false;
+    const mode = ["hud", "image", "colours"].includes(b.bg_video) ? b.bg_video : "";
+    const useImage = mode === "image" && b.bg_image, useVideo = mode === "" || mode === "hud";
+    if (useVideo) {
+      const url = urlOf(mode === "hud" ? cfg.bg_video || DEFAULT : DEFAULT);
+      if (video.dataset.src !== url) { video.dataset.src = url; video.src = url; video.play().catch(() => {}); }
+      else if (video.paused) video.play().catch(() => {});
+      const rate = Math.min(4, Math.max(0.0625, Number(b.bg_speed) || 1));
+      if (video.playbackRate !== rate) video.playbackRate = rate;
+    } else if (!video.paused) video.pause();
+    video.style.display = useVideo ? "" : "none";
+    if (useImage && still.dataset.src !== b.bg_image) { still.dataset.src = b.bg_image; still.src = urlOf(b.bg_image); }
+    still.style.display = useImage ? "" : "none";
+    const tinted = b.bg_tint !== false, colours = mode === "colours" || (mode === "image" && !b.bg_image);
     const bright = Math.min(3, Math.max(0, Number(b.bg_brightness ?? 1)));
-    video.style.filter = (tinted ? "grayscale(1) brightness(1.6) " : "") + (bright !== 1 ? `brightness(${bright})` : "");
-    tint.style.display = tinted ? "" : "none";
+    const look = (tinted ? "grayscale(1) brightness(1.6) " : "") + (bright !== 1 ? `brightness(${bright})` : "");
+    video.style.filter = still.style.filter = look;
     const l = lighten(cfg.left.color, .35), r = lighten(cfg.right.color, .35);
-    tint.style.background = `linear-gradient(to right, ${l} 0%, ${l} 30%, ${r} 70%, ${r} 100%)`;
+    if (colours) {
+      // No picture: the team colours themselves, left to right.
+      tint.style.display = "";
+      tint.style.mixBlendMode = "normal";
+      tint.style.filter = bright !== 1 ? `brightness(${bright})` : "";
+      tint.style.background = `linear-gradient(to right, ${cfg.left.color} 0%, ${cfg.left.color} 25%, ${cfg.right.color} 75%, ${cfg.right.color} 100%)`;
+    } else {
+      tint.style.display = tinted ? "" : "none";
+      tint.style.mixBlendMode = "multiply";
+      tint.style.filter = "";
+      tint.style.background = `linear-gradient(to right, ${l} 0%, ${l} 30%, ${r} 70%, ${r} 100%)`;
+    }
     // Logos: a share of the box, centred.
     const size = Math.min(1, Math.max(0.2, Number(b.logo_size) || 0.75));
     for (const img of logos) Object.assign(img.style, { width: size * 100 + "%", height: size * 100 + "%" });
