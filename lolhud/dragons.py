@@ -32,11 +32,17 @@ def _box(box, width, height):
     return scaled_box(box, width, height)
 
 
+def _rgb(img):
+    """[(r, g, b), ...] for an RGB image."""
+    data = img.tobytes()
+    return list(zip(data[0::3], data[1::3], data[2::3]))
+
+
 def banner_showing(image, height):
     """Cheap check: is there a line of the banner's beige text?"""
     crop = image.crop(_box(BANNER_TEXT, image.width, height)).convert("RGB")
     crop = crop.resize((max(1, crop.width // 2), max(1, crop.height // 2)))
-    pixels = list(crop.getdata())
+    pixels = _rgb(crop)
     beige = sum(1 for r, g, b in pixels if r > 190 and g > 165 and b < 190 and r - b > 30)
     return beige / max(1, len(pixels)) > 0.06
 
@@ -53,7 +59,7 @@ def portrait_colours(image, height):
     counts = {"warm": 0, "green": 0, "teal": 0, "blue": 0, "whitish": 0}
     coloured = total = 0
     sat = 0.0
-    for i, (R, G, B) in enumerate(crop.getdata()):
+    for i, (R, G, B) in enumerate(_rgb(crop)):
         px, py = i % size - size / 2, i // size - size / 2
         if px * px + py * py > (size / 2) ** 2:
             continue

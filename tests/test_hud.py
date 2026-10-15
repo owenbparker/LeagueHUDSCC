@@ -119,6 +119,28 @@ class StateTests(unittest.TestCase):
         raw["gameData"]["gameTime"] = 330.0
         self.assertIsNone(build_state(raw, cfg(), seen_objectives=seen)["detail"]["next_dragon"])
 
+    def test_auto_objective_timers_show_the_next_two(self):
+        raw = load()
+        events = [e for e in raw["events"]["Events"]
+                  if e.get("EventName") not in ("HordeKill", "HeraldKill", "BaronKill", "DragonKill")]
+        c = cfg(objective_timers_auto=True)
+
+        def shown(t, extra=()):
+            raw["gameData"]["gameTime"] = float(t)
+            raw["events"]["Events"] = events + list(extra)
+            f = build_state(raw, c)["fields"]
+            return [n for n in ("GRUBS", "HERALD", "BARON") if f[f"NEXT {n}"]], f["NEXT DRAGON"] != ""
+
+        self.assertEqual(shown(120), (["GRUBS", "HERALD"], True))
+        # Grubs gone for the game (past their despawn): herald and baron.
+        self.assertEqual(shown(c["timers"]["grubs_despawn"] + 5), (["HERALD", "BARON"], True))
+        # Herald taken: just baron.
+        herald = [{"EventID": 9001, "EventName": "HeraldKill", "EventTime": 900.0, "KillerName": "x"}]
+        self.assertEqual(shown(c["timers"]["grubs_despawn"] + 30, herald), (["BARON"], True))
+        # Off: all of them.
+        c["objective_timers_auto"] = False
+        self.assertEqual(shown(120), (["GRUBS", "HERALD", "BARON"], True))
+
     def test_grubs_and_herald_timers(self):
         raw = load()
         raw["gameData"]["gameTime"] = 300.0

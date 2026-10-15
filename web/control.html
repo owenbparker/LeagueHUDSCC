@@ -91,7 +91,7 @@
   .cam-row .who small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cam-row input { padding: 6px 8px; font-size: 12px; }
   .cam-row button { padding: 5px 6px; font-size: 12px; }
-  #match-enable.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
+  #match-enable.on, #timers-auto.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
   .cam-row button.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
   .note a { color: var(--accent); }
   #cams-test-result img { width: 100%; margin-top: 10px; border-radius: 6px; border: 1px solid var(--line); }
@@ -255,6 +255,7 @@
 
   <section>
     <h2>Objective timers</h2>
+    <button type="button" id="timers-auto" style="width:100%;margin-bottom:10px">Auto objective timers</button>
     <div id="objectives" class="checks"></div>
     <label for="next-dragon">Next dragon (its timer's icon)</label>
     <div class="row"><select id="next-dragon">
@@ -421,6 +422,7 @@ const OBJECTIVES = [["grubs", "Void Grubs", "grubs"], ["dragon", "Dragon", "drag
   ["herald", "Rift Herald", "herald"], ["elder", "Elder Drake", "elder"], ["baron", "Baron", "baron"]];
 $("objectives").innerHTML = OBJECTIVES.map(([key, name, icon]) =>
   `<label><input type="checkbox" data-obj="${key}"><img class="obj-icon" src="assets/objectives/${icon}.png" alt="">${name}</label>`).join("");
+$("timers-auto").onclick = () => post("/api/config", { objective_timers_auto: !state.config.objective_timers_auto });
 $("next-dragon").onchange = e => post("/api/config", { next_dragon: e.target.value });
 $("anim-first-blood").onchange = e => post("/api/config", { animations: { first_blood: e.target.checked } });
 for (const side of ["left", "right"])
@@ -626,6 +628,10 @@ function apply(s) {
   if (logosChanged) loadLogos(cfg);
   $("swap-sides").checked = cfg.swap_sides;
   $("objectives").querySelectorAll("input").forEach(box => box.checked = cfg.objective_timers[box.dataset.obj] !== false);
+  $("timers-auto").classList.toggle("on", !!cfg.objective_timers_auto);
+  $("timers-auto").textContent = cfg.objective_timers_auto ? "Auto objective timers: on" : "Auto objective timers";
+  $("timers-auto").title = "Of Void Grubs, Rift Herald and Baron, show only the next two still to come "
+    + "(grubs + herald, then herald + baron, then baron). Dragon and Elder follow their own switches.";
   setIfIdle($("next-dragon"), cfg.next_dragon || "");
   const dragon = cfg.next_dragon || s.detail.next_dragon;
   $("next-dragon-icon").src = `assets/objectives/dragon-${dragon ? dragon.toLowerCase() : "unknown"}.png`;

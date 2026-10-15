@@ -142,6 +142,8 @@ DEFAULTS = {
     "next_dragon": "",
     # Which objective timers to show, in the order they appear on the overlay.
     "objective_timers": {"grubs": True, "dragon": True, "herald": True, "elder": True, "baron": True},
+    # Of grubs, herald and baron, only show the next two still to come.
+    "objective_timers_auto": False,
 }
 
 _lock = threading.Lock()

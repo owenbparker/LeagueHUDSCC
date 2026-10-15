@@ -9,6 +9,7 @@ const TOGGLES = {
 	counter_dragons: 'Claimed objectives: dragons',
 	counter_heralds: 'Claimed objectives: Rift Heralds',
 	counter_grubs: 'Claimed objectives: void grubs',
+	timers_auto: 'Objective timers: auto (only the next two)',
 	timer_grubs: 'Objective timer: Void Grubs',
 	timer_dragon: 'Objective timer: Dragon',
 	timer_herald: 'Objective timer: Rift Herald',

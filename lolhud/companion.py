@@ -40,6 +40,7 @@ TOGGLES = {
     "counter_dragons": ("Claimed objectives: dragons", ("strip_counters", "dragons"), True),
     "counter_heralds": ("Claimed objectives: Rift Heralds", ("strip_counters", "heralds"), True),
     "counter_grubs": ("Claimed objectives: void grubs", ("strip_counters", "grubs"), True),
+    "timers_auto": ("Objective timers: auto (only the next two)", ("objective_timers_auto",), False),
     "timer_grubs": ("Objective timer: Void Grubs", ("objective_timers", "grubs"), True),
     "timer_dragon": ("Objective timer: Dragon", ("objective_timers", "dragon"), True),
     "timer_herald": ("Objective timer: Rift Herald", ("objective_timers", "herald"), True),
