@@ -47,6 +47,7 @@ TOGGLES = {
     "timer_elder": ("Objective timer: Elder Drake", ("objective_timers", "elder"), True),
     "timer_baron": ("Objective timer: Baron", ("objective_timers", "baron"), True),
     "bg_tint": ("Background video: tint with team colours", ("bg_tint",), True),
+    "sponsor_box": ("Sponsors: sponsor box over the observer controls", ("sponsor_box", "enabled"), True),
 }
 # On/off states that aren't settings.
 STATES = {

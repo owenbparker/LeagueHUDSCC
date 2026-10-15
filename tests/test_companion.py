@@ -15,6 +15,43 @@ def call(port, body=None):
         return json.loads(r.read())
 
 
+class SponsorTests(unittest.TestCase):
+    def test_sponsor_upload_and_save(self):
+        import base64
+        from unittest import mock
+        from lolhud import app as app_module, config as config_module
+        from lolhud.app import HudApp, start
+        from lolhud.config import Config
+        from lolhud.source import DemoSource
+        with tempfile.TemporaryDirectory() as d:
+            folder = os.path.join(d, "sponsors")
+            with mock.patch.object(app_module, "SPONSOR_DIR", folder), mock.patch.object(config_module, "SPONSOR_DIR", folder):
+                config = Config(os.path.join(d, "config.json"))
+                config.update({"http_port": 8861, "https_port": 8863, "output_dir": os.path.join(d, "out")})
+                app = HudApp(config, DemoSource(), mode="demo")
+                app.updater.check_in_background = lambda: None
+                start(app)
+                try:
+                    png = base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode()
+                    post = lambda path, body: json.loads(urllib.request.urlopen(urllib.request.Request(
+                        f"http://127.0.0.1:8861{path}", json.dumps(body).encode(), {"Content-Type": "application/json"}),
+                        timeout=5).read())
+                    a = post("/api/sponsor", {"filename": "Acme Logo.png", "data": png})["path"]
+                    b = post("/api/sponsor", {"filename": "Acme Logo.png", "data": png})["path"]
+                    self.assertEqual((a, b), ("sponsors/Acme_Logo.png", "sponsors/Acme_Logo-2.png"))   # never overwrites
+                    with urllib.request.urlopen(f"http://127.0.0.1:8861/{a}", timeout=5) as r:
+                        self.assertTrue(r.read().startswith(b"\x89PNG"))
+                    post("/api/sponsors", {"sponsors": [b, a, "sponsors/missing.png"], "seconds": 3})
+                    box = config.get()["sponsor_box"]
+                    self.assertEqual(box["sponsors"], [b, a])     # unknown files dropped, order kept
+                    self.assertEqual(box["seconds"], 3)
+                    self.assertTrue(box["enabled"])               # the rest of the box untouched
+                    with self.assertRaises(urllib.error.HTTPError):
+                        post("/api/sponsor", {"filename": "evil.exe", "data": png})
+                finally:
+                    app.stop()
+
+
 class CompanionTests(unittest.TestCase):
     def test_module_lists_match_the_app(self):
         # companion-module/src/definitions.js names the same settings and commands.

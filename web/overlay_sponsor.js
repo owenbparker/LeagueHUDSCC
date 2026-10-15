@@ -1,0 +1,80 @@
+// The sponsor box: covers the spectator's observer controls (camera mode and
+// fog of war, bottom left) with the background loop, tinted in both teams'
+// colours like the HUD's lines, and the sponsors' logos in turn on top.
+// Set up in the control panel's Sponsors section (config "sponsor_box").
+(function () {
+  const box = document.createElement("div");
+  box.id = "sponsor-box";
+  const style = document.createElement("style");
+  style.textContent = `
+    #sponsor-box { position: absolute; overflow: hidden; display: none; isolation: isolate; background: #0b0d10; }
+    #sponsor-box video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    #sponsor-box .tint { position: absolute; inset: 0; mix-blend-mode: multiply; }
+    #sponsor-box .logo { position: absolute; inset: 0; margin: auto; object-fit: contain; opacity: 0;
+                         transition: opacity .6s ease; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+    #sponsor-box .logo.on { opacity: 1; }
+    #sponsor-box.outline { outline: 2px dashed #ffcf66; outline-offset: -2px; }`;
+  document.head.appendChild(style);
+  const video = document.createElement("video");
+  video.muted = video.loop = video.autoplay = video.playsInline = true;
+  const tint = document.createElement("div");
+  tint.className = "tint";
+  const logos = [document.createElement("img"), document.createElement("img")];
+  for (const l of logos) l.className = "logo";
+  box.append(video, tint, ...logos);
+  document.body.appendChild(box);
+
+  const urlOf = p => "/" + String(p).split("/").map(encodeURIComponent).join("/");
+  const lighten = (hex, amount) => {
+    const n = parseInt((hex || "#888888").slice(1), 16);
+    const ch = shift => Math.round(((n >> shift) & 255) + (255 - ((n >> shift) & 255)) * amount);
+    return "#" + [16, 8, 0].map(sh => ch(sh).toString(16).padStart(2, "0")).join("");
+  };
+  let rotation = { key: "", i: 0, timer: null, front: 0 };
+
+  function rotate(list, seconds) {
+    const key = JSON.stringify([list, seconds]);
+    if (key === rotation.key) return;
+    rotation.key = key;
+    clearInterval(rotation.timer);
+    rotation.i = 0;
+    for (const l of logos) l.classList.remove("on");
+    if (!list.length) return;
+    const show = () => {
+      const img = logos[rotation.front = 1 - rotation.front];
+      img.src = urlOf(list[rotation.i++ % list.length]);
+      img.classList.add("on");
+      logos[1 - rotation.front].classList.remove("on");
+    };
+    show();
+    if (list.length > 1) rotation.timer = setInterval(show, Math.max(1, Number(seconds) || 5) * 1000);
+  }
+
+  window.renderSponsorBox = function (s) {
+    const cfg = s.config, b = cfg.sponsor_box || {};
+    const on = b.enabled !== false;
+    box.style.display = on ? "block" : "none";
+    if (!on) { video.pause(); return; }
+    const [x, y, w, h] = b.rect || [0, 964, 304, 116];
+    Object.assign(box.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
+    box.classList.toggle("outline", !!b.outline);
+    // The loop: the default one, or the same video as the HUD's lines ("hud").
+    const DEFAULT = "profiles/scc-2026/bg_loop.mp4";
+    const src = b.bg_video === "hud" ? cfg.bg_video || DEFAULT : b.bg_video || DEFAULT;
+    const url = urlOf(src);
+    if (video.dataset.src !== url) { video.dataset.src = url; video.src = url; video.play().catch(() => {}); }
+    else if (video.paused) video.play().catch(() => {});
+    const rate = Math.min(4, Math.max(0.0625, Number(b.bg_speed) || 1));
+    if (video.playbackRate !== rate) video.playbackRate = rate;
+    const tinted = b.bg_tint !== false;
+    const bright = Math.min(3, Math.max(0, Number(b.bg_brightness ?? 1)));
+    video.style.filter = (tinted ? "grayscale(1) brightness(1.6) " : "") + (bright !== 1 ? `brightness(${bright})` : "");
+    tint.style.display = tinted ? "" : "none";
+    const l = lighten(cfg.left.color, .35), r = lighten(cfg.right.color, .35);
+    tint.style.background = `linear-gradient(to right, ${l} 0%, ${l} 30%, ${r} 70%, ${r} 100%)`;
+    // Logos: a share of the box, centred.
+    const size = Math.min(1, Math.max(0.2, Number(b.logo_size) || 0.75));
+    for (const img of logos) Object.assign(img.style, { width: size * 100 + "%", height: size * 100 + "%" });
+    rotate(b.sponsors || [], b.seconds);
+  };
+})();

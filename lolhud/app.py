@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import outputs
 from .cams import CamHub, Director, get_json, post_json
-from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, WEB_DIR, web_file
+from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from . import companion
 from .log import log, since
@@ -296,6 +296,22 @@ class HudApp:
                     # How long ago game_time was read: pages run the clock on from then.
                     "game_time_age": round(max(0.0, time.time() - self.fetched_at), 3)}
 
+    def save_sponsor(self, filename, data_b64):
+        """Store an uploaded sponsor logo; it joins the rotation when the
+        sponsors are saved. Returns its path."""
+        name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename or "sponsor.png"))
+        if os.path.splitext(name)[1].lower() not in (".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif"):
+            raise ValueError("Sponsor logos must be PNG, JPG, WEBP, GIF or SVG")
+        os.makedirs(SPONSOR_DIR, exist_ok=True)
+        base, ext = os.path.splitext(name)
+        n = 1
+        while os.path.exists(os.path.join(SPONSOR_DIR, name)):   # don't overwrite one in use
+            n += 1
+            name = f"{base}-{n}{ext}"
+        with open(os.path.join(SPONSOR_DIR, name), "wb") as f:
+            f.write(base64.b64decode(data_b64))
+        return f"sponsors/{name}"
+
     def save_logo(self, side, filename, data_b64):
         name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename or "logo.png"))
         if os.path.splitext(name)[1].lower() not in (".png", ".jpg", ".jpeg", ".webp", ".svg"):
@@ -352,7 +368,7 @@ class HudApp:
             else "Companion can only control this app from this PC")
 
     def open_folder(self, which):
-        folders = {"output": self.config.output_dir(), "logos": LOGO_DIR, "app": DATA_DIR}
+        folders = {"output": self.config.output_dir(), "logos": LOGO_DIR, "app": DATA_DIR, "sponsors": SPONSOR_DIR}
         path = folders[which]
         os.makedirs(path, exist_ok=True)
         if sys.platform == "win32":
@@ -580,6 +596,14 @@ def make_handler(app):
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if path == "/api/config":
                     app.config.update(body)
+                elif path == "/api/sponsor":
+                    return self._send(json.dumps({"path": app.save_sponsor(body.get("filename"), body["data"])}))
+                elif path == "/api/sponsors":
+                    sponsors = [str(p) for p in body.get("sponsors", []) if web_file(str(p))]
+                    seconds = max(1.0, min(60.0, float(body.get("seconds") or 5)))
+                    app.config.update({"sponsor_box": {"sponsors": sponsors, "seconds": seconds}})
+                    log(f"Sponsors saved: {len(sponsors)} logo(s), {seconds:g} s each" if sponsors
+                        else "Sponsors saved: none (the box shows just the background loop)")
                 elif path == "/api/logo":
                     app.save_logo(body["side"], body.get("filename"), body["data"])
                 elif path == "/api/mode":

@@ -21,6 +21,7 @@ WEB_DIR = os.path.join(RESOURCE_DIR, "web")
 LOGO_DIR = os.path.join(DATA_DIR, "logos")
 PROFILE_DIR = os.path.join(DATA_DIR, "profiles")  # imported HUD profiles
 MEDIA_DIR = os.path.join(DATA_DIR, "media")        # background videos
+SPONSOR_DIR = os.path.join(DATA_DIR, "sponsors")   # uploaded sponsor logos (served as sponsors/...)
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 DEFAULTS = {
@@ -61,6 +62,13 @@ DEFAULTS = {
     "bg_tint": True,
     # Brightness of the video lines (1.0 = as filmed / tinted).
     "bg_brightness": 1.0,
+    # The sponsor box: covers the spectator's observer controls (camera mode
+    # and fog of war, bottom left) with the background loop, tinted in both
+    # teams' colours, and sponsor logos in turn. rect is x, y, w, h on the
+    # 1920x1080 overlay. bg_video "" is the default loop.
+    "sponsor_box": {"enabled": True, "rect": [0, 964, 304, 116], "sponsors": [], "seconds": 5,
+                    "bg_video": "", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
+                    "logo_size": 0.75, "outline": False},
     # Which screen the "HUD on the game" window covers (0 = main screen).
     "overlay_screen": 0,
     # Observer client: the GFX PC whose HUD to show, e.g. http://192.168.2.40:8777/overlay
@@ -215,6 +223,8 @@ def web_file(rel):
         candidates.append((PROFILE_DIR, rel[len("profiles/"):]))
     if rel.startswith("media/"):
         candidates.append((MEDIA_DIR, rel[len("media/"):]))
+    if rel.startswith("sponsors/"):
+        candidates.append((SPONSOR_DIR, rel[len("sponsors/"):]))
     candidates.append((WEB_DIR, rel))
     for base, sub in candidates:
         path = os.path.normpath(os.path.join(base, sub))

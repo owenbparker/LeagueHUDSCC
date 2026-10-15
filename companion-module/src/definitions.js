@@ -16,6 +16,7 @@ const TOGGLES = {
 	timer_elder: 'Objective timer: Elder Drake',
 	timer_baron: 'Objective timer: Baron',
 	bg_tint: 'Background video: tint with team colours',
+	sponsor_box: 'Sponsors: sponsor box over the observer controls',
 }
 
 // On/off states that can only be read (feedbacks), not toggled.

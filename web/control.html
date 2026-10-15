@@ -107,6 +107,16 @@
   .obj-icon.big { flex: 0 0 36px; width: 36px; height: 36px; }
   .checks .dot { width: 18px; height: 18px; box-shadow: none; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; }
   .warn { color: #ffcf66; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--text); background: rgba(49,195,146,.06); }
+  .sponsor-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .sponsor { position: relative; width: 160px; height: 62px; background: #111 center/contain no-repeat; border: 1px solid var(--line); border-radius: 6px; }
+  .sponsor .n { position: absolute; left: 4px; top: 2px; font-size: 11px; color: var(--muted); }
+  .sponsor .tools { position: absolute; right: 2px; bottom: 2px; display: flex; gap: 2px; }
+  .sponsor .tools button { padding: 0 6px; font-size: 12px; line-height: 18px; }
+  #sponsor-save { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
+  .rect4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .rect4 input { width: 100%; }
   .screen-result { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .screen-result figure { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
   .screen-result img { width: 100%; image-rendering: pixelated; background: #fff; border-radius: 3px; }
@@ -221,6 +231,35 @@
       <button type="button" id="preview-fb-right">Preview: right team</button>
     </div>
     <p class="note">When a team draws first blood, a stinger wipes across their side of the top bar, which fills with their colour and logo and "FIRST BLOOD", then wipes back (under 3 seconds). Preview plays it on the overlay now.</p>
+  </section>
+
+  <section class="wide">
+    <h2>Sponsors</h2>
+    <label class="toggle"><input type="checkbox" id="sb-on"> Sponsor box over the observer controls (bottom left)</label>
+    <div id="sponsor-drop" class="drop" tabindex="0">Drop sponsor logos here, or <u>choose files</u>
+      <input type="file" id="sponsor-files" accept=".png,.jpg,.jpeg,.webp,.gif,.svg" multiple hidden></div>
+    <div id="sponsor-list" class="sponsor-list"></div>
+    <div class="row" style="margin-top:10px;align-items:center">
+      <label style="margin:0;flex:0 0 auto">Seconds each <input type="number" id="sponsor-seconds" min="1" max="60" step="0.5" style="width:70px"></label>
+      <button type="button" id="sponsor-save" style="flex:0 0 auto">Save sponsors</button>
+      <span class="note" id="sponsor-note" style="margin:0"></span>
+    </div>
+    <p class="note">Shown in turn in the box, in this order. Saving puts them on the HUD now and makes them the rotation every time the app starts.</p>
+    <div class="row" style="margin-top:12px">
+      <div><label>Logo size <span id="sb-size-val"></span></label><input type="range" id="sb-size" min="0.2" max="1" step="0.05"></div>
+      <div><label>Background loop</label><select id="sb-video"><option value="">Default loop</option><option value="hud">Same video as the HUD's lines</option></select></div>
+    </div>
+    <div class="row">
+      <div><label>Playback speed <span id="sb-speed-val"></span></label><input type="range" id="sb-speed" min="0.1" max="3" step="0.05"></div>
+      <div><label>Brightness <span id="sb-bright-val"></span></label><input type="range" id="sb-bright" min="0.2" max="2.5" step="0.05"></div>
+    </div>
+    <label class="toggle"><input type="checkbox" id="sb-tint"> Tint with both teams' colours</label>
+    <label>Position on the overlay (x, y, width, height)</label>
+    <div class="rect4"><input type="number" id="sb-x"><input type="number" id="sb-y"><input type="number" id="sb-w"><input type="number" id="sb-h"></div>
+    <div class="row" style="margin-top:8px;align-items:center">
+      <label class="toggle" style="margin:0"><input type="checkbox" id="sb-outline"> Outline it, to line it up</label>
+      <button type="button" id="sb-reset" style="flex:0 0 auto">Reset position</button>
+    </div>
   </section>
 
   <section class="wide">
@@ -598,8 +637,89 @@ function applyCompanion(c) {
   $("companion-addr").textContent = `${c.lan ? c.host : "127.0.0.1"}  port ${c.port}`;
 }
 
+// Sponsors: the box over the observer controls, and its logos.
+let sponsors = null, sponsorsSaved = "";
+const SB_RECT = [0, 964, 304, 116];
+function sponsorUrl(p) { return "/" + p.split("/").map(encodeURIComponent).join("/"); }
+function drawSponsors() {
+  const list = $("sponsor-list");
+  list.innerHTML = "";
+  sponsors.forEach((p, i) => {
+    const d = document.createElement("div");
+    d.className = "sponsor";
+    d.style.backgroundImage = `url("${sponsorUrl(p)}")`;
+    d.title = p.split("/").pop();
+    d.innerHTML = `<span class="n">${i + 1}</span><span class="tools"><button type="button" title="Earlier">◀</button><button type="button" title="Later">▶</button><button type="button" title="Remove">✕</button></span>`;
+    const [back, fwd, del] = d.querySelectorAll("button");
+    back.onclick = () => { if (i > 0) { [sponsors[i - 1], sponsors[i]] = [sponsors[i], sponsors[i - 1]]; drawSponsors(); } };
+    fwd.onclick = () => { if (i < sponsors.length - 1) { [sponsors[i + 1], sponsors[i]] = [sponsors[i], sponsors[i + 1]]; drawSponsors(); } };
+    del.onclick = () => { sponsors.splice(i, 1); drawSponsors(); };
+    list.appendChild(d);
+  });
+  const changed = JSON.stringify([sponsors, Number($("sponsor-seconds").value)]) !== sponsorsSaved;
+  $("sponsor-note").textContent = changed ? "Not saved yet" : (sponsors.length ? `${sponsors.length} on the HUD` : "None yet: the box shows just the loop");
+  $("sponsor-note").className = "note" + (changed ? " warn" : "");
+}
+async function addSponsorFiles(files) {
+  for (const file of files) {
+    if (!/\.(png|jpe?g|webp|gif|svg)$/i.test(file.name)) continue;
+    const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.readAsDataURL(file); });
+    const r = await (await fetch("/api/sponsor", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                  body: JSON.stringify({ filename: file.name, data }) })).json();
+    if (r.error) { alert(r.error); continue; }
+    sponsors.push(r.path);
+    drawSponsors();
+  }
+}
+const drop = $("sponsor-drop");
+drop.onclick = () => $("sponsor-files").click();
+$("sponsor-files").onchange = e => { addSponsorFiles([...e.target.files]); e.target.value = ""; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addSponsorFiles([...e.dataTransfer.files]); };
+$("sponsor-seconds").oninput = drawSponsors;
+$("sponsor-save").onclick = async () => {
+  await post("/api/sponsors", { sponsors, seconds: Number($("sponsor-seconds").value) || 5 });
+  sponsorsSaved = JSON.stringify([sponsors, Number($("sponsor-seconds").value)]);
+  drawSponsors();
+};
+const sbPost = changes => post("/api/config", { sponsor_box: changes });
+$("sb-on").onchange = e => sbPost({ enabled: e.target.checked });
+$("sb-tint").onchange = e => sbPost({ bg_tint: e.target.checked });
+$("sb-outline").onchange = e => sbPost({ outline: e.target.checked });
+$("sb-video").onchange = e => sbPost({ bg_video: e.target.value });
+for (const [id, key] of [["sb-size", "logo_size"], ["sb-speed", "bg_speed"], ["sb-bright", "bg_brightness"]]) {
+  let t = null;
+  $(id).addEventListener("input", e => { clearTimeout(t); t = setTimeout(() => sbPost({ [key]: Number(e.target.value) }), 120); });
+}
+for (const id of ["sb-x", "sb-y", "sb-w", "sb-h"])
+  $(id).addEventListener("change", () => sbPost({ rect: ["sb-x", "sb-y", "sb-w", "sb-h"].map(k => Number($(k).value) || 0) }));
+$("sb-reset").onclick = () => sbPost({ rect: SB_RECT });
+function applySponsorBox(cfg) {
+  const b = cfg.sponsor_box || {};
+  if (sponsors === null) {   // loaded once; then edited here until saved
+    sponsors = [...(b.sponsors || [])];
+    $("sponsor-seconds").value = b.seconds || 5;
+    sponsorsSaved = JSON.stringify([sponsors, Number($("sponsor-seconds").value)]);
+    drawSponsors();
+  }
+  $("sb-on").checked = b.enabled !== false;
+  $("sb-tint").checked = b.bg_tint !== false;
+  $("sb-outline").checked = !!b.outline;
+  setIfIdle($("sb-video"), b.bg_video === "hud" ? "hud" : "");
+  for (const [id, key, d, fmt] of [["sb-size", "logo_size", .75, v => Math.round(v * 100) + "%"],
+                                   ["sb-speed", "bg_speed", 1, v => v.toFixed(2) + "×"],
+                                   ["sb-bright", "bg_brightness", 1, v => Math.round(v * 100) + "%"]]) {
+    const v = Number(b[key] ?? d);
+    setIfIdle($(id), v);
+    $(id + "-val").textContent = fmt(v);
+  }
+  (b.rect || SB_RECT).forEach((v, i) => setIfIdle($(["sb-x", "sb-y", "sb-w", "sb-h"][i]), v));
+}
+
 function apply(s) {
   applyMatchTime(s.app.match_time);
+  applySponsorBox(s.config);
   applyCompanion(s.app.companion);
   const first = !state;
   const logosChanged = !state || ["left", "right"].some(x => state.config[x].logo !== s.config[x].logo);

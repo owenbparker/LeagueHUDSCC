@@ -87,11 +87,12 @@
 </svg>
 <div id="fx"></div>
 <script src="overlay_cams.js"></script>
+<script src="overlay_sponsor.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
 const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true),
-               cams: opt("cams", true) };
+               cams: opt("cams", true), sponsors: opt("sponsors", true) };
 const $ = id => document.getElementById(id);
 if (opt("fit", false)) {
   // Scales with the screen's height like League's own top bar does.
@@ -624,6 +625,7 @@ function render(s) {
   drawTimers(f, cfg.objective_timers || {}, cfg.next_dragon || s.detail.next_dragon);
   checkAnimations(s);
   renderCams(s, SHOW.cams);
+  if (SHOW.sponsors) renderSponsorBox(s);
   setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);
   // The game reports its clock about once a second; only restart the
   // extrapolation when it moves, so a paused game freezes the timer. It
