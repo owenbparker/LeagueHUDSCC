@@ -190,6 +190,7 @@ class SeenObjectives:
         self.counts = {k: None for k in self.KEYS}
         self.times = {k: [] for k in self.KEYS}
         self.game_time = None
+        self.spawned = None   # (element, game time) from the "Dragon has spawned!" banner
 
     def update(self, screen_counts, game_time):
         if self.game_time is not None and game_time < self.game_time - 5:
@@ -320,6 +321,14 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
 
     # Objective timers: a countdown, "LIVE", or blank when the objective is
     # gone for the game (or not up yet, for elder) or switched off.
+    # The next dragon's element, once it's known: the third dragon's element
+    # becomes the rift's, and every dragon after it is the same. Before
+    # that, the one up now, from its spawn banner on screen (until it's taken).
+    next_dragon = last["dragon_types"][2] if len(last["dragon_types"]) >= 3 else None
+    spawned = seen_objectives.spawned if seen_objectives is not None else None
+    if next_dragon is None and spawned and spawned[0] and spawned[0] != "Elder" \
+            and spawned[1] >= (last["dragon"] if last["dragon"] is not None else -1):
+        next_dragon = spawned[0]
     soul_taken = any(n >= 4 for n in dragon_count.values())
     if last["dragon"] is None:
         dragon_spawn = timers["dragon_first"]
@@ -398,7 +407,7 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
         "dragons": {side: obj[side_team[side]]["dragons"] for side in SIDES},
         # The next dragon's element, once it's known: the third dragon's
         # element becomes the rift's, and every dragon after it is the same.
-        "next_dragon": last["dragon_types"][2] if len(last["dragon_types"]) >= 3 else None,
+        "next_dragon": next_dragon,
         # Which side drew first blood, and when (the overlay animates it once).
         "first_blood": ({"side": team_side[last["first_blood"][1]], "time": round(last["first_blood"][0], 1)}
                         if last["first_blood"] and last["first_blood"][1] in team_side else None),

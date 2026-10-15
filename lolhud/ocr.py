@@ -14,6 +14,7 @@ its gold estimate.
 
 import asyncio
 import io
+import os
 import re
 import sys
 import threading
@@ -203,7 +204,7 @@ def _bitmap_to_image(ctypes, gdi32, mdc, bmp, width, height):
     return Image.frombuffer("RGB", (width, height), buf.raw, "raw", "BGRX", 0, 1)
 
 
-def capture_league(full=False):
+def capture_league(full=False, top=None):
     """The League window's client area as an image (just the top bar unless
     full), or (None, reason)."""
     ctypes, wintypes, user32, gdi32 = _win32()
@@ -219,6 +220,8 @@ def capture_league(full=False):
         return None, "League window is too small"
     # Only the top bar is needed for the gold.
     strip = height if full else max(1, int(height * 0.05) + 2)
+    if top and not full:   # more of the screen, in 1080p rows (e.g. down to the dragon banner)
+        strip = min(height, max(strip, round(top * height / REF_HEIGHT)))
 
     screen = user32.GetDC(None)
     mdc = gdi32.CreateCompatibleDC(screen)
@@ -424,6 +427,7 @@ class ScreenGold:
         self.read_at = 0.0
         self.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
         self.counts_at = {}          # (team, counter) -> when it was last read cleanly
+        self.dragon_spawned = (None, 0.0)   # (element or None, when its banner was read)
         self._pending_counts = {}
         self._last_missed = []
         self.status = "starting"
@@ -509,7 +513,8 @@ class ScreenGold:
         return False
 
     def read_once(self):
-        captured, reason = capture_league()
+        from .dragons import TOP_ROWS
+        captured, reason = capture_league(top=TOP_ROWS)
         if not captured:
             return None, reason
         image, height = captured
@@ -519,7 +524,23 @@ class ScreenGold:
             result["_counters"] = read_counters(image, self.ocr, height, cfg.get("counter_ocr_boxes"))
         except Exception as e:  # counters are a bonus; never lose the gold over them
             result["_counters"] = {"error": repr(e)}
+        try:
+            self._check_dragon_banner(image, height)
+        except Exception as e:   # a bonus too
+            log(f"Couldn't read the dragon banner: {e!r}", "warn")
         return result, None
+
+    def _check_dragon_banner(self, image, height):
+        """The "Dragon has spawned!" banner: which element (see dragons.py)."""
+        from .config import DATA_DIR
+        from .dragons import read_banner
+        if time.time() - self.dragon_spawned[1] < 20:
+            return   # this banner's been read already
+        found = read_banner(image, self.ocr, height, os.path.join(DATA_DIR, "dragon-banners"))
+        if found:
+            element, text = found
+            self.dragon_spawned = (element, time.time())
+            log(f"Dragon spawned: {element or 'element not clear from the banner'} ({text.strip()!r})")
 
     def _run(self):
         last_reason = None

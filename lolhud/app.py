@@ -56,6 +56,7 @@ class HudApp:
         self.server = None
         self.screen_gold = ScreenGold(config)
         self.seen_objectives = SeenObjectives()   # when the top bar's counters went up
+        self._dragon_banner_at = 0.0
         self.updater = Updater()
         self.overlay_window = None  # the desktop app's HUD-over-the-game window
         self.preview = None  # an animation the control panel asked to see
@@ -98,6 +99,12 @@ class HudApp:
             self.raw = self.source.fetch()
             self.fetched_at = time.time()   # when the game reported game_time
         live = self.mode == "live"
+        element, seen_at = self.screen_gold.dragon_spawned
+        if live and seen_at and seen_at != self._dragon_banner_at:
+            # A dragon's spawn banner was just read: note it at this game time.
+            self._dragon_banner_at = seen_at
+            game_time = float(((self.raw or {}).get("gameData") or {}).get("gameTime") or 0)
+            self.seen_objectives.spawned = (element, game_time)
         state = build_state(self.raw, self.config.get(), self.ddragon,
                             self.screen_gold.fresh() if live else None,
                             self.screen_gold.fresh_counts() if live else None, self.seen_objectives)

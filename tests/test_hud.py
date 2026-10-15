@@ -94,6 +94,31 @@ class StateTests(unittest.TestCase):
         at(100, 0, 0)
         self.assertEqual(seen.times["dragons"], [])
 
+    def test_dragon_from_its_spawn_banner(self):
+        from PIL import Image
+        from lolhud import dragons
+        from lolhud.state import SeenObjectives
+        here = os.path.join(os.path.dirname(__file__), "fixtures")
+        banner = Image.open(os.path.join(here, "dragon-banner-infernal.png")).convert("RGB")
+        self.assertTrue(dragons.banner_showing(banner, 1080))
+        self.assertEqual(dragons.classify(dragons.portrait_colours(banner, 1080)), "Infernal")
+        plain = Image.open(os.path.join(here, "top-bar-no-banner.png")).convert("RGB")
+        self.assertFalse(dragons.banner_showing(plain, 1080))
+        # Unclear colours: no guess.
+        self.assertIsNone(dragons.classify({"warm": .3, "green": .3, "teal": .2, "blue": .2,
+                                            "whitish": .05, "saturation": .5}))
+        # The HUD's next dragon: the one up now, until it's taken.
+        raw = load()
+        raw["events"]["Events"] = [e for e in raw["events"]["Events"] if e.get("EventName") != "DragonKill"]
+        seen = SeenObjectives()
+        seen.spawned = ("Infernal", 300.0)
+        raw["gameData"]["gameTime"] = 301.0
+        self.assertEqual(build_state(raw, cfg(), seen_objectives=seen)["detail"]["next_dragon"], "Infernal")
+        raw["events"]["Events"].append({"EventID": 9999, "EventName": "DragonKill", "EventTime": 320.0,
+                                        "DragonType": "Fire", "KillerName": "x"})
+        raw["gameData"]["gameTime"] = 330.0
+        self.assertIsNone(build_state(raw, cfg(), seen_objectives=seen)["detail"]["next_dragon"])
+
     def test_grubs_and_herald_timers(self):
         raw = load()
         raw["gameData"]["gameTime"] = 300.0

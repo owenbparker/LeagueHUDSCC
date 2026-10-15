@@ -629,9 +629,9 @@ function apply(s) {
   setIfIdle($("next-dragon"), cfg.next_dragon || "");
   const dragon = cfg.next_dragon || s.detail.next_dragon;
   $("next-dragon-icon").src = `assets/objectives/dragon-${dragon ? dragon.toLowerCase() : "unknown"}.png`;
-  $("next-dragon-note").textContent = cfg.next_dragon ? "Set by hand. Automatic works it out once the rift has formed."
-    : s.detail.next_dragon ? `The rift is ${s.detail.next_dragon}: every dragon from now on.`
-    : "Automatic: known once the third dragon is taken (it sets the rift). Until then a grey dragon, or pick one.";
+  $("next-dragon-note").textContent = cfg.next_dragon ? "Set by hand. Automatic works it out from the screen and the rift."
+    : s.detail.next_dragon ? `Next dragon: ${s.detail.next_dragon} (from its spawn banner on screen, or the rift once it forms).`
+    : "Automatic: read from the \"Dragon has spawned!\" banner on this PC's screen, and known for good once the third dragon sets the rift. Until then a grey dragon, or pick one.";
   $("anim-first-blood").checked = (cfg.animations || {}).first_blood !== false;
   applyCams(s);
   $("counters").querySelectorAll("input").forEach(box => box.checked = (cfg.strip_counters || {})[box.dataset.counter] !== false);
