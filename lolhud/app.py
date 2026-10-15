@@ -21,6 +21,8 @@ from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from .log import log, since
+from .matchtime import MatchSync, ReplayClient, enable_replay_api, run_follower
+from .matchtime import fmt as fmt_time
 from .ocr import ScreenGold
 from .updater import Updater, clean_up_old_update
 from . import profiles
@@ -64,6 +66,8 @@ class HudApp:
         self.director.enabled = lambda: (bool(self.config.get()["cams"].get("director"))
                                          and self.role in ("gfx", "observer"))
         self._gfx_roster = (0.0, None)
+        # Match time: every PC's League client at the same moment (see matchtime.py).
+        self.match_sync = MatchSync(ReplayClient(cfg["api_url"]))
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._was_connected = None
@@ -182,6 +186,32 @@ class HudApp:
         return {"ok": True, "focus": focus, "seen": seen, "lines": [t for t, _ in lines][:40],
                 "image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()}
 
+    def sync_all(self):
+        """Every client (this PC, the GFX PC and its observers) to 0:00."""
+        if self.role == "observer":
+            try:
+                reply = post_json(self._gfx_base() + "/api/sync", {"time": 0, "scope": "all"})
+            except Exception as e:
+                raise ValueError(f"Couldn't reach the GFX PC: {getattr(e, 'reason', e)}")
+            self.match_sync.status = "Sent to the GFX PC: all clients to 0:00"
+            return reply
+        return self.match_sync.issue(0, "all")
+
+    def sync_gfx_to_me(self):
+        """Observer: the GFX PC's game to this PC's time, half a second ahead."""
+        if self.role != "observer":
+            raise ValueError("This is for the Observer Client")
+        mine = self.match_sync.mine_plus(0.5)
+        try:
+            reply = post_json(self._gfx_base() + "/api/sync", {"time": mine, "scope": "gfx"})
+        except Exception as e:
+            raise ValueError(f"Couldn't reach the GFX PC: {getattr(e, 'reason', e)}")
+        if not reply.get("ok"):
+            raise ValueError(reply.get("status") or reply.get("error") or "The GFX PC couldn't sync")
+        self.match_sync.status = f"GFX PC synced to {fmt_time(mine)} (0.5 s ahead of this PC)"
+        log(self.match_sync.status)
+        return reply
+
     def swap_teams(self):
         cfg = self.config.get()
         pin = cfg["cams"].get("pin") or {}
@@ -235,6 +265,7 @@ class HudApp:
                 "screen_gold": screen, "update": self.updater.info(),
                 "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
                 "director": self.director.status,
+                "match_time": {"status": self.match_sync.status, "local": self.match_sync.local},
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
     def snapshot(self):
@@ -410,6 +441,8 @@ def make_handler(app):
                 self.send_response(302)
                 self.send_header("Location", "/control")
                 self.end_headers()
+            elif path == "/api/sync":
+                self._send(json.dumps(app.match_sync.public()))
             elif path == "/api/observer/check":
                 # Observer client: can this PC reach the GFX PC's HUD?
                 if not _is_local(self.client_address[0]):
@@ -474,6 +507,14 @@ def make_handler(app):
             url = urlparse(self.path)
             path = url.path
             length = int(self.headers.get("Content-Length") or 0)
+            if path == "/api/sync":
+                # Observer clients: sync commands (all clients, or this PC's game).
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    scope = "gfx" if body.get("scope") == "gfx" else "all"
+                    return self._send(json.dumps(app.match_sync.issue(float(body.get("time") or 0), scope)))
+                except (ValueError, TypeError) as e:
+                    return self._send(json.dumps({"error": str(e)}), status=400)
             if path in ("/api/cam/poll", "/api/cam/send", "/api/cams/focus"):
                 try:
                     body = json.loads(self.rfile.read(length) or b"{}")
@@ -547,6 +588,16 @@ def make_handler(app):
                     app.preview = {"name": body["name"], "side": body["side"], "id": time.time()}
                 elif path == "/api/role":
                     app.set_role(body.get("role"))
+                elif path == "/api/match/sync-all":
+                    app.sync_all()
+                elif path == "/api/match/sync-gfx":
+                    app.sync_gfx_to_me()
+                elif path == "/api/match/enable":
+                    changed = enable_replay_api()
+                    log(f"Time control turned on in {changed}: restart the League client" if changed
+                        else "Time control was already on in League's game.cfg")
+                    app.match_sync.status = ("Turned on: restart the League spectator client" if changed
+                                             else "Already on in League's game.cfg")
                 elif path == "/api/teams/swap":
                     app.swap_teams()
                 elif path == "/api/cams/test":
@@ -629,6 +680,7 @@ def start(app):
     clean_up_old_update()
     app.updater.check_in_background()
     threading.Thread(target=app.run_poller, daemon=True).start()
+    threading.Thread(target=run_follower, args=(app, app._stop), daemon=True).start()
     log(f"League HUD {app.updater.current} running - control panel http://localhost:{port}/control")
     log(f"Overlay (browser source, 1920x1080): http://localhost:{port}/overlay")
     log(f"vMix data source: http://localhost:{port}/hud.csv  - file: {app.config.output_dir()}")

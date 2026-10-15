@@ -202,6 +202,15 @@
   </section>
 
   <section>
+    <h2>Match time</h2>
+    <div class="note" id="match-local" style="margin:0 0 10px"></div>
+    <button type="button" id="sync-all" style="width:100%">Sync all clients to 0:00</button>
+    <div class="note" id="match-status"></div>
+    <button type="button" id="match-enable" style="margin-top:10px">Turn on time control</button>
+    <p class="note">Jumps the League spectator client on this PC, and on every Observer Client connected to it, to 0:00 at the same moment. Needs League's Replay API: click "Turn on time control" once on each PC, then restart the League client.</p>
+  </section>
+
+  <section>
     <h2>Animations</h2>
     <div class="checks">
       <label><input type="checkbox" id="anim-first-blood"><span class="dot" style="background:#c0392b">FB</span>First blood</label>
@@ -536,7 +545,18 @@ function showAdj(side, adj) {
 
 function setIfIdle(el, value) { if (document.activeElement !== el) el.value = value; }
 
+$("sync-all").onclick = () => post("/api/match/sync-all", {});
+$("match-enable").onclick = () => post("/api/match/enable", {});
+function applyMatchTime(info) {
+  const m = info || {}, local = m.local || {};
+  $("match-local").textContent = local.error ? "This PC's game: " + local.error
+    : local.time !== undefined ? `This PC's game: ${Math.floor(local.time / 60)}:${String(Math.floor(local.time % 60)).padStart(2, "0")}${local.paused ? " (paused)" : ""}`
+    : "";
+  $("match-status").textContent = m.status || "";
+}
+
 function apply(s) {
+  applyMatchTime(s.app.match_time);
   const first = !state;
   const logosChanged = !state || ["left", "right"].some(x => state.config[x].logo !== s.config[x].logo);
   state = s;

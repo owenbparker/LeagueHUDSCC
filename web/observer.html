@@ -75,6 +75,17 @@
       <button id="director-test" class="small">Test screen read</button>
       <div id="director-result"></div>
     </div>
+    <div class="cams">
+      <label>Match time</label>
+      <div class="status" id="match-local"></div>
+      <div class="row" style="gap:8px">
+        <button id="sync-all" class="small" style="flex:1">Sync all clients to 0:00</button>
+        <button id="sync-gfx" class="small" style="flex:1">Sync GFX to my time</button>
+      </div>
+      <div class="status" id="match-status"></div>
+      <button id="match-enable" class="small">Turn on time control</button>
+      <p class="note">"Sync all clients" jumps every League client (the GFX PC's and every observer's) to 0:00 together. "Sync GFX to my time" puts the GFX PC's League client half a second ahead of this one. Each PC needs League's Replay API: click "Turn on time control" once, then restart the League client.</p>
+    </div>
   </section>
 </main>
 <script src="update.js"></script>
@@ -109,6 +120,11 @@ function apply(s) {
     ? s.app.director + " (League in Borderless or Windowed on this PC)"
     : "Reads the player name tags nearest the middle of the screen and tells the GFX PC whose cam to show.";
   if (document.activeElement !== $("screen")) $("screen").value = String(ow.screen || 0);
+  const mt = s.app.match_time || {}, local = mt.local || {};
+  $("match-local").textContent = local.error ? "This PC's game: " + local.error
+    : local.time !== undefined ? `This PC's game: ${Math.floor(local.time / 60)}:${String(Math.floor(local.time % 60)).padStart(2, "0")}${local.paused ? " (paused)" : ""}`
+    : "";
+  $("match-status").textContent = mt.status || "";
   if (first) {
     check();
     if (s.app.role !== "observer") fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"role":"observer"}' }).catch(() => {});
@@ -116,6 +132,10 @@ function apply(s) {
 }
 
 // Can this PC reach the GFX PC's HUD?
+$("sync-all").onclick = () => post("/api/match/sync-all", {});
+$("sync-gfx").onclick = () => post("/api/match/sync-gfx", {});
+$("match-enable").onclick = () => post("/api/match/enable", {});
+
 async function check() {
   const url = $("url").value.trim();
   const id = ++checking;
