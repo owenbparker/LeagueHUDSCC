@@ -216,7 +216,7 @@ def run_follower(app, stop):
     from .cams import get_json
     failed, checked = False, 0.0
     while not stop.is_set():
-        if time.time() - checked >= 1:   # this PC's own game time, for the panels
+        if time.time() - checked >= 1:   # this PC's own game time, for the panels (they run it on between reads)
             checked = time.time()
             try:
                 app.match_sync.enabled = replay_api_enabled()
@@ -224,7 +224,8 @@ def run_follower(app, stop):
                 pass
             try:
                 st = app.match_sync.replay.get()
-                app.match_sync.local = {"time": float(st.get("time") or 0), "paused": bool(st.get("paused"))}
+                app.match_sync.local = {"time": float(st.get("time") or 0), "paused": bool(st.get("paused")),
+                                        "speed": float(st.get("speed") or 1), "at": time.time()}
             except Exception as e:
                 app.match_sync.local = {"error": str(e)}
         if app.role == "observer" and app.config.get().get("observer_url"):

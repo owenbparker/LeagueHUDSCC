@@ -548,11 +548,26 @@ function setIfIdle(el, value) { if (document.activeElement !== el) el.value = va
 
 $("sync-all").onclick = () => post("/api/match/sync-all", {});
 $("match-enable").onclick = () => post("/api/match/enable", {});
+// Clocks shown here run on between updates (the app reads them once a
+// second): from when the game reported them, so they match the game's.
+let gameClock = { base: -1, at: 0, running: false }, replayClock = null;
+function mmss(t) { t = Math.max(0, Math.floor(t)); return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
+function tickClocks() {
+  if (gameClock.base >= 0)
+    $("clock").textContent = mmss(gameClock.base + (gameClock.running ? Math.min(2.5, (performance.now() - gameClock.at) / 1000) : 0));
+  if (replayClock) {
+    const r = replayClock, run = r.paused ? 0 : Math.min(2.5, (performance.now() - r.at) / 1000) * r.speed;
+    $("match-local").textContent = `This PC's game: ${mmss(r.time + run)}${r.paused ? " (paused)" : ""}`;
+  }
+}
+setInterval(tickClocks, 100);
 function applyMatchTime(info) {
   const m = info || {}, local = m.local || {};
-  $("match-local").textContent = local.error ? "This PC's game: " + local.error
-    : local.time !== undefined ? `This PC's game: ${Math.floor(local.time / 60)}:${String(Math.floor(local.time % 60)).padStart(2, "0")}${local.paused ? " (paused)" : ""}`
-    : "";
+  replayClock = !local.error && local.time !== undefined
+    ? { time: local.time, paused: local.paused, speed: local.speed || 1, at: performance.now() - 1000 * (local.age || 0) } : null;
+  if (local.error) $("match-local").textContent = "This PC's game: " + local.error;
+  else if (!replayClock) $("match-local").textContent = "";
+  tickClocks();
   $("match-status").textContent = m.status || "";
   const on = m.enabled === true;
   $("match-enable").classList.toggle("on", on);
@@ -571,7 +586,10 @@ function apply(s) {
   // Short status here; the full error is in the log.
   $("status").textContent = s.detail.connected ? "Game connected" : "Waiting for a game…";
   $("status").title = s.detail.error || "";
-  $("clock").textContent = f.TIMER;
+  // Run the clock on between updates, from when the game reported it.
+  if (s.detail.game_time !== gameClock.base)
+    gameClock = { base: s.detail.game_time, at: performance.now() - 1000 * (s.game_time_age || 0),
+                  running: s.detail.connected && s.detail.game_time > gameClock.base };
   for (const side of ["left", "right"]) {
     const el = document.querySelector(`.team.${side}`);
     el.querySelectorAll("input[data-k]").forEach(i => setIfIdle(i, cfg[side][i.dataset.k]));

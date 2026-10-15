@@ -51,6 +51,7 @@ class HudApp:
         self.raw = None
         self.state = build_state(None, cfg, self.ddragon)
         self.updated_at = 0.0
+        self.fetched_at = time.time()
         self.server = None
         self.screen_gold = ScreenGold(config)
         self.updater = Updater()
@@ -93,6 +94,7 @@ class HudApp:
     def refresh(self, fetch=True):
         if fetch:
             self.raw = self.source.fetch()
+            self.fetched_at = time.time()   # when the game reported game_time
         live = self.mode == "live"
         state = build_state(self.raw, self.config.get(), self.ddragon,
                             self.screen_gold.fresh() if live else None,
@@ -265,7 +267,9 @@ class HudApp:
                 "screen_gold": screen, "update": self.updater.info(),
                 "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
                 "director": self.director.status,
-                "match_time": {"status": self.match_sync.status, "local": self.match_sync.local,
+                "match_time": {"status": self.match_sync.status,
+                               "local": {**self.match_sync.local,
+                                         "age": round(time.time() - self.match_sync.local.get("at", time.time()), 3)},
                                "enabled": self.match_sync.enabled},
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR}
 
@@ -277,7 +281,9 @@ class HudApp:
                     "cams": self.cams.info(cfg, detail),
                     "updated_at": self.updated_at, "config": cfg,
                     "profiles_version": profiles.version(), "preview": self.preview,
-                    "output_dir": self.config.output_dir(), "app": self.app_info()}
+                    "output_dir": self.config.output_dir(), "app": self.app_info(),
+                    # How long ago game_time was read: pages run the clock on from then.
+                    "game_time_age": round(max(0.0, time.time() - self.fetched_at), 3)}
 
     def save_logo(self, side, filename, data_b64):
         name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename or "logo.png"))

@@ -626,14 +626,17 @@ function render(s) {
   renderCams(s, SHOW.cams);
   setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);
   // The game reports its clock about once a second; only restart the
-  // extrapolation when it moves, so a paused game freezes the timer.
+  // extrapolation when it moves, so a paused game freezes the timer. It
+  // runs on from when the game reported it (game_time_age ago), not from
+  // when this page heard about it, which can be over a second later.
   const t = s.detail.game_time;
-  if (t !== clock.base) clock = { base: t, at: performance.now(), running: s.detail.connected && t > clock.base };
+  if (t !== clock.base) clock = { base: t, at: performance.now() - 1000 * (s.game_time_age || 0),
+                                  running: s.detail.connected && t > clock.base };
 }
 
 function tick() {
   let t = clock.base;
-  if (clock.running) t += Math.min(1, (performance.now() - clock.at) / 1000);
+  if (clock.running) t += Math.min(2.5, (performance.now() - clock.at) / 1000);
   t = Math.floor(t);
   const value = String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
   for (const x of texts) if (x.e.field === "TIMER") setText(x.node, value);

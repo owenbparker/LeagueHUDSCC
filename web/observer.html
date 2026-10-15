@@ -101,6 +101,16 @@ async function post(url, body) {
   if (data.error) alert(data.error); else apply(data);
 }
 
+// This PC's game time, run on between updates from when League reported it.
+let replayClock = null;
+function tickClock() {
+  const r = replayClock;
+  if (!r) return;
+  let t = Math.max(0, Math.floor(r.time + (r.paused ? 0 : Math.min(2.5, (performance.now() - r.at) / 1000) * r.speed)));
+  $("match-local").textContent = `This PC's game: ${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}${r.paused ? " (paused)" : ""}`;
+}
+setInterval(tickClock, 100);
+
 function apply(s) {
   const first = !state;
   state = s;
@@ -122,9 +132,11 @@ function apply(s) {
     : "Reads the player name tags nearest the middle of the screen and tells the GFX PC whose cam to show.";
   if (document.activeElement !== $("screen")) $("screen").value = String(ow.screen || 0);
   const mt = s.app.match_time || {}, local = mt.local || {};
-  $("match-local").textContent = local.error ? "This PC's game: " + local.error
-    : local.time !== undefined ? `This PC's game: ${Math.floor(local.time / 60)}:${String(Math.floor(local.time % 60)).padStart(2, "0")}${local.paused ? " (paused)" : ""}`
-    : "";
+  replayClock = !local.error && local.time !== undefined
+    ? { time: local.time, paused: local.paused, speed: local.speed || 1, at: performance.now() - 1000 * (local.age || 0) } : null;
+  if (local.error) $("match-local").textContent = "This PC's game: " + local.error;
+  else if (!replayClock) $("match-local").textContent = "";
+  tickClock();
   $("match-status").textContent = mt.status || "";
   const on = mt.enabled === true;
   $("match-enable").classList.toggle("on", on);
