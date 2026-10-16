@@ -85,6 +85,16 @@
                background: rgba(49,195,146,.14); color: var(--accent); font-weight: 700; font-size: 15px; }
   .connected::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
   .connected[hidden] { display: none; }
+  .find-row { display: flex; gap: 8px; align-items: stretch; }
+  .find-row input { flex: 1; min-width: 0; }
+  .find-row button, .found button { flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; border-radius: 6px; cursor: pointer;
+                                   font: 600 13px "Inter", system-ui, sans-serif; background: #252a2f; color: var(--text); border: 1px solid var(--line); }
+  .find-row button:hover, .found button:hover { border-color: var(--muted); }
+  .find-row button[disabled] { opacity: .6; cursor: progress; }
+  .found { display: grid; gap: 6px; margin-top: 8px; }
+  .found[hidden] { display: none; }
+  .found button { text-align: left; }
+  .found button small { color: var(--muted); margin-left: 8px; }
   body.game-val .preview { aspect-ratio: 16 / 9; }
 </style>
 </head>
@@ -107,7 +117,9 @@
   <div class="wrap">
     <section>
       <label for="gfx" class="app-only">GFX PC address</label>
-      <input id="gfx" class="app-only" spellcheck="false" placeholder="192.168.2.40">
+      <div class="row find-row app-only"><input id="gfx" spellcheck="false" placeholder="192.168.2.40">
+        <button id="find" type="button">Connect to HUD</button></div>
+      <div class="found app-only" id="found" hidden></div>
       <label class="lol-only">Team</label>
       <div class="seg lol-only" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
       <label class="lol-only">Player</label>
@@ -377,6 +389,7 @@ async function start() {
     } catch (e) { /* fall through to the message below */ }
   }
   $("gfx").addEventListener("change", () => { store(`camGfx-${GAME}`, $("gfx").value.trim()); claim = !!seat; online = false; wake(); });
+  $("find").onclick = findHud;
   if (APP) {
     document.body.classList.add("picking");
     await new Promise(resolve => {
@@ -398,6 +411,46 @@ async function start() {
     setTimeout(updates, 5000);
   })();
 }
+// --- finding the HUD -------------------------------------------------------------
+// Connect to HUD looks on the network for the PC running this game's HUD;
+// with none found, it asks for the address.
+function useGfx(address) {
+  $("gfx").value = address;
+  $("found").hidden = true;
+  $("gfx").dispatchEvent(new Event("change"));
+}
+
+async function findHud() {
+  const button = $("find");
+  button.disabled = true;
+  button.textContent = "Searching…";
+  $("found").hidden = true;
+  status("Looking for the HUD on the network…");
+  let huds = [];
+  try { huds = (await (await fetch(`/api/find?game=${GAME}`)).json()).huds || []; } catch (e) {}
+  button.disabled = false;
+  button.textContent = "Connect to HUD";
+  if (huds.length === 1) return useGfx(huds[0].url);
+  if (huds.length > 1) {
+    status("More than one PC is running the HUD. Pick the GFX PC:");
+    $("found").innerHTML = "";
+    for (const h of huds) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = `${h.ip}<small>${h.teams || ""}</small>`;
+      b.onclick = () => useGfx(h.url);
+      $("found").appendChild(b);
+    }
+    $("found").hidden = false;
+    return;
+  }
+  const typed = prompt("No PC running the HUD was found on the network.\n\nEnter the GFX PC's address " +
+    "(ask the GFX operator; it's under Outputs > From another PC, and \"Let other PCs on the network read the HUD\" must be ticked).",
+    $("gfx").value.trim());
+  if (typed && typed.trim()) useGfx(typed.trim());
+  else status("No HUD found. Enter the GFX PC's address, or press Connect to HUD to look again.", "bad");
+}
+
 // --- the game -----------------------------------------------------------------
 function pickGame(game) {
   const changed = GAME && GAME !== game;
@@ -409,6 +462,7 @@ function pickGame(game) {
   $("gfx").value = new URLSearchParams(location.search).get("gfx") || stored(`camGfx-${game}`)
     || (game === "lol" ? stored("camGfx") || "" : "");
   $("gfx").placeholder = `192.168.2.40${GAMES[game].port === 8777 ? "" : ":" + GAMES[game].port}`;
+  if (APP && !$("gfx").value.trim()) findHud();
   if (changed) {
     // Leave the other game's HUD and start again on this one's.
     for (const id of Object.keys(viewers)) { viewers[id].close(); delete viewers[id]; }

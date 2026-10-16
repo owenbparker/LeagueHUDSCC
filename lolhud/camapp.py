@@ -20,7 +20,7 @@ import sys
 import threading
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .config import DATA_DIR, web_file
 from .log import log
@@ -105,6 +105,25 @@ def open_riot_client():
     subprocess.Popen([exe], close_fds=True)
 
 
+HUD_PORTS = {"lol": 8777, "val": 8778}
+
+
+def find_huds_for(game):
+    """[{"ip", "url", "teams"}] of the GFX PCs running the game's HUD (not
+    observer PCs) on this PC's networks."""
+    from .discover import find_huds
+    key = "game" if game == "val" else "detail"   # (what each HUD's state carries)
+
+    def is_gfx(state):
+        return key in state and (state.get("app") or {}).get("role") != "observer"
+    out = []
+    for hit in find_huds(HUD_PORTS.get(game, 8777), is_gfx):
+        cfg = hit["state"].get("config") or {}
+        names = [(cfg.get(side) or {}).get("name") for side in ("left", "right")]
+        out.append({"ip": hit["ip"], "url": hit["url"], "teams": " vs ".join(n for n in names if n)})
+    return out
+
+
 def make_handler(updater):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -129,6 +148,10 @@ def make_handler(updater):
                 return self._send(self._state())
             if path == "/api/riot/account":
                 return self._send(json.dumps(riot_account()))
+            if path == "/api/find":
+                # The PCs on the network running this game's HUD.
+                game = (parse_qs(urlparse(self.path).query).get("game") or ["lol"])[0]
+                return self._send(json.dumps({"huds": find_huds_for(game)}))
             rel = FILES.get(path)
             full = web_file(rel) if rel else None
             if not full:
