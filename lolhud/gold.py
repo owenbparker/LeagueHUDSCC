@@ -39,6 +39,8 @@ class DataDragon:
     def __init__(self, cache_dir):
         self.version = "15.20.1"
         self.item_totals = {}
+        self.champions = {}   # numeric key -> {"id": "MonkeyKing", "name": "Wukong"}
+        self.spells = {}      # numeric key -> image file name (SummonerFlash.png)
         self.cache_path = os.path.join(cache_dir, "ddragon_cache.json")
         self._load_cache()
         threading.Thread(target=self._refresh, daemon=True).start()
@@ -49,6 +51,8 @@ class DataDragon:
                 cached = json.load(f)
             self.version = cached["version"]
             self.item_totals = {int(k): v for k, v in cached["items"].items()}
+            self.champions = {int(k): v for k, v in cached.get("champions", {}).items()}
+            self.spells = {int(k): v for k, v in cached.get("spells", {}).items()}
         except (OSError, ValueError, KeyError):
             pass
 
@@ -61,15 +65,35 @@ class DataDragon:
             version = self._get(f"{DDRAGON}/api/versions.json")[0]
             items = self._get(f"{DDRAGON}/cdn/{version}/data/en_US/item.json")["data"]
             totals = {int(k): v["gold"]["total"] for k, v in items.items() if k.isdigit()}
+            champs = self._get(f"{DDRAGON}/cdn/{version}/data/en_US/champion.json")["data"]
+            champions = {int(c["key"]): {"id": c["id"], "name": c["name"]} for c in champs.values()}
+            spells = self._get(f"{DDRAGON}/cdn/{version}/data/en_US/summoner.json")["data"]
+            spells = {int(sp["key"]): sp["image"]["full"] for sp in spells.values() if str(sp.get("key", "")).isdigit()}
         except Exception:
             return
-        self.version, self.item_totals = version, totals
+        self.version, self.item_totals, self.champions, self.spells = version, totals, champions, spells
         try:
             os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
             with open(self.cache_path, "w", encoding="utf-8") as f:
-                json.dump({"version": version, "items": totals}, f)
+                json.dump({"version": version, "items": totals, "champions": champions, "spells": spells}, f)
         except OSError:
             pass
+
+    def champion(self, key):
+        """Name and images of a champion by its numeric id (as champion select
+        reports it), or None."""
+        c = self.champions.get(int(key or 0))
+        if not c:
+            return None
+        cdn = f"{DDRAGON}/cdn"
+        return {"key": int(key), "name": c["name"], "id": c["id"],
+                "square": f"{cdn}/{self.version}/img/champion/{c['id']}.png",
+                "loading": f"{cdn}/img/champion/loading/{c['id']}_0.jpg",
+                "splash": f"{cdn}/img/champion/splash/{c['id']}_0.jpg"}
+
+    def spell_icon(self, key):
+        name = self.spells.get(int(key or 0))
+        return f"{DDRAGON}/cdn/{self.version}/img/spell/{name}" if name else ""
 
     def champion_icon(self, player):
         # rawChampionName ends in the internal key (e.g. MonkeyKing for Wukong),

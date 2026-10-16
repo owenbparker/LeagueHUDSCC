@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Draft</title>
+<!-- Champ select overlay (OBS / vMix browser source, 1920x1080): the "Europe"
+     layout of RCVolus' lol-pick-ban-ui (MIT, see draft/LICENSE-lol-pick-ban-ui.txt),
+     driven by the app's /api/draft. -->
+<link rel="stylesheet" href="draft/europe.css">
+</head>
+<body>
+<div id="overlay" class="Overlay Europe TheAbsoluteVoid">
+  <div class="ChampSelect">
+    <div class="MiddleBox">
+      <div class="Logo"><img id="logo" alt=""></div>
+      <div class="Patch" id="phase"></div>
+      <div class="Timer" id="timer">
+        <div class="Background Blue"></div>
+        <div class="Background Red"></div>
+        <div class="TimerChars" id="timer-chars"></div>
+      </div>
+    </div>
+    <div class="Team TeamBlue" id="team-blue"></div>
+    <div class="Team TeamRed" id="team-red"></div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const PLACEHOLDERS = ["top", "jung", "mid", "bot", "sup"].map(r => `draft/${r}_splash_placeholder.svg`);
+const BAN_PLACEHOLDER = "draft/ban_placeholder.svg";
+const url = p => !p ? "" : /^https?:/.test(p) ? p : "/" + p.split("/").map(encodeURIComponent).join("/");
+
+// Fit the page to the window (?fit=1, like the HUD).
+if (params.get("fit") === "1") {
+  const fit = () => {
+    const k = Math.min(innerHeight / 1080, innerWidth / 1920);
+    Object.assign(document.body.style, { transformOrigin: "0 0", transform: `translateX(${(innerWidth - 1920 * k) / 2}px) scale(${k})` });
+  };
+  addEventListener("resize", fit); fit();
+}
+
+// Built once per team, then only changed where the draft changes.
+function el(tag, cls, parent) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (parent) parent.appendChild(n);
+  return n;
+}
+const teams = {};
+function buildTeam(side) {
+  const root = $(`team-${side}`);
+  const picks = el("div", "Picks", root);
+  const t = { picks: [], bans: [] };
+  for (let i = 0; i < 5; i++) {
+    const pick = el("div", "Pick", picks);
+    const spells = el("div", "SummonerSpells", pick);
+    const s1 = el("img", "", spells), s2 = el("img", "", spells);
+    const imgBox = el("div", "PickImage", pick);
+    const img = el("img", "", imgBox);
+    const name = el("span", "", el("div", "PlayerName", pick));
+    t.picks.push({ pick, spells, s1, s2, imgBox, img, name });
+  }
+  const bansRow = el("div", "Bans", el("div", "BansWrapper", root));
+  const score = el("div", "TeamScore");
+  const teamName = el("div", "TeamName");
+  const nameText = document.createTextNode("");
+  teamName.appendChild(nameText);
+  const coach = el("div", "CoachName", teamName);
+  const bansBox = el("div", "BansBox");
+  for (let i = 0; i < 5; i++) {
+    if (i === 3) el("div", "Spacing", bansBox);
+    const ban = el("div", "Ban", bansBox);
+    const imgBox = el("div", "BanImage", ban);
+    t.bans.push({ imgBox, img: el("img", "", imgBox) });
+  }
+  // Blue: score, name, bans. Red: bans, name, score (mirrored).
+  if (side === "blue") bansRow.append(score, teamName, bansBox);
+  else bansRow.append(bansBox, teamName, score);
+  Object.assign(t, { bansRow, score, teamName, nameText, coach });
+  teams[side] = t;
+}
+buildTeam("blue"); buildTeam("red");
+
+function setSrc(img, src) { if (img.getAttribute("src") !== src) img.setAttribute("src", src); }
+
+function renderTeam(side, team, info, show) {
+  const t = teams[side];
+  t.bansRow.classList.toggle("WithScore", !!show.score);
+  t.score.style.display = show.score ? "" : "none";
+  t.score.textContent = info.score ?? 0;
+  t.nameText.nodeValue = info.name || "";
+  const coaches = show.coaches && !!info.coach;   // no name: the bigger team name, as without coaches
+  t.teamName.classList.toggle("WithoutCoaches", !coaches);
+  t.coach.style.display = coaches ? "" : "none";
+  t.coach.textContent = `Coach: ${info.coach || ""}`;
+  for (let i = 0; i < 5; i++) {
+    const p = (team.picks || [])[i] || {}, v = t.picks[i];
+    const champ = p.champion || {};
+    setSrc(v.img, champ.loading || PLACEHOLDERS[i]);
+    v.pick.classList.toggle("Active", !!p.active);
+    v.imgBox.classList.toggle("Active", !!p.active);
+    v.name.textContent = p.name || "";
+    const spells = show.spells && champ.name && !p.active && p.spell1 && p.spell2;
+    v.spells.style.display = spells ? "" : "none";
+    if (spells) { setSrc(v.s1, p.spell1); setSrc(v.s2, p.spell2); }
+    const b = (team.bans || [])[i] || {}, bv = t.bans[i];
+    setSrc(bv.img, (b.champion || {}).square || BAN_PLACEHOLDER);
+    bv.imgBox.classList.toggle("Active", !!b.active);
+  }
+}
+
+// The opening: as the Europe layout plays it when champ select starts.
+let shown = false, timers = [];
+function setAnim(cls) {
+  $("overlay").className = "Overlay Europe " + cls;
+}
+function open() {
+  shown = true;
+  timers = [
+    setTimeout(() => setAnim("AnimationHidden"), 500),
+    setTimeout(() => setAnim("AnimationTimer AnimationBansPick"), 1200),
+    setTimeout(() => setAnim("AnimationBansPick AnimationBansPickOnly"), 2650),
+    setTimeout(() => setAnim("AnimationPigs"), 3650),
+  ];
+}
+function close() {
+  shown = false;
+  timers.forEach(clearTimeout);
+  setAnim("TheAbsoluteVoid");
+}
+
+function render(s) {
+  const d = s.draft || {};
+  const root = $("overlay");
+  root.style.setProperty("--color-blue", s.teams.blue.color || "rgb(0,151,196)");
+  root.style.setProperty("--color-red", s.teams.red.color || "rgb(222,40,70)");
+  setSrc($("logo"), url(params.get("logo") || "assets/logos/scc.png"));
+  if (!d.active) { if (shown) close(); return; }
+  if (!shown) open();
+  $("phase").textContent = d.phase || "";
+  const timer = $("timer");
+  timer.classList.toggle("Blue", !!d.blue.active || (!d.blue.active && !d.red.active));
+  timer.classList.toggle("Red", !!d.red.active || (!d.blue.active && !d.red.active));
+  const t = String(d.timer ?? 0);
+  const chars = $("timer-chars");
+  if (chars.dataset.t !== t) {
+    chars.dataset.t = t;
+    chars.innerHTML = d.timer >= 100 ? t : t.split("").map(c => `<div class="TimerChar">${c}</div>`).join("");
+  }
+  renderTeam("blue", d.blue, s.teams.blue, s.show);
+  renderTeam("red", d.red, s.teams.red, s.show);
+}
+
+async function poll() {
+  try { render(await (await fetch("/api/draft", { cache: "no-store" })).json()); } catch (e) { /* app restarting */ }
+  setTimeout(poll, 250);
+}
+poll();
+</script>
+</body>
+</html>

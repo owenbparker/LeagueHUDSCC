@@ -77,6 +77,10 @@
       <div id="director-result"></div>
     </div>
     <div class="cams">
+      <label class="check"><input type="checkbox" id="draft-read"> Read champ select on this PC and send it to the GFX PC's draft overlay</label>
+      <div class="status" id="draft-status"></div>
+    </div>
+    <div class="cams">
       <label>Match time</label>
       <div class="status" id="match-local"></div>
       <div class="row" style="gap:8px">
@@ -137,6 +141,9 @@ function apply(s) {
     ? s.app.director + " (League in Borderless or Windowed on this PC)"
     : "Reads the player name tags nearest the middle of the screen and tells the GFX PC whose cam to show.";
   if (document.activeElement !== $("screen")) $("screen").value = String(ow.screen || 0);
+  $("draft-read").checked = !!(s.config.draft || {}).read;
+  $("draft-status").textContent = (s.config.draft || {}).read
+    ? (s.app.draft || {}).reader || "" : "For when this PC's League client is the one in the lobby (as a player or spectator).";
   const mt = s.app.match_time || {}, local = mt.local || {};
   replayClock = !local.error && local.time !== undefined
     ? { time: local.time, paused: local.paused, speed: local.speed || 1, at: performance.now() - 1000 * (local.age || 0) } : null;
@@ -162,6 +169,7 @@ function apply(s) {
 
 // Can this PC reach the GFX PC's HUD?
 $("companion-lan").onchange = e => post("/api/companion/network", { enabled: e.target.checked });
+$("draft-read").onchange = e => post("/api/draft/read", { enabled: e.target.checked });
 $("sync-all").onclick = () => post("/api/match/sync-all", {});
 $("sync-gfx").onclick = () => post("/api/match/sync-gfx", {});
 $("match-enable").onclick = () => post("/api/match/enable", {});

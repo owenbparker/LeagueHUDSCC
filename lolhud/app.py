@@ -21,6 +21,7 @@ from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from . import companion
+from .draft import DraftFeed, DraftReader, play_recording
 from .log import log, since
 from .matchtime import MatchSync, ReplayClient, enable_replay_api, run_follower
 from .matchtime import fmt as fmt_time
@@ -70,6 +71,10 @@ class HudApp:
         self.director.enabled = lambda: (bool(self.config.get()["cams"].get("director"))
                                          and self.role in ("gfx", "observer"))
         self._gfx_roster = (0.0, None)
+        # The draft (champ select), for /draft: read here or sent by an observer.
+        self.draft_feed = DraftFeed()
+        self.draft_reader = DraftReader(self._draft_send, self._league_paths)
+        self._draft_demo = None   # (thread, stop event) while the demo draft plays
         # Match time: every PC's League client at the same moment (see matchtime.py).
         self.match_sync = MatchSync(ReplayClient(cfg["api_url"]))
         self._lock = threading.Lock()
@@ -198,6 +203,73 @@ class HudApp:
         return {"ok": True, "focus": focus, "seen": seen, "lines": [t for t, _ in lines][:40],
                 "image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()}
 
+    # --- the draft ------------------------------------------------------
+
+    def _league_paths(self):
+        folder = (self.config.get().get("draft") or {}).get("league_path") or ""
+        return [os.path.join(folder, "lockfile")] if folder else []
+
+    def _draft_send(self, draft):
+        """A reading of this PC's champ select: here, or to the GFX PC."""
+        if self.role == "observer":
+            try:
+                post_json(self._gfx_base() + "/api/draft/ingest", {"draft": draft})
+            except Exception as e:
+                self.draft_reader.status = f"Couldn't send the draft to the GFX PC: {getattr(e, 'reason', e)}"
+        else:
+            self.draft_feed.push(draft, "this PC")
+
+    def set_draft_read(self, on):
+        self.config.update({"draft": {"read": bool(on)}})
+        self.draft_reader.set_enabled(on)
+        log("Reading champ select on this PC" if on else "Stopped reading champ select")
+
+    def draft_demo(self, on):
+        """Play the recorded tournament draft into the feed (or stop it)."""
+        if self._draft_demo:
+            self._draft_demo[1].set()
+            self._draft_demo = None
+        if not on:
+            self.draft_feed.push(None, "demo")
+            return
+        path = web_file("draft/demo-draft.json")
+        stop = threading.Event()
+        self.draft_feed.clear()
+        t = threading.Thread(target=play_recording, args=(path, lambda d: self.draft_feed.push(d, "demo"), stop),
+                             daemon=True)
+        self._draft_demo = (t, stop)
+        t.start()
+        log("Demo draft started (a recorded tournament draft, about 4 minutes)")
+
+    def draft_delay(self):
+        d = self.config.get().get("draft") or {}
+        return float(d.get("delay") or 0) if d.get("delay_on") else 0.0
+
+    def draft_view(self):
+        """The draft overlay's state: the (delayed) draft with names and
+        images, the teams and what to show."""
+        cfg = self.config.get()
+        d = cfg.get("draft") or {}
+        view = self.draft_feed.view(self.draft_delay())
+        dd = self.ddragon
+
+        def champ(key):
+            return (dd.champion(key) if key else None) or {}
+
+        if view.get("active"):
+            for side in ("blue", "red"):
+                for p in view[side]["picks"]:
+                    p["champion"] = champ(p["champion"])
+                    p["spell1"], p["spell2"] = dd.spell_icon(p["spell1"]), dd.spell_icon(p["spell2"])
+                for b in view[side]["bans"]:
+                    b["champion"] = champ(b["champion"])
+        blue, red = ("right", "left") if cfg.get("swap_sides") else ("left", "right")
+        team = lambda side: {"name": cfg[side].get("name", ""), "tricode": cfg[side].get("tricode", ""),
+                                  "logo": cfg[side].get("logo", ""), "color": cfg[side].get("color", ""),
+                                  "score": cfg[side].get("wins", 0), "coach": d.get(f"coach_{side}", "")}
+        return {"draft": view, "teams": {"blue": team(blue), "red": team(red)},
+                "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True)}}
+
     def sync_all(self):
         """Every client (this PC, the GFX PC and its observers) to 0:00."""
         if self.role == "observer":
@@ -257,6 +329,9 @@ class HudApp:
 
     def stop(self):
         self._stop.set()
+        self.draft_reader.set_enabled(False)
+        if self._draft_demo:
+            self._draft_demo[1].set()
         self.screen_gold.stop()
         self.director.stop()
         if self.server:
@@ -277,6 +352,9 @@ class HudApp:
                 "screen_gold": screen, "update": self.updater.info(),
                 "overlay_window": self.overlay_window.info() if self.overlay_window else {"available": False},
                 "director": self.director.status,
+                "draft": {"reader": self.draft_reader.status if self.draft_reader.enabled else "off",
+                          "demo": bool(self._draft_demo and self._draft_demo[0].is_alive()),
+                          **self.draft_feed.info(self.draft_delay())},
                 "match_time": {"status": self.match_sync.status,
                                "local": {**self.match_sync.local,
                                          "age": round(time.time() - self.match_sync.local.get("at", time.time()), 3)},
@@ -485,6 +563,10 @@ def make_handler(app):
                 self.end_headers()
             elif path == "/api/sync":
                 self._send(json.dumps(app.match_sync.public()))
+            elif path == "/api/draft":
+                self._send(json.dumps(app.draft_view()))
+            elif path in ("/draft", "/draft/"):
+                self._static("draft.html")
             elif path == "/api/companion":
                 self._send(json.dumps(companion.state(app)))
             elif path == "/api/companion/describe":
@@ -562,6 +644,17 @@ def make_handler(app):
                     body = json.loads(self.rfile.read(length) or b"{}")
                     return self._send(json.dumps(companion.act(app, body)))
                 except (ValueError, TypeError, KeyError, OSError) as e:
+                    return self._send(json.dumps({"error": str(e)}), status=400)
+            if path == "/api/draft/ingest":
+                # An observer PC's reading of champ select.
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    draft = body.get("draft")
+                    if draft is not None and not isinstance(draft, dict):
+                        raise ValueError("Expected a draft object")
+                    app.draft_feed.push(draft, "observer")
+                    return self._send('{"ok":true}')
+                except (ValueError, TypeError) as e:
                     return self._send(json.dumps({"error": str(e)}), status=400)
             if path == "/api/sync":
                 # Observer clients: sync commands (all clients, or this PC's game).
@@ -652,6 +745,10 @@ def make_handler(app):
                     app.preview = {"name": body["name"], "side": body["side"], "id": time.time()}
                 elif path == "/api/role":
                     app.set_role(body.get("role"))
+                elif path == "/api/draft/read":
+                    app.set_draft_read(body.get("enabled"))
+                elif path == "/api/draft/demo":
+                    app.draft_demo(bool(body.get("on")))
                 elif path == "/api/companion/network":
                     app.set_companion_lan(body.get("enabled"))
                 elif path == "/api/match/sync-all":
@@ -748,6 +845,8 @@ def start(app):
     app.updater.check_in_background()
     threading.Thread(target=app.run_poller, daemon=True).start()
     threading.Thread(target=run_follower, args=(app, app._stop), daemon=True).start()
+    if (app.config.get().get("draft") or {}).get("read"):
+        app.draft_reader.set_enabled(True)
     log(f"League HUD {app.updater.current} running - control panel http://localhost:{port}/control")
     log(f"Overlay (browser source, 1920x1080): http://localhost:{port}/overlay")
     log(f"vMix data source: http://localhost:{port}/hud.csv  - file: {app.config.output_dir()}")

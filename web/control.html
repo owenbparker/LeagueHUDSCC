@@ -91,7 +91,7 @@
   .cam-row .who small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cam-row input { padding: 6px 8px; font-size: 12px; }
   .cam-row button { padding: 5px 6px; font-size: 12px; }
-  #match-enable.on, #timers-auto.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
+  #match-enable.on, #timers-auto.on, #draft-demo.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
   .cam-row button.on { background: var(--accent); color: #06231a; border-color: var(--accent); font-weight: 600; }
   .note a { color: var(--accent); }
   #cams-test-result img { width: 100%; margin-top: 10px; border-radius: 6px; border: 1px solid var(--line); }
@@ -231,6 +231,32 @@
       <button type="button" id="preview-fb-right">Preview: right team</button>
     </div>
     <p class="note">When a team draws first blood, a stinger wipes across their side of the top bar, which fills with their colour and logo and "FIRST BLOOD", then wipes back (under 3 seconds). Preview plays it on the overlay now.</p>
+  </section>
+
+  <section class="wide">
+    <h2>Draft</h2>
+    <div class="out"><span>Draft overlay (OBS / vMix browser source, 1920×1080)</span>
+      <div class="row"><code id="url-draft"></code><button data-copy="url-draft">Copy</button></div></div>
+    <label class="toggle"><input type="checkbox" id="draft-read"> Read champ select on this PC (League client in the lobby, as a player or spectator)</label>
+    <div class="note" id="draft-status" style="margin:0 0 8px"></div>
+    <div class="row" style="align-items:center">
+      <label class="toggle" style="margin:0"><input type="checkbox" id="draft-delay-on"> Delay the draft by</label>
+      <input type="number" id="draft-delay" min="0" max="600" step="1" style="width:80px;flex:0 0 auto"> <span class="note" style="margin:0">seconds (2:30 = 150, the spectator delay)</span>
+    </div>
+    <div class="checks" style="margin-top:6px">
+      <label><input type="checkbox" id="draft-score"> Series score</label>
+      <label><input type="checkbox" id="draft-coaches"> Coaches</label>
+      <label><input type="checkbox" id="draft-spells"> Summoner spells</label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>Coach: left team</label><input id="draft-coach-left" placeholder="Coach name"></div>
+      <div><label>Coach: right team</label><input id="draft-coach-right" placeholder="Coach name"></div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:center">
+      <button type="button" id="draft-demo" style="flex:0 0 auto">Play demo draft</button>
+      <span class="note" style="margin:0">A recorded tournament draft (about 4 minutes), through the same delay.</span>
+    </div>
+    <p class="note">The Europe layout from RCVolus' lol-pick-ban-ui. Bans and picks come up one by one at the pace they were made; with the delay on they come up that much later, in step with the spectator feed. Team names, colours and series score come from Teams; blue side is the left team unless "Left team is on red side" is ticked. An Observer Client in the lobby can read champ select instead and send it here.</p>
   </section>
 
   <section class="wide">
@@ -742,9 +768,37 @@ function applySponsorBox(cfg) {
   (b.rect || SB_RECT).forEach((v, i) => setIfIdle($(["sb-x", "sb-y", "sb-w", "sb-h"][i]), v));
 }
 
+// Draft.
+const draftPost = changes => post("/api/config", { draft: changes });
+$("draft-read").onchange = e => post("/api/draft/read", { enabled: e.target.checked });
+$("draft-delay-on").onchange = e => draftPost({ delay_on: e.target.checked });
+$("draft-delay").onchange = e => draftPost({ delay: Math.max(0, Number(e.target.value) || 0) });
+for (const k of ["score", "coaches", "spells"]) $(`draft-${k}`).onchange = e => draftPost({ [k]: e.target.checked });
+for (const side of ["left", "right"]) $(`draft-coach-${side}`).onchange = e => draftPost({ [`coach_${side}`]: e.target.value.trim() });
+$("draft-demo").onclick = () => post("/api/draft/demo", { on: !(state.app.draft || {}).demo });
+function applyDraft(s) {
+  const d = s.config.draft || {}, info = s.app.draft || {};
+  $("url-draft").textContent = `${location.origin}/draft`;
+  $("draft-read").checked = !!d.read;
+  $("draft-delay-on").checked = !!d.delay_on;
+  setIfIdle($("draft-delay"), d.delay ?? 150);
+  for (const k of ["score", "coaches", "spells"]) $(`draft-${k}`).checked = d[k] !== false;
+  for (const side of ["left", "right"]) setIfIdle($(`draft-coach-${side}`), d[`coach_${side}`] || "");
+  $("draft-demo").textContent = info.demo ? "Stop demo draft" : "Play demo draft";
+  $("draft-demo").classList.toggle("on", !!info.demo);
+  const parts = [];
+  if (d.read) parts.push(info.reader || "");
+  if (info.source) parts.push(`Last from ${info.source}${info.age != null ? ` ${info.age}s ago` : ""}`);
+  if (info.live_active) parts.push(`live: ${info.live_phase || "champ select"}`);
+  if (info.delay && (info.live_active || info.shown_active))
+    parts.push(info.shown_active ? `on air, ${info.delay}s behind` : `on air in up to ${info.delay}s`);
+  $("draft-status").textContent = parts.filter(Boolean).join(" · ") || "No draft yet.";
+}
+
 function apply(s) {
   applyMatchTime(s.app.match_time);
   applySponsorBox(s.config);
+  applyDraft(s);
   applyCompanion(s.app.companion);
   const first = !state;
   const logosChanged = !state || ["left", "right"].some(x => state.config[x].logo !== s.config[x].logo);

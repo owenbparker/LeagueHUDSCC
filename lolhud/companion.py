@@ -48,12 +48,15 @@ TOGGLES = {
     "timer_baron": ("Objective timer: Baron", ("objective_timers", "baron"), True),
     "bg_tint": ("Background video: tint with team colours", ("bg_tint",), True),
     "sponsor_box": ("Sponsors: sponsor box over the observer controls", ("sponsor_box", "enabled"), True),
+    "draft_delay": ("Draft: delay (spectator delay)", ("draft", "delay_on"), True),
 }
 # On/off states that aren't settings.
 STATES = {
     "hud_on_game": "HUD on game (the HUD window over League)",
     "time_control": "Time control on (League's Replay API)",
     "connected": "Game connected",
+    "draft_read": "Draft: reading champ select on this PC",
+    "draft_live": "Draft: champ select on (live, before the delay)",
 }
 # Sliders: id -> (name, config key, default, min, max).
 VALUES = {
@@ -67,6 +70,8 @@ COMMANDS = {
     "enable_time_control": "Match time: turn on time control",
     "preview_fb_left": "Animation: preview first blood, left team",
     "preview_fb_right": "Animation: preview first blood, right team",
+    "draft_read": "Draft: read champ select on this PC (toggle)",
+    "draft_demo": "Draft: play / stop the demo draft",
 }
 
 
@@ -83,6 +88,8 @@ def state(app):
     toggles["hud_on_game"] = bool(ow.get("open"))
     toggles["time_control"] = app.match_sync.enabled is True
     toggles["connected"] = bool(snap["detail"].get("connected"))
+    toggles["draft_read"] = bool((cfg.get("draft") or {}).get("read"))
+    toggles["draft_live"] = bool(app.draft_feed.info().get("live_active"))
     values = {k: float(cfg.get(key) if cfg.get(key) is not None else d) for k, (_, key, d, _, _) in VALUES.items()}
     f = snap["fields"]
     game_time = float(snap["detail"].get("game_time") or 0)
@@ -149,6 +156,10 @@ def act(app, body):
             enable_replay_api()
             app.match_sync.enabled = True
             app.match_sync.status = "Time control on: restart the League client if it was just turned on"
+        elif key == "draft_read":
+            app.set_draft_read(not (cfg.get("draft") or {}).get("read"))
+        elif key == "draft_demo":
+            app.draft_demo(not (app._draft_demo and app._draft_demo[0].is_alive()))
         elif key in ("preview_fb_left", "preview_fb_right"):
             app.preview = {"name": "first_blood", "side": key.rsplit("_", 1)[1], "id": time.time()}
         else:

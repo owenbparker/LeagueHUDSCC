@@ -62,6 +62,12 @@ DEFAULTS = {
     "bg_tint": True,
     # Brightness of the video lines (1.0 = as filmed / tinted).
     "bg_brightness": 1.0,
+    # The draft overlay (/draft): champ select read off a League client in the
+    # lobby. "read": read it on this PC (an Observer Client sends it to the GFX
+    # PC). "delay": show it this many seconds late (the spectator delay), when
+    # delay_on. Coaches' names, and what the Europe layout shows.
+    "draft": {"read": False, "delay_on": True, "delay": 150, "score": True, "coaches": True, "spells": True,
+              "coach_left": "", "coach_right": "", "league_path": ""},
     # The sponsor box: covers the spectator's observer controls (camera mode
     # and fog of war, bottom left) with the background loop, tinted in both
     # teams' colours, and sponsor logos in turn. rect is x, y, w, h on the

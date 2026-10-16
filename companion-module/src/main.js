@@ -194,6 +194,8 @@ class LeagueHudInstance extends InstanceBase {
 			enable_time_control: ['Match time', 'Time control', 'time_control'],
 			preview_fb_left: ['Animation', 'First blood\npreview L', null],
 			preview_fb_right: ['Animation', 'First blood\npreview R', null],
+			draft_read: ['Draft', 'Read\nchamp select', 'draft_read'],
+			draft_demo: ['Draft', 'Demo\ndraft', null],
 		}
 		for (const [id, [category, text, feedback]] of Object.entries(runs)) {
 			presets[`run_${id}`] = {

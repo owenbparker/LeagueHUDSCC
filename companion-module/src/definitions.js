@@ -17,12 +17,15 @@ const TOGGLES = {
 	timer_baron: 'Objective timer: Baron',
 	bg_tint: 'Background video: tint with team colours',
 	sponsor_box: 'Sponsors: sponsor box over the observer controls',
+	draft_delay: 'Draft: delay (spectator delay)',
 }
 
 // On/off states that can only be read (feedbacks), not toggled.
 const STATES = {
 	time_control: "Time control on (League's Replay API)",
 	connected: 'Game connected',
+	draft_read: 'Draft: reading champ select on this PC',
+	draft_live: 'Draft: champ select on (live, before the delay)',
 }
 
 const VALUES = {
@@ -37,6 +40,8 @@ const COMMANDS = {
 	enable_time_control: 'Match time: turn on time control',
 	preview_fb_left: 'Animation: preview first blood, left team',
 	preview_fb_right: 'Animation: preview first blood, right team',
+	draft_read: 'Draft: read champ select on this PC (toggle)',
+	draft_demo: 'Draft: play / stop the demo draft',
 }
 
 const VARIABLES = {
