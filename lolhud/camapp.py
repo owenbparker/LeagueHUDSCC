@@ -32,7 +32,7 @@ STATUS = {"camera_ready": False}
 _handlers = []  # .NET event handlers, kept alive
 # Only these files are served (and bundled into the app).
 FILES = {"/cam": "cam.html", "/update.js": "update.js", "/fonts/Inter.ttf": "fonts/Inter.ttf",
-         "/assets/app_icon.png": "assets/app_icon.png",
+         "/assets/playercam_icon.png": "assets/playercam_icon.png",
          "/assets/games/lol.svg": "assets/games/lol.svg", "/assets/games/valorant.svg": "assets/games/valorant.svg"}
 
 

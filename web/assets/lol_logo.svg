@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="30 20 480 490" width="480" height="490">
+  <!-- The League of Legends "L": a white L over a ring, outlined in black (reads on light and dark). -->
+  <g stroke="#000" stroke-width="14" stroke-linejoin="round" fill="#fff">
+    <path fill-rule="evenodd" d="M268 80 a205 205 0 1 0 0.01 0 Z M268 120 a165 165 0 1 1 -0.01 0 Z"/>
+    <path d="M112 40 L246 40 L246 410 L476 410 L426 490 L114 490 L157 446 L157 86 Z"/>
+  </g>
+</svg>

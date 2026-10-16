@@ -9,11 +9,11 @@ import os
 import sys
 
 root = SPECPATH
-icon = os.path.join(root, "packaging", "icon.ico")
+icon = os.path.join(root, "packaging", "playercam.ico")
 web = os.path.join(root, "web")
 datas = [(os.path.join(web, "cam.html"), "web"), (os.path.join(web, "update.js"), "web"),
          (os.path.join(web, "fonts", "Inter.ttf"), os.path.join("web", "fonts")),
-         (os.path.join(web, "assets", "app_icon.png"), os.path.join("web", "assets")),
+         (os.path.join(web, "assets", "playercam_icon.png"), os.path.join("web", "assets")),
          (os.path.join(web, "assets", "games", "lol.svg"), os.path.join("web", "assets", "games")),
          (os.path.join(web, "assets", "games", "valorant.svg"), os.path.join("web", "assets", "games"))]
 hidden = []
