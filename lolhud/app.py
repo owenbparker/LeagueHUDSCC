@@ -39,6 +39,8 @@ mimetypes.add_type("video/webm", ".webm")
 
 # Bundled logos (shipped with the app) plus ones you've uploaded.
 BUNDLED_LOGO_DIR = os.path.join(WEB_DIR, "assets", "logos")
+# Draft overlay looks ("draft profiles"): id -> (name, page in web/).
+DRAFT_LAYOUTS = {"europe": ("Europe (lol-pick-ban-ui)", "draft.html")}
 
 
 class HudApp:
@@ -245,6 +247,10 @@ class HudApp:
         d = self.config.get().get("draft") or {}
         return float(d.get("delay") or 0) if d.get("delay_on") else 0.0
 
+    def draft_layout(self):
+        layout = (self.config.get().get("draft") or {}).get("layout") or "europe"
+        return layout if layout in DRAFT_LAYOUTS else "europe"
+
     def draft_view(self):
         """The draft overlay's state: the (delayed) draft with names and
         images, the teams and what to show."""
@@ -269,7 +275,7 @@ class HudApp:
                              "logo": cfg[side].get("logo", ""), "color": cfg[side].get("color", ""),
                              "score": cfg[side].get("wins", 0), "coach": d.get(f"coach_{side}", ""),
                              "logo_adjust": adjust.get(side) or {}}
-        return {"draft": view, "teams": {"blue": team(blue), "red": team(red)},
+        return {"draft": view, "layout": self.draft_layout(), "teams": {"blue": team(blue), "red": team(red)},
                 "logo": d.get("logo") or "assets/logos/scc.png", "logo_adjust": adjust.get("event") or {},
                 "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
                          "team_logos": d.get("team_logos", True), "champ_names": d.get("champ_names", True)},
@@ -374,6 +380,7 @@ class HudApp:
                 "director": self.director.status,
                 "draft": {"reader": self.draft_reader.status if self.draft_reader.enabled else "off",
                           "demo": bool(self._draft_demo and self._draft_demo[0].is_alive()),
+                          "layouts": [{"id": k, "name": v[0]} for k, v in DRAFT_LAYOUTS.items()],
                           **self.draft_feed.info(self.draft_delay())},
                 "match_time": {"status": self.match_sync.status,
                                "local": {**self.match_sync.local,
@@ -586,7 +593,9 @@ def make_handler(app):
             elif path == "/api/draft":
                 self._send(json.dumps(app.draft_view()))
             elif path in ("/draft", "/draft/"):
-                self._static("draft.html")
+                # The chosen look (?layout= to see another).
+                layout = (parse_qs(url.query).get("layout") or [app.draft_layout()])[0]
+                self._static(DRAFT_LAYOUTS.get(layout, DRAFT_LAYOUTS["europe"])[1])
             elif path == "/api/companion":
                 self._send(json.dumps(companion.state(app)))
             elif path == "/api/companion/describe":

@@ -245,6 +245,8 @@
     <h2>Draft</h2>
     <div class="out"><span>Draft overlay (OBS / vMix browser source, 1920×1080)</span>
       <div class="row"><code id="url-draft"></code><button data-copy="url-draft">Copy</button></div></div>
+    <div class="row" style="align-items:center;margin-bottom:8px"><label for="draft-layout" style="margin:0">Draft look</label>
+      <select id="draft-layout"></select></div>
     <label class="toggle"><input type="checkbox" id="draft-read"> Read champ select on this PC (League client in the lobby, as a player or spectator)</label>
     <div class="note" id="draft-status" style="margin:0 0 8px"></div>
     <div class="row" style="align-items:center">
@@ -812,6 +814,7 @@ $("draft-logo-file").onchange = async e => {
 $("draft-logo-reset").onclick = () => draftPost({ logo: "" });
 $("draft-team-logos").onchange = e => draftPost({ team_logos: e.target.checked });
 $("draft-champ-names").onchange = e => draftPost({ champ_names: e.target.checked });
+$("draft-layout").onchange = e => draftPost({ layout: e.target.value });
 $("draft-bg-loop").onchange = e => draftPost({ bg_loop: e.target.checked });
 const DRAFT_ADJ = [["scale", "Size", 0.3, 3, 0.05, v => Math.round(v * 100) + "%"],
                    ["x", "Left / right", -80, 80, 1, v => v], ["y", "Up / down", -60, 60, 1, v => v]];
@@ -852,6 +855,12 @@ function applyDraft(s) {
   $("draft-team-logos").checked = d.team_logos !== false;
   $("draft-champ-names").checked = d.champ_names !== false;
   $("draft-bg-loop").checked = d.bg_loop !== false;
+  const layouts = info.layouts || [], sel = $("draft-layout");
+  if (sel.dataset.ids !== layouts.map(l => l.id).join()) {
+    sel.dataset.ids = layouts.map(l => l.id).join();
+    sel.innerHTML = layouts.map(l => `<option value="${l.id}">${l.name}</option>`).join("");
+  }
+  if (document.activeElement !== sel) sel.value = d.layout || "europe";
   const logoUrl = d.logo || "assets/logos/scc.png";
   if ($("draft-logo-img").dataset.src !== logoUrl) { $("draft-logo-img").dataset.src = logoUrl; $("draft-logo-img").src = "/" + logoUrl.split("/").map(encodeURIComponent).join("/"); }
   for (const k of ["event", "left", "right"]) {

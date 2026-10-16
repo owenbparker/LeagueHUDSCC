@@ -243,7 +243,10 @@ function renderBg(bg, blue, red) {
 }
 $("bg-loop").querySelector("video").addEventListener("error", e => { e.target.dataset.failed = "1"; $("bg-loop").classList.remove("On"); });
 
+const LAYOUT = "europe";
 function render(s) {
+  // Another look chosen in the control panel: load it (unless one was asked for).
+  if (s.layout && s.layout !== LAYOUT && !params.get("layout")) { location.reload(); return; }
   const d = s.draft || {};
   const root = $("overlay");
   loadFonts(s.fonts);
