@@ -126,6 +126,8 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(s["fonts"]["kill"]["family"], "Inter")                # the HUD's fonts
                 self.assertEqual(s["fonts"]["short"]["family"], "Heathergreen")
                 self.assertTrue(s["show"]["champ_names"])
+                self.assertTrue(s["bg"]["on"])
+                self.assertTrue(s["bg"]["video"].endswith("bg_loop.mp4"))
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
                     self.assertIn(b"europe.css", r.read())
                 self.assertEqual(app.app_info()["draft"]["source"], "observer")

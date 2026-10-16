@@ -267,6 +267,7 @@
       <label><input type="checkbox" id="draft-coaches"> Coaches</label>
       <label><input type="checkbox" id="draft-spells"> Summoner spells</label>
       <label><input type="checkbox" id="draft-champ-names"> Champion names</label>
+      <label><input type="checkbox" id="draft-bg-loop"> Background loop in the middle box</label>
     </div>
     <div class="row" style="margin-top:8px">
       <div><label>Coach: left team</label><input id="draft-coach-left" placeholder="Coach name"></div>
@@ -811,6 +812,7 @@ $("draft-logo-file").onchange = async e => {
 $("draft-logo-reset").onclick = () => draftPost({ logo: "" });
 $("draft-team-logos").onchange = e => draftPost({ team_logos: e.target.checked });
 $("draft-champ-names").onchange = e => draftPost({ champ_names: e.target.checked });
+$("draft-bg-loop").onchange = e => draftPost({ bg_loop: e.target.checked });
 const DRAFT_ADJ = [["scale", "Size", 0.3, 3, 0.05, v => Math.round(v * 100) + "%"],
                    ["x", "Left / right", -80, 80, 1, v => v], ["y", "Up / down", -60, 60, 1, v => v]];
 $("draft-adjust").innerHTML = ["event", "left", "right"].map(k => `<div>${DRAFT_ADJ.map(([a, label, min, max, step]) =>
@@ -849,6 +851,7 @@ function applyDraft(s) {
   $("draft-demo").textContent = info.demo ? "Stop demo draft" : "Play demo draft";
   $("draft-team-logos").checked = d.team_logos !== false;
   $("draft-champ-names").checked = d.champ_names !== false;
+  $("draft-bg-loop").checked = d.bg_loop !== false;
   const logoUrl = d.logo || "assets/logos/scc.png";
   if ($("draft-logo-img").dataset.src !== logoUrl) { $("draft-logo-img").dataset.src = logoUrl; $("draft-logo-img").src = "/" + logoUrl.split("/").map(encodeURIComponent).join("/"); }
   for (const k of ["event", "left", "right"]) {
