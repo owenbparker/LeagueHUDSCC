@@ -14,7 +14,36 @@
   .Europe .Team.TeamRed .TeamLogo { margin-left: 0; margin-right: 12px; }
   .Europe .Team .TeamLogo img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .Europe .Logo img { transform-origin: 50% 50%; }
+
+  /* SCC: the HUD's fonts (from its profile): the kills font for the timer and
+     the series score, the team short-name font for every other text. */
+  body, .Europe .Team .TeamName, .Europe .Patch, .Europe .Team .CoachName,
+  .Europe .Team .Picks .Pick .PlayerName, .Europe .ChampName {
+    font-family: var(--font-short, "Heathergreen"), "Saira Condensed", sans-serif;
+    font-weight: var(--font-short-weight, 400); font-style: var(--font-short-style, normal);
+  }
+  .Europe .Timer, .Europe .Team .TeamScore {
+    font-family: var(--font-kill, "Inter"), "Saira Condensed", sans-serif;
+    font-weight: var(--font-kill-weight, 700); font-style: var(--font-kill-style, normal);
+    font-variant-numeric: tabular-nums;
+  }
+  .Europe .Patch { line-height: var(--box-patch-height); font-size: 28px; letter-spacing: .03em; }
+  .Europe .Team .TeamScore { margin-top: 0; height: var(--box-ban-height); line-height: var(--box-ban-height); font-size: 44px; }
+  .Europe .Team .Picks .Pick .PlayerName { font-size: 22px; letter-spacing: .02em; }
+  .Europe .Team.TeamBlue .Picks .Pick.Active span, .Europe .Team.TeamRed .Picks .Pick.Active span { font-size: 26px; }
+
+  /* SCC: the champion's name along the bottom of its picture. */
+  .Europe .Team .Picks .Pick .ChampName {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; height: 28px; line-height: 30px;
+    text-align: center; color: #fff; font-size: 22px; text-transform: uppercase; letter-spacing: .03em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px;
+    background: linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0)); text-shadow: 0 1px 3px #000;
+  }
+  .Europe .Team .Picks .Pick.WithChampName .SummonerSpells {
+    top: calc(var(--box-pick-height) - 30px - 28px - var(--summoner-spell-size));
+  }
 </style>
+<style id="fonts"></style>
 </head>
 <body>
 <div id="overlay" class="Overlay Europe TheAbsoluteVoid">
@@ -66,8 +95,9 @@ function buildTeam(side) {
     const s1 = el("img", "", spells), s2 = el("img", "", spells);
     const imgBox = el("div", "PickImage", pick);
     const img = el("img", "", imgBox);
+    const champName = el("div", "ChampName", imgBox);
     const name = el("span", "", el("div", "PlayerName", pick));
-    t.picks.push({ pick, spells, s1, s2, imgBox, img, name });
+    t.picks.push({ pick, spells, s1, s2, imgBox, img, champName, name });
   }
   const bansRow = el("div", "Bans", el("div", "BansWrapper", root));
   const score = el("div", "TeamScore");
@@ -120,6 +150,10 @@ function renderTeam(side, team, info, show) {
     v.pick.classList.toggle("Active", !!p.active);
     v.imgBox.classList.toggle("Active", !!p.active);
     v.name.textContent = p.name || "";
+    const champName = show.champ_names && champ.name && !p.active ? champ.name : "";
+    v.champName.textContent = champName;
+    v.champName.style.display = champName ? "" : "none";
+    v.pick.classList.toggle("WithChampName", !!champName);
     const spells = show.spells && champ.name && !p.active && p.spell1 && p.spell2;
     v.spells.style.display = spells ? "" : "none";
     if (spells) { setSrc(v.s1, p.spell1); setSrc(v.s2, p.spell2); }
@@ -149,9 +183,27 @@ function close() {
   setAnim("TheAbsoluteVoid");
 }
 
+// The HUD's fonts (its profile's), loaded once and again when they change.
+let fontsKey = "";
+function loadFonts(f) {
+  const key = JSON.stringify(f || {});
+  if (!f || key === fontsKey) return;
+  fontsKey = key;
+  $("fonts").textContent = (f.faces || []).map(x =>
+    `@font-face { font-family: "${x.family}"; src: url("${x.src}"); ${x.weight ? `font-weight: ${x.weight};` : ""} ${x.style ? `font-style: ${x.style};` : ""} }`).join("\n");
+  const root = document.documentElement.style;
+  for (const [name, v] of [["kill", f.kill], ["short", f.short]]) {
+    if (!v) continue;
+    root.setProperty(`--font-${name}`, `"${v.family}"`);
+    root.setProperty(`--font-${name}-weight`, v.weight || 400);
+    root.setProperty(`--font-${name}-style`, v.italic ? "italic" : "normal");
+  }
+}
+
 function render(s) {
   const d = s.draft || {};
   const root = $("overlay");
+  loadFonts(s.fonts);
   root.style.setProperty("--color-blue", s.teams.blue.color || "rgb(0,151,196)");
   root.style.setProperty("--color-red", s.teams.red.color || "rgb(222,40,70)");
   setSrc($("logo"), url(params.get("logo") || s.logo || "assets/logos/scc.png"));

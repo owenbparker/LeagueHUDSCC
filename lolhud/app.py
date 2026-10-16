@@ -272,7 +272,8 @@ class HudApp:
         return {"draft": view, "teams": {"blue": team(blue), "red": team(red)},
                 "logo": d.get("logo") or "assets/logos/scc.png", "logo_adjust": adjust.get("event") or {},
                 "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
-                         "team_logos": d.get("team_logos", True)}}
+                         "team_logos": d.get("team_logos", True), "champ_names": d.get("champ_names", True)},
+                "fonts": profiles.hud_fonts(cfg.get("profile"))}
 
     def save_draft_logo(self, filename, data_b64):
         """The tournament logo for the draft overlay (stored with the team logos)."""

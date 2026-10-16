@@ -91,3 +91,38 @@ def delete(pid):
         raise ValueError("Built-in profiles can't be deleted")
     shutil.rmtree(path)
     changed()
+
+
+_fonts_cache = {}
+
+
+def hud_fonts(pid):
+    """The HUD's fonts, for other overlays (the draft) to match it: the
+    profile's font faces (src as URLs), and the font of the kills ("kill")
+    and of the team short names ("short") as {family, weight, italic}."""
+    key = (pid, _version)
+    if key not in _fonts_cache:
+        try:
+            data = load(pid) or load(DEFAULT_PROFILE) or {}
+        except (OSError, ValueError):
+            data = {}
+        if not folder(pid):
+            pid = DEFAULT_PROFILE
+        fonts = data.get("fonts") or {}
+        faces = fonts if isinstance(fonts, list) else [{"family": k, **v} for k, v in fonts.items()]
+        faces = [dict(f, src=f["src"] if f["src"].startswith("/") else f"/profiles/{pid}/{f['src']}")
+                 for f in faces if f.get("src")]
+
+        def font_of(fields, fallback):
+            for e in data.get("elements") or []:
+                if e.get("type") == "text" and e.get("field") in fields and e.get("font"):
+                    return {"family": e["font"], "weight": e.get("weight") or 400, "italic": bool(e.get("italic"))}
+            return fallback
+
+        _fonts_cache.clear()
+        _fonts_cache[key] = {
+            "faces": faces,
+            "kill": font_of(("KILLS LEFT", "KILLS RIGHT"), {"family": "Inter", "weight": 700, "italic": False}),
+            "short": font_of(("TRI-CODE LEFT", "TRI-CODE RIGHT"), {"family": "Heathergreen", "weight": 400, "italic": False}),
+        }
+    return _fonts_cache[key]

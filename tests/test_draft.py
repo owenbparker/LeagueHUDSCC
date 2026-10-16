@@ -123,6 +123,9 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(s["logo"], "assets/logos/scc.png")          # no tournament logo yet
                 self.assertEqual(s["teams"]["blue"]["logo_adjust"], {"scale": 1, "x": 0, "y": 0})
                 self.assertEqual(s["teams"]["blue"]["name"], config.get()["left"]["name"])
+                self.assertEqual(s["fonts"]["kill"]["family"], "Inter")                # the HUD's fonts
+                self.assertEqual(s["fonts"]["short"]["family"], "Heathergreen")
+                self.assertTrue(s["show"]["champ_names"])
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
                     self.assertIn(b"europe.css", r.read())
                 self.assertEqual(app.app_info()["draft"]["source"], "observer")
