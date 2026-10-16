@@ -4,18 +4,17 @@
 <meta charset="utf-8">
 <title>Draft (LEC)</title>
 <!-- Champ select overlay (OBS / vMix browser source, 1920x1080) in the look
-     of the LEC broadcast: a bar along the bottom with bans and coaches on
-     top, a timer line, ten tall pick cards and the match in the middle.
-     Driven by the app's /api/draft, like the Europe look. -->
+     of the LEC broadcast: boxes with the coaches and bans each side and the
+     phase in the middle, a timer line, ten pick cards and the match in the
+     middle. Driven by the app's /api/draft, like the Europe look. -->
 <style>
   @font-face { font-family: "Saira Condensed"; src: url("draft/saira-condensed.woff2") format("woff2"); font-weight: 100 900; }
   @property --blue { syntax: "<color>"; inherits: true; initial-value: #0a6d4c; }
   @property --red { syntax: "<color>"; inherits: true; initial-value: #bd1313; }
   :root {
-    --blue: #0a6d4c; --red: #bd1313; --navy: #070b24; --line: rgba(255,255,255,.08);
+    --navy: #060a24; --box: rgba(10, 12, 40, .86);
     --short: "Heathergreen"; --short-weight: 400; --short-style: normal;
     --kill: "Inter"; --kill-weight: 700; --kill-style: normal;
-    --card-w: 160px; --mid-w: 320px; --picks-h: 306px; --top-h: 96px;
   }
   html, body { margin: 0; width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
   * { box-sizing: border-box; }
@@ -23,125 +22,143 @@
   .kill { font-family: var(--kill), "Saira Condensed", sans-serif; font-weight: var(--kill-weight); font-style: var(--kill-style);
           font-variant-numeric: tabular-nums; }
 
-  #draft { position: absolute; left: 0; bottom: 0; width: 1920px; height: calc(var(--top-h) + 4px + var(--picks-h));
-           color: #fff; transition: --blue 1s ease, --red 1s ease; }
-  /* In and out: up from below the screen, back down when champ select ends. */
-  #draft { transform: translateY(105%); transition: transform .9s cubic-bezier(.55, 0, .75, .3), --blue 1s, --red 1s; }
+  /* Everything sits in the bottom 360px: header boxes 720-820, the timer
+     line 820-828, the cards 828-1080. It slides up when champ select starts
+     and back down when it ends. */
+  #draft { position: absolute; left: 0; top: 720px; width: 1920px; height: 360px; color: #fff;
+           --blue-hi: color-mix(in srgb, var(--blue) 70%, white); --red-hi: color-mix(in srgb, var(--red) 70%, white);
+           transform: translateY(105%); transition: transform .9s cubic-bezier(.55, 0, .75, .3), --blue 1s, --red 1s; }
   #draft.On { transform: none; transition: transform .9s cubic-bezier(.2, .7, .3, 1), --blue 1s, --red 1s; }
   #draft.Gone { visibility: hidden; }
 
-  /* --- top strip: coaches and bans each side, the phase in the middle --- */
-  .top { position: absolute; left: 0; top: 0; width: 100%; height: var(--top-h);
-         background: linear-gradient(to bottom, rgba(5,8,26,0) 0%, rgba(5,8,26,.82) 30%, rgba(5,8,26,.94) 100%); }
-  .side { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 6px; }
-  .side.blue { left: 16px; align-items: flex-start; }
-  .side.red { right: 16px; align-items: flex-end; }
-  .coach { font-size: 22px; letter-spacing: .04em; text-transform: uppercase; line-height: 22px; height: 22px;
-           opacity: .9; white-space: nowrap; }
-  .bans { display: flex; gap: 6px; }
-  .side.red .bans { flex-direction: row-reverse; }
-  .ban { position: relative; width: 52px; height: 52px; background: rgba(255,255,255,.06); overflow: hidden;
-         border: 1px solid rgba(255,255,255,.12); }
-  .ban img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.1); }
+  /* --- header boxes --- */
+  .box { position: absolute; top: 0; height: 100px; background: var(--box); }
+  .coaches { left: 0; width: 318px; }
+  .coaches.red { left: auto; right: 0; }
+  .coach { position: absolute; left: 0; right: 0; top: 7px; text-align: center; font-size: 22px; line-height: 26px;
+           text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; }
+  .bans { position: absolute; top: 37px; display: flex; gap: 2px; }
+  .coaches.blue .bans { left: 2px; }
+  .coaches.red .bans { right: 2px; flex-direction: row-reverse; }
+  .ban { position: relative; width: 62px; height: 62px; overflow: hidden; }
+  .ban img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.08); }
   .ban img[src=""] { display: none; }
-  .ban.Done img { filter: saturate(.75) brightness(.85); }
-  .ban.Done::after { content: ""; position: absolute; left: -10%; top: 50%; width: 120%; height: 2px;
-                     background: rgba(255,255,255,.75); transform: rotate(-45deg); }
-  .ban.Active { border-color: transparent; }
-  .side.blue .ban.Active { box-shadow: inset 0 0 0 2px var(--blue), 0 0 14px var(--blue); animation: pulse 1.2s infinite; }
-  .side.red .ban.Active { box-shadow: inset 0 0 0 2px var(--red), 0 0 14px var(--red); animation: pulse 1.2s infinite; }
-  .ban.Active img { opacity: .55; }
+  /* Each slot is struck through, empty or banned. */
+  .ban::after { content: ""; position: absolute; left: 50%; top: 50%; width: 52px; height: 1.5px; background: rgba(255,255,255,.9);
+                transform: translate(-50%, -50%) rotate(45deg); }
+  .ban.Done::after { width: 60px; background: rgba(255,255,255,.8); box-shadow: 0 0 2px rgba(0,0,0,.8); }
+  .coaches.blue .ban.Active { background: linear-gradient(135deg, var(--blue-hi), var(--blue)); }
+  .coaches.red .ban.Active { background: linear-gradient(135deg, var(--red-hi), var(--red)); }
+  .ban.Active img { opacity: .5; }
 
-  .phase { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); text-align: center; white-space: nowrap; }
-  .phase .name { font-size: 26px; letter-spacing: .08em; text-transform: uppercase; line-height: 28px; }
-  .phase .secs { font-size: 34px; line-height: 40px; }
+  .phasebox { left: 687px; width: 546px; text-align: center; }
+  .phase { margin-top: 7px; font-size: 26px; line-height: 28px; letter-spacing: .04em; text-transform: uppercase; }
+  .secs { font-size: 46px; line-height: 56px; }
 
-  /* --- the timer: a line that shrinks to the middle as time runs out --- */
-  .timer { position: absolute; left: 0; top: var(--top-h); width: 100%; height: 4px; background: rgba(5,8,26,.94); }
+  /* --- the timer line: shrinks to the middle as the turn runs out --- */
+  .timer { position: absolute; left: 0; top: 100px; width: 100%; height: 8px; }
   .timer .bar { position: absolute; left: 50%; top: 0; height: 100%; width: 0; transform: translateX(-50%);
-                background: #fff; transition: width .25s linear, background-color .6s ease; }
-  .timer .bar.blue { background: var(--blue); box-shadow: 0 0 10px var(--blue); }
-  .timer .bar.red { background: var(--red); box-shadow: 0 0 10px var(--red); }
+                transition: width .25s linear, background-color .6s ease; background: #fff; }
+  .timer .bar.blue { background: var(--blue-hi); }
+  .timer .bar.red { background: var(--red-hi); }
 
-  /* --- picks --- */
-  .picks { position: absolute; top: calc(var(--top-h) + 4px); height: var(--picks-h); width: calc(5 * var(--card-w));
-           display: flex; }
-  .picks.blue { left: 0; background: linear-gradient(to right, var(--blue) 0%, color-mix(in srgb, var(--blue) 35%, var(--navy)) 35%, var(--navy) 85%); }
-  .picks.red { right: 0; background: linear-gradient(to left, var(--red) 0%, color-mix(in srgb, var(--red) 35%, var(--navy)) 35%, var(--navy) 85%); }
-  .card { position: relative; width: var(--card-w); height: 100%; overflow: hidden; border-left: 1px solid var(--line); }
-  .picks.blue .card:first-child, .picks.red .card:last-child { border-left: none; }
-  .card .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%;
-               opacity: 0; transform: scale(1.06); transition: opacity .5s ease, transform .8s ease, filter .5s ease; }
+  /* --- pick cards --- */
+  .picks { position: absolute; top: 108px; height: 252px; width: 800px; display: flex; }
+  .picks.blue { left: 0; background: linear-gradient(to right, var(--blue) 0%, color-mix(in srgb, var(--blue) 30%, var(--navy)) 40%, var(--navy) 75%); }
+  .picks.red { right: 0; background: linear-gradient(to left, var(--red) 0%, color-mix(in srgb, var(--red) 30%, var(--navy)) 40%, var(--navy) 75%); }
+  .card { position: relative; width: 160px; height: 100%; overflow: hidden; }
+  /* Team colour lines between the cards (and by the middle). */
+  .picks.blue .card { border-right: 2px solid var(--blue-hi); }
+  .picks.red .card { border-left: 2px solid var(--red-hi); }
+  .card .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%;
+               opacity: 0; transform: scale(1.08); transition: opacity .5s ease, transform .9s ease; }
   .card.Picked .art { opacity: 1; transform: scale(1); }
-  .card.Active .art { opacity: .45; filter: grayscale(.6) blur(1px); }
-  .card .glow { position: absolute; inset: 0; opacity: 0; transition: opacity .6s ease; pointer-events: none; }
-  .picks.blue .card .glow { background: radial-gradient(circle at 50% 45%, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 45%),
-                                        linear-gradient(to top, var(--blue) 0%, transparent 70%); }
-  .picks.red .card .glow { background: radial-gradient(circle at 50% 45%, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 45%),
-                                       linear-gradient(to top, var(--red) 0%, transparent 70%); }
-  .card.Active .glow { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
-  .card .shade { position: absolute; left: 0; right: 0; bottom: 0; height: 55%;
-                 background: linear-gradient(to top, rgba(5,8,26,.92), rgba(5,8,26,0)); }
-  /* Names run up the card's left edge, from the bottom. */
-  .card .names { position: absolute; left: 10px; bottom: 12px; display: flex; gap: 4px;
-                 writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
-  .card .player { font-size: 30px; line-height: 30px; letter-spacing: .03em; }
-  .card .champ { font-size: 18px; line-height: 20px; letter-spacing: .06em; text-transform: uppercase; opacity: .8; }
-  /* The role icon, cut out of the role placeholder pictures (icon at 115,157 83x83 of 308x560). */
-  .card .role { position: absolute; left: 44px; bottom: 12px; width: 24px; height: 24px; opacity: .85;
+  /* Picking: the card lights up in the team colour around a dark hole. */
+  .card .hole { position: absolute; inset: 0; opacity: 0; transition: opacity .5s ease; }
+  .picks.blue .card .hole { background: radial-gradient(ellipse 34% 30% at 50% 45%, var(--navy) 0%, rgba(6,10,36,.85) 45%, rgba(6,10,36,0) 100%),
+                                        linear-gradient(160deg, var(--blue-hi) 0%, var(--blue) 70%); }
+  .picks.red .card .hole { background: radial-gradient(ellipse 34% 30% at 50% 45%, var(--navy) 0%, rgba(6,10,36,.85) 45%, rgba(6,10,36,0) 100%),
+                                       linear-gradient(200deg, var(--red-hi) 0%, var(--red) 70%); }
+  .card.Active .hole { opacity: 1; }
+  .card.Active .art { opacity: 0; }
+  .card .shade { position: absolute; left: 0; right: 0; bottom: 0; height: 45%; opacity: 0; transition: opacity .5s;
+                 background: linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0)); }
+  .card.Picked .shade { opacity: 1; }
+  /* Names run up the card's outer edge from the bottom (the player, then
+     the champion), the role icon beside. */
+  .card .names { position: absolute; bottom: 20px; display: flex; align-items: baseline; gap: 10px; writing-mode: vertical-rl; transform: rotate(180deg);
+                 white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.6); max-height: 220px; overflow: hidden; }
+  .picks.blue .card .names { left: 12px; }
+  .picks.red .card .names { right: 12px; }
+  .card .player { font-size: 34px; line-height: 32px; }
+  .card .champ { font-size: 18px; line-height: 20px; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+  /* (the role icon is cut out of the role placeholder pictures: 83x83 at 115,157 of 308x560) */
+  .card .role { position: absolute; bottom: 22px; width: 24px; height: 24px;
                 background-size: 89px 162px; background-position: -33px -45px; background-repeat: no-repeat; }
-  .card .spells { position: absolute; right: 8px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
-  .card .spells img { width: 26px; height: 26px; display: block; border: 1px solid rgba(255,255,255,.25); }
+  .picks.blue .card .role { left: 62px; }
+  .picks.red .card .role { right: 62px; }
+  .card .spells { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .picks.blue .card .spells { right: 10px; } .picks.red .card .spells { left: 10px; }
+  .card .spells img { width: 26px; height: 26px; display: block; border: 1px solid rgba(255,255,255,.3); }
 
-  /* --- the middle: series, logos, tri-codes --- */
-  .mid { position: absolute; left: calc(50% - var(--mid-w) / 2); top: calc(var(--top-h) + 4px); width: var(--mid-w);
-         height: var(--picks-h); background: var(--navy); overflow: hidden; isolation: isolate;
-         border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-  .mid .bg { position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity 1s ease; }
-  .mid .bg.On { opacity: 1; }
+  /* --- the middle --- */
+  .mid { position: absolute; left: 800px; top: 108px; width: 320px; height: 252px; background: var(--navy); overflow: hidden; isolation: isolate; }
+  .mid .glow { position: absolute; inset: 0; z-index: -1; transition: opacity .8s ease; opacity: 0; }
+  .mid .glow.blue { background: radial-gradient(ellipse 80% 70% at 0% 100%, color-mix(in srgb, var(--blue) 75%, transparent), transparent 70%); }
+  .mid .glow.red { background: radial-gradient(ellipse 80% 70% at 100% 100%, color-mix(in srgb, var(--red) 75%, transparent), transparent 70%); }
+  .mid .glow.On { opacity: 1; }
+  .mid .bg { position: absolute; inset: 0; z-index: -2; opacity: 0; transition: opacity 1s ease; }
+  .mid .bg.On { opacity: .55; }
   .mid .bg video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .mid .bg .tint { position: absolute; inset: 0; mix-blend-mode: multiply; }
-  .mid .bg::after { content: ""; position: absolute; inset: 0; background: rgba(5,8,26,.55); }
-  .mid .pips { position: absolute; top: 18px; display: flex; gap: 5px; }
-  .mid .pips.blue { left: 52px; } .mid .pips.red { right: 52px; flex-direction: row-reverse; }
-  .mid .pip { width: 22px; height: 9px; border: 1.5px solid rgba(255,255,255,.85); }
+  .mid .col { position: absolute; top: 0; width: 160px; height: 100%; }
+  .mid .col.blue { left: 0; } .mid .col.red { right: 0; }
+  .mid .pips { position: absolute; top: 19px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; }
+  .mid .pip { width: 26px; height: 14px; border: 2px solid #fff; }
   .mid .pip.Won { background: #fff; }
-  .mid .teamlogo { position: absolute; top: 58px; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; }
-  .mid .teamlogo.blue { left: 20px; } .mid .teamlogo.red { right: 20px; }
+  .mid .label { position: absolute; top: 49px; left: 0; right: 0; text-align: center; font-size: 15px; line-height: 18px;
+                letter-spacing: .02em; text-transform: uppercase; }
+  .mid .teamlogo { position: absolute; top: 83px; left: 50%; width: 84px; height: 80px; transform: translateX(-50%);
+                   display: flex; align-items: center; justify-content: center; }
   .mid .teamlogo img, .mid .event img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: 50% 50%; }
-  .mid .event { position: absolute; left: 50%; top: 92px; width: 56px; height: 56px; transform: translateX(-50%);
+  .mid .tri { position: absolute; top: 166px; left: 0; right: 0; text-align: center; font-size: 54px; line-height: 54px; }
+  .mid .arrow { position: absolute; top: 50px; left: 50%; width: 0; height: 0; transform: translateX(-50%);
+                border-top: 7px solid transparent; border-bottom: 7px solid transparent; opacity: 0; transition: opacity .4s; }
+  .mid .arrow.blue { border-right: 12px solid #fff; opacity: 1; }
+  .mid .arrow.red { border-left: 12px solid #fff; opacity: 1; }
+  .mid .event { position: absolute; left: 50%; top: 90px; width: 52px; height: 66px; transform: translateX(-50%);
                 display: flex; align-items: center; justify-content: center; }
-  .mid .tri { position: absolute; top: 186px; width: 120px; text-align: center; font-size: 64px; line-height: 64px; letter-spacing: .02em; }
-  .mid .tri.blue { left: 20px; } .mid .tri.red { right: 20px; }
-  .mid .score { position: absolute; left: 50%; top: 196px; transform: translateX(-50%); font-size: 40px; line-height: 44px; }
-  .mid .game { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 22px;
-               letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
-
-  @keyframes pulse { 50% { opacity: .55; } }
-  @keyframes breathe { 50% { opacity: .65; } }
+  .mid .patch { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-size: 19px; line-height: 22px;
+                text-transform: uppercase; }
 </style>
 <style id="fonts"></style>
 </head>
 <body>
 <div id="draft" class="Gone">
-  <div class="top">
-    <div class="side blue"><div class="coach short" id="coach-blue"></div><div class="bans" id="bans-blue"></div></div>
-    <div class="phase"><div class="name short" id="phase"></div><div class="secs kill" id="secs"></div></div>
-    <div class="side red"><div class="coach short" id="coach-red"></div><div class="bans" id="bans-red"></div></div>
-  </div>
+  <div class="box coaches blue"><div class="coach kill" id="coach-blue"></div><div class="bans" id="bans-blue"></div></div>
+  <div class="box phasebox"><div class="phase short" id="phase"></div><div class="secs kill" id="secs"></div></div>
+  <div class="box coaches red"><div class="coach kill" id="coach-red"></div><div class="bans" id="bans-red"></div></div>
   <div class="timer"><div class="bar" id="bar"></div></div>
   <div class="picks blue" id="picks-blue"></div>
   <div class="mid">
     <div class="bg" id="bg"><video muted loop autoplay playsinline></video><div class="tint"></div></div>
-    <div class="pips blue" id="pips-blue"></div>
-    <div class="pips red" id="pips-red"></div>
-    <div class="teamlogo blue"><img id="logo-blue" alt=""></div>
+    <div class="glow blue" id="glow-blue"></div>
+    <div class="glow red" id="glow-red"></div>
+    <div class="col blue">
+      <div class="pips" id="pips-blue"></div>
+      <div class="label kill">Blue side</div>
+      <div class="teamlogo"><img id="logo-blue" alt=""></div>
+      <div class="tri short" id="tri-blue"></div>
+    </div>
+    <div class="arrow" id="arrow"></div>
     <div class="event"><img id="logo-event" alt=""></div>
-    <div class="teamlogo red"><img id="logo-red" alt=""></div>
-    <div class="tri blue short" id="tri-blue"></div>
-    <div class="score kill" id="score"></div>
-    <div class="tri red short" id="tri-red"></div>
-    <div class="game short" id="game"></div>
+    <div class="col red">
+      <div class="pips" id="pips-red"></div>
+      <div class="label kill">Red side</div>
+      <div class="teamlogo"><img id="logo-red" alt=""></div>
+      <div class="tri short" id="tri-red"></div>
+    </div>
+    <div class="patch kill" id="patch"></div>
   </div>
   <div class="picks red" id="picks-red"></div>
 </div>
@@ -172,7 +189,8 @@ function nudge(img, a) {
   img.style.transform = `translate(${Number(a.x || 0)}px, ${Number(a.y || 0)}px) scale(${Number(a.scale ?? 1)})`;
 }
 
-// Cards and bans, built once (top to support, left to right, on both sides).
+// Cards and bans, built once: top to support, left to right, on both sides;
+// bans from the outside in.
 const sides = {};
 for (const side of ["blue", "red"]) {
   const t = { cards: [], bans: [] };
@@ -180,7 +198,7 @@ for (const side of ["blue", "red"]) {
   for (let i = 0; i < 5; i++) {
     const card = el("div", "card", picks);
     const art = el("img", "art", card);
-    el("div", "glow", card);
+    el("div", "hole", card);
     el("div", "shade", card);
     const names = el("div", "names", card);
     const player = el("span", "player short", names);
@@ -189,7 +207,7 @@ for (const side of ["blue", "red"]) {
     role.style.backgroundImage = `url("${ROLES[i]}")`;
     const spells = el("div", "spells", card);
     const s1 = el("img", "", spells), s2 = el("img", "", spells);
-    t.cards.push({ card, art, player, champ, role, spells, s1, s2 });
+    t.cards.push({ card, art, player, champ, spells, s1, s2 });
   }
   const bans = $(`bans-${side}`);
   for (let i = 0; i < 5; i++) {
@@ -222,7 +240,7 @@ function loadFonts(f) {
   }
 }
 
-// The draft's background loop behind the middle, as the Europe look.
+// The draft's background loop behind the middle, as in the Europe look.
 function renderBg(bg, blue, red) {
   const box = $("bg"), v = box.querySelector("video");
   const src = bg && bg.on && bg.video ? url(bg.video) : "";
@@ -261,12 +279,12 @@ function renderSide(side, team, info, show) {
   for (let i = 0; i < 5; i++) {
     const p = (team.picks || [])[i] || {}, v = t.cards[i];
     const champ = p.champion || {};
-    const art = champ.loading || "";
-    if (art) setSrc(v.art, art);
-    v.card.classList.toggle("Picked", !!art && !p.active);
+    if (champ.loading) setSrc(v.art, champ.loading);
+    v.card.classList.toggle("Picked", !!champ.loading && !p.active);
     v.card.classList.toggle("Active", !!p.active);
     v.player.textContent = p.name || "";
     v.champ.textContent = show.champ_names && champ.name && !p.active ? champ.name : "";
+    v.champ.style.display = v.champ.textContent ? "" : "none";
     const spells = show.spells && champ.name && !p.active && p.spell1 && p.spell2;
     v.spells.style.display = spells ? "" : "none";
     if (spells) { setSrc(v.s1, p.spell1); setSrc(v.s2, p.spell2); }
@@ -308,24 +326,24 @@ function render(s) {
   $("phase").textContent = d.phase || "";
   const secs = Number(d.timer || 0);
   $("secs").textContent = d.phase ? secs : "";
-  // The line: full at the start of each turn, gone at 0.
+  // The line: full at the start of each turn, gone at 0, in the acting team's colour.
   if (d.timer_total) timerTotal = d.timer_total;
   else if (secs > timerTotal) timerTotal = secs;
   const bar = $("bar");
   bar.style.width = (d.phase ? Math.min(1, secs / (timerTotal || 30)) * 100 : 0) + "%";
-  bar.classList.toggle("blue", !!d.blue.active);
-  bar.classList.toggle("red", !!d.red.active);
+  for (const side of ["blue", "red"]) {
+    bar.classList.toggle(side, !!d[side].active);
+    $(`glow-${side}`).classList.toggle("On", !!d[side].active);
+  }
+  $("arrow").className = "arrow " + (d.blue.active ? "blue" : d.red.active ? "red" : "");
 
   const show = s.show || {};
   renderSide("blue", d.blue, s.teams.blue, show);
   renderSide("red", d.red, s.teams.red, show);
-  const wb = Number(s.teams.blue.score || 0), wr = Number(s.teams.red.score || 0);
-  pips("blue", s.best_of, wb);
-  pips("red", s.best_of, wr);
+  pips("blue", s.best_of, Number(s.teams.blue.score || 0));
+  pips("red", s.best_of, Number(s.teams.red.score || 0));
   $("pips-blue").style.display = $("pips-red").style.display = show.score ? "" : "none";
-  $("score").textContent = show.score ? `${wb}-${wr}` : "";
-  const bo = Number(s.best_of) || 1;
-  $("game").textContent = bo > 1 ? `Game ${Math.min(bo, wb + wr + 1)} · Best of ${bo}` : "Best of 1";
+  $("patch").textContent = s.patch ? `Patch ${s.patch}` : "";
 }
 
 async function poll() {

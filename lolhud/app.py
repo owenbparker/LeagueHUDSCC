@@ -276,7 +276,10 @@ class HudApp:
                              "logo": cfg[side].get("logo", ""), "color": cfg[side].get("color", ""),
                              "score": cfg[side].get("wins", 0), "coach": d.get(f"coach_{side}", ""),
                              "logo_adjust": adjust.get(side) or {}}
-        return {"draft": view, "layout": self.draft_layout(), "best_of": cfg.get("best_of", 3), "teams": {"blue": team(blue), "red": team(red)},
+        # The game's patch (Data Dragon 15.20.1 is patch 25.20).
+        ver = (dd.version or "").split(".")
+        patch = f"{int(ver[0]) + 10}.{ver[1]}" if len(ver) > 1 and ver[0].isdigit() and int(ver[0]) < 20 else ".".join(ver[:2])
+        return {"draft": view, "layout": self.draft_layout(), "best_of": cfg.get("best_of", 3), "patch": patch, "teams": {"blue": team(blue), "red": team(red)},
                 "logo": d.get("logo") or "assets/logos/scc.png", "logo_adjust": adjust.get("event") or {},
                 "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
                          "team_logos": d.get("team_logos", True), "champ_names": d.get("champ_names", True)},
