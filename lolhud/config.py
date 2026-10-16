@@ -70,7 +70,9 @@ DEFAULTS = {
               "coach_left": "", "coach_right": "", "league_path": "",
               # The tournament logo in the middle ("" = the SCC logo), team logos by
               # the team names, and each one's size and nudge (draft only).
-              "logo": "", "team_logos": True, "champ_names": True, "bg_loop": True, "layout": "europe",
+              "logo": "", "team_logos": True, "champ_names": True, "layout": "europe",
+              # Its own background loop (middle box), like the HUD's: "" none.
+              "bg_video": "profiles/scc-2026/bg_loop.mp4", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
               "logo_adjust": {"event": {"scale": 1, "x": 0, "y": 0}, "left": {"scale": 1, "x": 0, "y": 0},
                               "right": {"scale": 1, "x": 0, "y": 0}}},
     # The sponsor box: covers the spectator's observer controls (camera mode

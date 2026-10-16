@@ -269,7 +269,20 @@
       <label><input type="checkbox" id="draft-coaches"> Coaches</label>
       <label><input type="checkbox" id="draft-spells"> Summoner spells</label>
       <label><input type="checkbox" id="draft-champ-names"> Champion names</label>
-      <label><input type="checkbox" id="draft-bg-loop"> Background loop in the middle box</label>
+    </div>
+    <div class="bg-video">
+      <div class="row" style="align-items:center">
+        <div><label>Background loop (middle box)</label><div id="dbg-name" class="note" style="margin:0"></div></div>
+        <button type="button" id="dbg-choose" style="flex:0 0 auto">Choose video…</button>
+        <button type="button" id="dbg-default" style="flex:0 0 auto" hidden title="The SCC background loop that comes with the app">Use default loop</button>
+        <button type="button" id="dbg-remove" style="flex:0 0 auto" hidden>Remove</button>
+        <input type="file" id="dbg-file" accept="video/mp4,video/webm,.mp4,.webm,.m4v" hidden>
+      </div>
+      <label>Playback speed <span id="dbg-speed-val">1.00×</span></label>
+      <input type="range" id="dbg-speed" min="0.1" max="3" step="0.05">
+      <label class="toggle"><input type="checkbox" id="dbg-tint"> Tint with team colours</label>
+      <label>Brightness <span id="dbg-bright-val">100%</span></label>
+      <input type="range" id="dbg-bright" min="0.2" max="2.5" step="0.05">
     </div>
     <div class="row" style="margin-top:8px">
       <div><label>Coach: left team</label><input id="draft-coach-left" placeholder="Coach name"></div>
@@ -815,7 +828,29 @@ $("draft-logo-reset").onclick = () => draftPost({ logo: "" });
 $("draft-team-logos").onchange = e => draftPost({ team_logos: e.target.checked });
 $("draft-champ-names").onchange = e => draftPost({ champ_names: e.target.checked });
 $("draft-layout").onchange = e => draftPost({ layout: e.target.value });
-$("draft-bg-loop").onchange = e => draftPost({ bg_loop: e.target.checked });
+$("dbg-choose").onclick = () => $("dbg-file").click();
+$("dbg-remove").onclick = () => draftPost({ bg_video: "" });
+$("dbg-default").onclick = () => draftPost({ bg_video: DEFAULT_BG });
+$("dbg-file").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `/api/media?for=draft&filename=${encodeURIComponent(file.name)}`);
+  xhr.upload.onprogress = ev => { if (ev.lengthComputable) $("dbg-name").textContent = `Copying ${file.name}… ${Math.round(ev.loaded * 100 / ev.total)}%`; };
+  xhr.onload = () => { const d = JSON.parse(xhr.responseText); if (d.error) alert(d.error); else apply(d); };
+  xhr.onerror = () => alert("Couldn't copy the video");
+  xhr.send(file);
+});
+$("dbg-tint").onchange = e => draftPost({ bg_tint: e.target.checked });
+for (const [id, key, fmt] of [["dbg-speed", "bg_speed", v => v.toFixed(2) + "×"], ["dbg-bright", "bg_brightness", v => Math.round(v * 100) + "%"]]) {
+  let t;
+  $(id).addEventListener("input", e => {
+    $(`${id}-val`).textContent = fmt(Number(e.target.value));
+    clearTimeout(t);
+    t = setTimeout(() => draftPost({ [key]: Number(e.target.value) }), 100);
+  });
+}
 const DRAFT_ADJ = [["scale", "Size", 0.3, 3, 0.05, v => Math.round(v * 100) + "%"],
                    ["x", "Left / right", -80, 80, 1, v => v], ["y", "Up / down", -60, 60, 1, v => v]];
 $("draft-adjust").innerHTML = ["event", "left", "right"].map(k => `<div>${DRAFT_ADJ.map(([a, label, min, max, step]) =>
@@ -854,7 +889,13 @@ function applyDraft(s) {
   $("draft-demo").textContent = info.demo ? "Stop demo draft" : "Play demo draft";
   $("draft-team-logos").checked = d.team_logos !== false;
   $("draft-champ-names").checked = d.champ_names !== false;
-  $("draft-bg-loop").checked = d.bg_loop !== false;
+  if (!$("dbg-name").textContent.startsWith("Copying"))
+    $("dbg-name").textContent = d.bg_video === DEFAULT_BG ? "Default SCC loop" : d.bg_video ? d.bg_video.split("/").pop() : "None: just the team colours";
+  $("dbg-remove").hidden = !d.bg_video;
+  $("dbg-default").hidden = d.bg_video === DEFAULT_BG;
+  $("dbg-tint").checked = d.bg_tint !== false;
+  for (const [id, key, fmt] of [["dbg-speed", "bg_speed", v => v.toFixed(2) + "×"], ["dbg-bright", "bg_brightness", v => Math.round(v * 100) + "%"]])
+    if (document.activeElement !== $(id)) { $(id).value = d[key] ?? 1; $(`${id}-val`).textContent = fmt(Number(d[key] ?? 1)); }
   const layouts = info.layouts || [], sel = $("draft-layout");
   if (sel.dataset.ids !== layouts.map(l => l.id).join()) {
     sel.dataset.ids = layouts.map(l => l.id).join();

@@ -221,6 +221,13 @@ function loadFonts(f) {
   }
 }
 
+function lighten(c, amount) {
+  if (!/^#[0-9a-f]{6}$/i.test(c || "")) return c;
+  const n = parseInt(c.slice(1), 16);
+  const ch = shift => Math.round(((n >> shift) & 255) + (255 - ((n >> shift) & 255)) * amount);
+  return "#" + [16, 8, 0].map(sh => ch(sh).toString(16).padStart(2, "0")).join("");
+}
+
 // The background loop, as the HUD plays it (speed, brightness, team tint).
 function renderBg(bg, blue, red) {
   const box = $("bg-loop"), v = box.querySelector("video");
@@ -239,7 +246,9 @@ function renderBg(bg, blue, red) {
   v.style.filter = bg.tint ? "grayscale(1) brightness(1.6)" : "";
   const tint = box.querySelector(".Tint");
   tint.style.display = bg.tint ? "" : "none";
-  tint.style.background = `linear-gradient(to right, ${blue} 0%, ${red} 100%)`;
+  // As the HUD: lightened team colours, blended across the middle.
+  const l = lighten(blue, .35), r = lighten(red, .35);
+  tint.style.background = `linear-gradient(to right, ${l} 0%, ${l} 30%, ${r} 70%, ${r} 100%)`;
 }
 $("bg-loop").querySelector("video").addEventListener("error", e => { e.target.dataset.failed = "1"; $("bg-loop").classList.remove("On"); });
 

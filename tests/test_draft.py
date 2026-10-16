@@ -128,6 +128,10 @@ class ApiTests(unittest.TestCase):
                 self.assertTrue(s["show"]["champ_names"])
                 self.assertTrue(s["bg"]["on"])
                 self.assertTrue(s["bg"]["video"].endswith("bg_loop.mp4"))
+                config.update({"draft": {"bg_video": "", "bg_speed": 0.5}})
+                with urllib.request.urlopen("http://127.0.0.1:8871/api/draft", timeout=5) as r:
+                    bg = json.loads(r.read())["bg"]
+                self.assertEqual((bg["on"], bg["speed"]), (False, 0.5))       # removed; its own settings
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
                     self.assertIn(b"europe.css", r.read())
                 self.assertEqual(app.app_info()["draft"]["source"], "observer")

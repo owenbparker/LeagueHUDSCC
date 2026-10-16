@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import outputs
 from .cams import CamHub, Director, get_json, post_json
-from .config import DATA_DIR, DEFAULT_BG_VIDEO, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
+from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from . import companion
 from .draft import DraftFeed, DraftReader, play_recording
@@ -280,10 +280,10 @@ class HudApp:
                 "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
                          "team_logos": d.get("team_logos", True), "champ_names": d.get("champ_names", True)},
                 "fonts": profiles.hud_fonts(cfg.get("profile")),
-                # The HUD's background loop (or the default one) behind the middle box.
-                "bg": {"on": d.get("bg_loop", True), "video": cfg.get("bg_video") or DEFAULT_BG_VIDEO,
-                       "speed": cfg.get("bg_speed", 1.0), "brightness": cfg.get("bg_brightness", 1.0),
-                       "tint": cfg.get("bg_tint", True)}}
+                # The draft's background loop behind the middle box ("" none).
+                "bg": {"on": bool(d.get("bg_video")), "video": d.get("bg_video", ""),
+                       "speed": d.get("bg_speed", 1.0), "brightness": d.get("bg_brightness", 1.0),
+                       "tint": d.get("bg_tint", True)}}
 
     def save_draft_logo(self, filename, data_b64):
         """The tournament logo for the draft overlay (stored with the team logos)."""
@@ -708,7 +708,10 @@ def make_handler(app):
                 try:
                     name = (parse_qs(url.query).get("filename") or [""])[0]
                     saved = app.save_media(name, self.rfile, length)
-                    app.config.update({"bg_video": saved})
+                    if (parse_qs(url.query).get("for") or [""])[0] == "draft":
+                        app.config.update({"draft": {"bg_video": saved}})
+                    else:
+                        app.config.update({"bg_video": saved})
                     log(f"Background video set: {os.path.basename(saved)} ({length / 1e6:.1f} MB)")
                     app.refresh(fetch=False)
                     return self._send(json.dumps(app.snapshot()))
