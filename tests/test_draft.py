@@ -135,5 +135,11 @@ class ApiTests(unittest.TestCase):
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
                     self.assertIn(b"europe.css", r.read())
                 self.assertEqual(app.app_info()["draft"]["source"], "observer")
+                self.assertEqual([l["id"] for l in app.app_info()["draft"]["layouts"]], ["europe", "lec"])
+                config.update({"draft": {"layout": "lec"}})
+                with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
+                    self.assertIn(b'const LAYOUT = "lec"', r.read())                # the chosen look
+                with urllib.request.urlopen("http://127.0.0.1:8871/draft?layout=europe", timeout=5) as r:
+                    self.assertIn(b"europe.css", r.read())
             finally:
                 app.stop()

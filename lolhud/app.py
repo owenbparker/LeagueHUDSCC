@@ -40,7 +40,8 @@ mimetypes.add_type("video/webm", ".webm")
 # Bundled logos (shipped with the app) plus ones you've uploaded.
 BUNDLED_LOGO_DIR = os.path.join(WEB_DIR, "assets", "logos")
 # Draft overlay looks ("draft profiles"): id -> (name, page in web/).
-DRAFT_LAYOUTS = {"europe": ("Europe (lol-pick-ban-ui)", "draft.html")}
+DRAFT_LAYOUTS = {"europe": ("Europe (lol-pick-ban-ui)", "draft.html"),
+                 "lec": ("LEC", "draft-lec.html")}
 
 
 class HudApp:
@@ -275,7 +276,7 @@ class HudApp:
                              "logo": cfg[side].get("logo", ""), "color": cfg[side].get("color", ""),
                              "score": cfg[side].get("wins", 0), "coach": d.get(f"coach_{side}", ""),
                              "logo_adjust": adjust.get(side) or {}}
-        return {"draft": view, "layout": self.draft_layout(), "teams": {"blue": team(blue), "red": team(red)},
+        return {"draft": view, "layout": self.draft_layout(), "best_of": cfg.get("best_of", 3), "teams": {"blue": team(blue), "red": team(red)},
                 "logo": d.get("logo") or "assets/logos/scc.png", "logo_adjust": adjust.get("event") or {},
                 "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
                          "team_logos": d.get("team_logos", True), "champ_names": d.get("champ_names", True)},

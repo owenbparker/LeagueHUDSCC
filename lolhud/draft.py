@@ -151,6 +151,7 @@ def convert_session(session, names=None, now=None):
         left -= max(0.0, now - float(timer["internalNowInEpochMs"]) / 1000)
     out["timer_left"] = max(0.0, left)
     out["timer_infinite"] = bool(timer.get("isInfinite"))
+    out["timer_total"] = round(float(timer.get("totalTimeInPhase") or 0) / 1000)
     return out
 
 
