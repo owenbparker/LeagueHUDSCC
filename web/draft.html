@@ -63,6 +63,11 @@
   .Europe .Timer.Blue .Background.Blue, .Europe .Timer.Red .Background.Red { opacity: .75; }
   .Europe .Timer.Blue.Red .Background { opacity: .5; }
 </style>
+<style>
+  /* SCC: when the draft ends it slides down out of frame. */
+  .Europe .ChampSelect { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  .Europe.SlideOut .ChampSelect { transform: translateY(440px); transition: transform .9s cubic-bezier(.55, 0, .75, .3); }
+</style>
 <style id="fonts"></style>
 </head>
 <body>
@@ -191,6 +196,8 @@ function setAnim(cls) {
 }
 function open() {
   shown = true;
+  timers.forEach(clearTimeout);
+  setAnim("TheAbsoluteVoid");   // (back from a slide out: start over)
   timers = [
     setTimeout(() => setAnim("AnimationHidden"), 500),
     setTimeout(() => setAnim("AnimationTimer AnimationBansPick"), 1200),
@@ -198,10 +205,13 @@ function open() {
     setTimeout(() => setAnim("AnimationPigs"), 3650),
   ];
 }
+const SLIDE_OUT_MS = 900;
 function close() {
   shown = false;
   timers.forEach(clearTimeout);
-  setAnim("TheAbsoluteVoid");
+  // Slide what's on screen down, then hide it.
+  $("overlay").classList.add("SlideOut");
+  timers = [setTimeout(() => setAnim("TheAbsoluteVoid"), SLIDE_OUT_MS + 50)];
 }
 
 // The HUD's fonts (its profile's), loaded once and again when they change.
