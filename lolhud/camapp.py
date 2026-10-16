@@ -10,9 +10,12 @@ network. Players can instead open the GFX PC's https link in a browser.
 """
 
 import argparse
+import base64
 import json
 import mimetypes
 import os
+import ssl
+import subprocess
 import sys
 import threading
 import urllib.request
@@ -29,7 +32,77 @@ STATUS = {"camera_ready": False}
 _handlers = []  # .NET event handlers, kept alive
 # Only these files are served (and bundled into the app).
 FILES = {"/cam": "cam.html", "/update.js": "update.js", "/fonts/Inter.ttf": "fonts/Inter.ttf",
-         "/assets/app_icon.png": "assets/app_icon.png"}
+         "/assets/app_icon.png": "assets/app_icon.png",
+         "/assets/games/lol.svg": "assets/games/lol.svg", "/assets/games/valorant.svg": "assets/games/valorant.svg"}
+
+
+# --- the player's Riot account (VALORANT) -----------------------------------
+#
+# Their Riot ID is read from the Riot Client on this PC, which they're signed
+# in to to play: its local API (port and password in its lockfile) answers
+# with the signed-in account's name and tag. Nothing leaves this PC.
+
+def riot_lockfile():
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/AppData/Local")
+    return os.path.join(base, "Riot Games", "Riot Client", "Config", "lockfile")
+
+
+def _riot_get(port, password, path):
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE   # the Riot Client's own certificate, on this PC
+    auth = base64.b64encode(f"riot:{password}".encode()).decode()
+    req = urllib.request.Request(f"https://127.0.0.1:{port}{path}", headers={"Authorization": f"Basic {auth}"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(context=ctx))
+    with opener.open(req, timeout=3) as r:
+        return json.loads(r.read() or b"null")
+
+
+def riot_account(lockfile=None):
+    """{"riot_id": "Name#TAG"} for the account signed in to the Riot Client
+    here, or {"error": why, "can_sign_in": bool}."""
+    try:
+        with open(lockfile or riot_lockfile(), encoding="utf-8") as f:
+            parts = f.read().strip().split(":")   # name:pid:port:password:protocol
+        port, password = int(parts[2]), parts[3]
+    except (OSError, ValueError, IndexError):
+        return {"error": "The Riot Client isn't running on this PC.", "can_sign_in": bool(riot_client_exe())}
+    for path, name_key, tag_key in (("/player-account/aliases/v1/active", "game_name", "tag_line"),
+                                    ("/chat/v1/session", "game_name", "game_tag")):
+        try:
+            data = _riot_get(port, password, path) or {}
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            if data.get(name_key) and data.get(tag_key):
+                return {"riot_id": f"{data[name_key]}#{data[tag_key]}"}
+        except Exception:
+            continue
+    return {"error": "Sign in to the Riot Client, then try again.", "can_sign_in": bool(riot_client_exe())}
+
+
+def riot_client_exe():
+    """RiotClientServices.exe, from where the Riot installer records it."""
+    if sys.platform != "win32":
+        return None
+    try:
+        with open(os.path.join(os.environ.get("PROGRAMDATA", r"C:\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
+                  encoding="utf-8") as f:
+            installs = json.load(f)
+        for key in ("rc_default", "rc_live"):
+            if installs.get(key) and os.path.exists(installs[key]):
+                return installs[key]
+    except (OSError, ValueError):
+        pass
+    default = r"C:\Riot Games\Riot Client\RiotClientServices.exe"
+    return default if os.path.exists(default) else None
+
+
+def open_riot_client():
+    """Open the Riot Client (its sign-in window when signed out)."""
+    exe = riot_client_exe()
+    if not exe:
+        raise ValueError("The Riot Client isn't installed on this PC: type your Riot ID instead.")
+    subprocess.Popen([exe], close_fds=True)
 
 
 def make_handler(updater):
@@ -54,6 +127,8 @@ def make_handler(updater):
             path = urlparse(self.path).path
             if path == "/api/state":
                 return self._send(self._state())
+            if path == "/api/riot/account":
+                return self._send(json.dumps(riot_account()))
             rel = FILES.get(path)
             full = web_file(rel) if rel else None
             if not full:
@@ -69,6 +144,9 @@ def make_handler(updater):
                     updater.check()
                 elif path == "/api/update/install":
                     updater.install_in_background()
+                elif path == "/api/riot/sign-in":
+                    open_riot_client()
+                    return self._send(json.dumps({"ok": True}))
                 else:
                     return self._send('{"error":"not found"}', status=404)
                 self._send(self._state())

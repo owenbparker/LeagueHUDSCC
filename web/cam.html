@@ -61,32 +61,69 @@
   .update.error { background: #6b2a2a; color: #fff; }
   .version { font-size: 12px; color: var(--muted); }
   .update.check { background: #252a2f; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+
+  /* The game picker (the app opens on it). */
+  #picker { min-height: calc(100% - 54px); display: grid; place-items: center; padding: 24px; }
+  #picker .games { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  #picker button { width: 300px; height: 190px; display: grid; place-items: center; padding: 34px; cursor: pointer;
+                   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+                   transition: border-color .15s, transform .15s, background .15s; }
+  #picker button:hover, #picker button:focus-visible { border-color: var(--accent); background: #1c2024; transform: translateY(-2px); outline: none; }
+  #picker button img { width: 232px; height: 122px; object-fit: contain; display: block; }
+  body.picking main, body:not(.picking) #picker { display: none; }
+  #switch-game { display: flex; align-items: center; height: 30px; padding: 4px 10px; background: transparent;
+                 border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  #switch-game img { height: 20px; }
+  #switch-game:hover { border-color: var(--accent); }
+  body.picking #switch-game { display: none; }
+  body:not(.game-lol) .lol-only, body:not(.game-val) .val-only { display: none !important; }
+  .riot-row { display: flex; gap: 8px; margin-top: 8px; }
+  .riot-row button { flex: 0 0 auto; padding: 8px 12px; border-radius: 6px; font: 600 13px "Inter", system-ui, sans-serif; cursor: pointer;
+                     background: #d13639; color: #fff; border: 0; }
+  .riot-row button:hover { background: #e2474a; }
+  .connected { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 14px; border-radius: 6px;
+               background: rgba(49,195,146,.14); color: var(--accent); font-weight: 700; font-size: 15px; }
+  .connected::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .connected[hidden] { display: none; }
+  body.game-val .preview { aspect-ratio: 16 / 9; }
 </style>
 </head>
 <body>
 <header>
   <h1>SCC Player Cam</h1><span id="hud-name"></span>
+  <button id="switch-game" class="app-only" title="Change game"><img id="game-logo" alt=""></button>
   <div class="right app-only">
     <button id="update" class="update" hidden></button>
     <span class="version" id="version"></span>
   </div>
 </header>
+<div id="picker">
+  <div class="games">
+    <button data-game="lol" title="League of Legends"><img src="assets/games/lol.svg" alt="League of Legends"></button>
+    <button data-game="val" title="VALORANT"><img src="assets/games/valorant.svg" alt="VALORANT"></button>
+  </div>
+</div>
 <main>
   <div class="wrap">
     <section>
       <label for="gfx" class="app-only">GFX PC address</label>
       <input id="gfx" class="app-only" spellcheck="false" placeholder="192.168.2.40">
-      <label>Team</label>
-      <div class="seg" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
-      <label>Player</label>
-      <div class="seg roles" id="role"></div>
+      <label class="lol-only">Team</label>
+      <div class="seg lol-only" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
+      <label class="lol-only">Player</label>
+      <div class="seg roles lol-only" id="role"></div>
+      <label for="riot-id" class="val-only">Riot ID</label>
+      <input id="riot-id" class="val-only" spellcheck="false" autocomplete="off" placeholder="Name#TAG">
+      <div class="riot-row val-only app-only"><button id="riot-sign-in" type="button">Sign in with Riot</button>
+        <div class="status" id="riot-status" style="margin:0;align-self:center"></div></div>
       <label for="camera">Camera</label>
       <select id="camera"></select>
       <div class="row cam-line"><div class="status" id="cam-status"></div><button id="cam-retry" class="retry" hidden>Try again</button></div>
+      <div class="connected" id="connected" hidden>Connected</div>
       <div class="status" id="status"></div>
       <p class="note"><span class="app-only">Ask the GFX operator to tick "Let other PCs on the network read the HUD".</span>
         Keep this <span id="window-word">window</span> open while you play (it can be minimised). Your cam shows on the
-        HUD when the action is on you.</p>
+        HUD when <span class="lol-only">the action is on you</span><span class="val-only">the observer is spectating you</span>.</p>
     </section>
     <section>
       <div class="preview"><video id="preview" autoplay muted playsinline></video><span class="live" id="live">OFF AIR</span></div>
@@ -109,6 +146,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const ME = Math.random().toString(16).slice(2, 18);
 let base = "", seat = stored("camSeat") || "", claim = !!seat, stream = null, teams = null, online = false;
+// The game: the app asks on launch; in a browser the page comes from the
+// League HUD itself. Each game's HUD app has its own address and port.
+const GAMES = { lol: { port: 8777, logo: "assets/games/lol.svg" }, val: { port: 8778, logo: "assets/games/valorant.svg" } };
+let GAME = APP ? "" : "lol";
+let riotId = stored("camRiotId") || "", matched = null;
 const viewers = {};  // overlay id -> RTCPeerConnection
 
 // "192.168.2.40", "http://192.168.2.40:8777/overlay" -> "http://192.168.2.40:8777"
@@ -118,11 +160,15 @@ function gfxBase(text) {
   if (!/^https?:\/\//i.test(text)) text = "http://" + text;
   try {
     const u = new URL(text);
-    return `${u.protocol}//${u.hostname}:${u.port || 8777}`;
+    return `${u.protocol}//${u.hostname}:${u.port || GAMES[GAME || "lol"].port}`;
   } catch (e) { return ""; }
 }
 
-function status(text, kind) { $("status").textContent = text; $("status").className = "status " + (kind || ""); }
+function status(text, kind) {
+  $("status").textContent = text;
+  $("status").className = "status " + (kind || "");
+  $("connected").hidden = kind !== "ok";
+}
 
 function drawSeat() {
   const [side, slot] = seat ? seat.split("-") : ["", ""];
@@ -250,7 +296,22 @@ async function answer(m) {
 let wakeUp = null;
 function wake() { if (wakeUp) wakeUp(); }
 
+function handleVal(r) {
+  online = true;
+  matched = r.player || null;
+  status(!r.riot_id ? "Enter your Riot ID (Name#TAG) to connect."
+         : matched ? `On the HUD at ${base} as ${matched.name} (${matched.team_name || matched.team})`
+         : `Connected to the HUD at ${base} as ${r.riot_id}. Your cam shows once you're in the match.`, r.riot_id ? "ok" : "");
+  for (const m of r.messages) {
+    if (m.type === "offer") answer(m).catch(() => {});
+    else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
+    else if (m.type === "replaced") status("Your Riot ID connected from another PC.", "bad");
+  }
+  drawSeat();
+}
+
 function handle(r) {
+  if (GAME === "val") return handleVal(r);
   claim = false;
   online = true;
   teams = r.teams;
@@ -274,13 +335,16 @@ async function loop() {
     }
     try {
       // A poll cut short by a change of seat or address still gets handled.
-      const pending = post("/api/cam/poll", { id: ME, seat, claim, label: cameraLabel(), wait: online && !claim ? 20 : 0 })
-        .then(handle);
+      const body = GAME === "val"
+        ? { id: ME, riot_id: riotId, label: cameraLabel(), wait: online ? 20 : 0 }
+        : { id: ME, seat, claim, label: cameraLabel(), wait: online && !claim ? 20 : 0 };
+      const pending = post("/api/cam/poll", body).then(handle);
       const woken = new Promise(res => (wakeUp = () => res("woken")));
       await Promise.race([pending, woken]);
     } catch (e) {
       online = false;
-      status(`Can't reach the HUD at ${base}. Check the address and that the GFX PC lets other PCs read the HUD.`, "bad");
+      status(e.message && !/fetch|network/i.test(e.message) ? e.message
+             : `Can't reach the HUD at ${base}. Check the address and that the GFX PC lets other PCs read the HUD.`, "bad");
       await Promise.race([sleep(3000), new Promise(r => (wakeUp = r))]);
     }
   }
@@ -295,7 +359,8 @@ function cameraLabel() {
 // browser sends it to another PC without asking first.)
 addEventListener("pagehide", () => {
   if (base && navigator.sendBeacon)
-    navigator.sendBeacon(base + "/api/cam/poll", new Blob([JSON.stringify({ id: ME, seat: "", claim: true, wait: 0 })], { type: "text/plain" }));
+    navigator.sendBeacon(base + "/api/cam/poll", new Blob([JSON.stringify(
+      GAME === "val" ? { id: ME, riot_id: "", wait: 0 } : { id: ME, seat: "", claim: true, wait: 0 })], { type: "text/plain" }));
 });
 
 async function start() {
@@ -311,8 +376,13 @@ async function start() {
       }
     } catch (e) { /* fall through to the message below */ }
   }
-  $("gfx").value = new URLSearchParams(location.search).get("gfx") || stored("camGfx") || "";
-  $("gfx").addEventListener("change", () => { store("camGfx", $("gfx").value.trim()); claim = !!seat; wake(); });
+  $("gfx").addEventListener("change", () => { store(`camGfx-${GAME}`, $("gfx").value.trim()); claim = !!seat; online = false; wake(); });
+  if (APP) {
+    document.body.classList.add("picking");
+    await new Promise(resolve => {
+      for (const b of document.querySelectorAll("#picker button")) b.onclick = () => { pickGame(b.dataset.game); resolve(); };
+    });
+  } else pickGame("lol");
   drawSeat();
   if (APP) {
     // The app allows this page the camera once its window is ready.
@@ -328,6 +398,59 @@ async function start() {
     setTimeout(updates, 5000);
   })();
 }
+// --- the game -----------------------------------------------------------------
+function pickGame(game) {
+  const changed = GAME && GAME !== game;
+  GAME = game;
+  document.body.classList.remove("picking", "game-lol", "game-val");
+  document.body.classList.add(`game-${game}`);
+  $("game-logo").src = GAMES[game].logo;
+  // (The address used to be stored for League only.)
+  $("gfx").value = new URLSearchParams(location.search).get("gfx") || stored(`camGfx-${game}`)
+    || (game === "lol" ? stored("camGfx") || "" : "");
+  $("gfx").placeholder = `192.168.2.40${GAMES[game].port === 8777 ? "" : ":" + GAMES[game].port}`;
+  if (changed) {
+    // Leave the other game's HUD and start again on this one's.
+    for (const id of Object.keys(viewers)) { viewers[id].close(); delete viewers[id]; }
+    online = false;
+    claim = !!seat;
+    status("");
+    wake();
+  }
+}
+$("switch-game").onclick = () => {
+  document.body.classList.add("picking");
+  for (const b of document.querySelectorAll("#picker button")) b.onclick = () => pickGame(b.dataset.game);
+};
+
+// --- VALORANT: the player's Riot ID ------------------------------------------
+$("riot-id").value = riotId;
+function setRiotId(text) {
+  const clean = (text || "").trim().replace(/\s*#\s*/, "#");
+  $("riot-id").value = clean;
+  if (clean && !/^[^#]{1,16}#[^#]{1,5}$/.test(clean)) { status("Enter your Riot ID as Name#TAG (as shown in VALORANT).", "bad"); return; }
+  riotId = clean;
+  store("camRiotId", riotId || undefined);
+  online = false;
+  wake();
+}
+$("riot-id").addEventListener("change", e => setRiotId(e.target.value));
+function riotStatus(text, kind) { $("riot-status").textContent = text || ""; $("riot-status").className = "status " + (kind || ""); }
+// "Sign in with Riot": the Riot ID of the account signed in to the Riot
+// Client on this PC (opening the Riot Client to sign in when needed).
+$("riot-sign-in").onclick = async () => {
+  const account = async () => (await fetch("/api/riot/account")).json();
+  riotStatus("Checking the Riot Client…");
+  let a = await account().catch(() => ({ error: "Couldn't check the Riot Client." }));
+  if (!a.riot_id && a.can_sign_in) {
+    await fetch("/api/riot/sign-in", { method: "POST" }).catch(() => {});
+    riotStatus("Sign in in the Riot Client window…");
+    for (let i = 0; i < 90 && !a.riot_id; i++) { await sleep(2000); a = await account().catch(() => a); }
+  }
+  if (a.riot_id) { riotStatus(`Signed in as ${a.riot_id}`, "ok"); setRiotId(a.riot_id); }
+  else riotStatus(a.error || "Couldn't get your Riot ID: type it instead.", "bad");
+};
+
 start();
 </script>
 </body>
