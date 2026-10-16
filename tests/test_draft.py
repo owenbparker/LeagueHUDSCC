@@ -55,6 +55,17 @@ class DelayTests(unittest.TestCase):
         self.assertFalse(feed.view(0)["active"])
         self.assertEqual(feed.view(5)["phase"], "BAN PHASE 2")
 
+    def test_time_until_bans(self):
+        feed = DraftFeed()
+        self.assertIsNone(feed.starts_in(150))
+        now = time.time()
+        feed.push({"phase": "BAN PHASE 1", "timer_left": 30, "blue": {}, "red": {}}, at=now - 40)
+        feed.push({"phase": "BAN PHASE 1", "timer_left": 20, "blue": {"bans": [1]}, "red": {}}, at=now - 30)
+        self.assertAlmostEqual(feed.starts_in(150), 110, delta=1)   # from when champ select began
+        self.assertEqual(feed.starts_in(20), 0)                       # already on air
+        feed.push(None)
+        self.assertIsNone(feed.starts_in(150))
+
     def test_view_is_a_copy(self):
         feed = DraftFeed()
         feed.push({"phase": "X", "timer_left": 5, "blue": {"picks": [{"champion": 1}]}, "red": {}})
@@ -109,6 +120,8 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(s["draft"]["blue"]["bans"][0]["champion"]["name"], "Aatrox")
                 self.assertIn("/img/champion/loading/KogMaw_0.jpg", s["draft"]["blue"]["picks"][0]["champion"]["loading"])
                 self.assertEqual(s["teams"]["blue"]["coach"], "Coach L")
+                self.assertEqual(s["logo"], "assets/logos/scc.png")          # no tournament logo yet
+                self.assertEqual(s["teams"]["blue"]["logo_adjust"], {"scale": 1, "x": 0, "y": 0})
                 self.assertEqual(s["teams"]["blue"]["name"], config.get()["left"]["name"])
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
                     self.assertIn(b"europe.css", r.read())

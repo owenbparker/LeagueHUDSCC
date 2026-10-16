@@ -264,11 +264,26 @@ class HudApp:
                 for b in view[side]["bans"]:
                     b["champion"] = champ(b["champion"])
         blue, red = ("right", "left") if cfg.get("swap_sides") else ("left", "right")
+        adjust = d.get("logo_adjust") or {}
         team = lambda side: {"name": cfg[side].get("name", ""), "tricode": cfg[side].get("tricode", ""),
-                                  "logo": cfg[side].get("logo", ""), "color": cfg[side].get("color", ""),
-                                  "score": cfg[side].get("wins", 0), "coach": d.get(f"coach_{side}", "")}
+                             "logo": cfg[side].get("logo", ""), "color": cfg[side].get("color", ""),
+                             "score": cfg[side].get("wins", 0), "coach": d.get(f"coach_{side}", ""),
+                             "logo_adjust": adjust.get(side) or {}}
         return {"draft": view, "teams": {"blue": team(blue), "red": team(red)},
-                "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True)}}
+                "logo": d.get("logo") or "assets/logos/scc.png", "logo_adjust": adjust.get("event") or {},
+                "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
+                         "team_logos": d.get("team_logos", True)}}
+
+    def save_draft_logo(self, filename, data_b64):
+        """The tournament logo for the draft overlay (stored with the team logos)."""
+        name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename or "tournament.png"))
+        if os.path.splitext(name)[1].lower() not in (".png", ".jpg", ".jpeg", ".webp", ".svg"):
+            raise ValueError("The logo must be a PNG, JPG, WEBP or SVG")
+        os.makedirs(LOGO_DIR, exist_ok=True)
+        with open(os.path.join(LOGO_DIR, name), "wb") as f:
+            f.write(base64.b64decode(data_b64))
+        self.config.update({"draft": {"logo": f"assets/logos/{name}"}})
+        log(f"Tournament logo for the draft: {name}")
 
     def sync_all(self):
         """Every client (this PC, the GFX PC and its observers) to 0:00."""
@@ -747,6 +762,8 @@ def make_handler(app):
                     app.set_role(body.get("role"))
                 elif path == "/api/draft/read":
                     app.set_draft_read(body.get("enabled"))
+                elif path == "/api/draft/logo":
+                    app.save_draft_logo(body.get("filename"), body["data"])
                 elif path == "/api/draft/demo":
                     app.draft_demo(bool(body.get("on")))
                 elif path == "/api/companion/network":

@@ -78,6 +78,8 @@
   /* Just the HUD, on a dark checkerboard that shows where it's see-through. */
   .preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: repeating-conic-gradient(#1a1e22 0 25%, #121518 0 50%) 0 0 / 20px 20px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
   .preview.bar { aspect-ratio: 934 / 122; }
+  .preview.draft { aspect-ratio: 1920 / 420; }
+  .preview-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; pointer-events: none; }
   .preview-mode { margin-bottom: 10px; }
   .cam-opts { display: flex; flex-wrap: wrap; gap: 4px 22px; }
   .cam-opts .toggle { margin: 4px 0; }
@@ -107,6 +109,12 @@
   .obj-icon.big { flex: 0 0 36px; width: 36px; height: 36px; }
   .checks .dot { width: 18px; height: 18px; box-shadow: none; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; }
   .warn { color: #ffcf66; }
+  .countdown { font-size: 18px; font-weight: 700; color: var(--text); margin: 8px 0 12px; font-variant-numeric: tabular-nums; }
+  .countdown.live { color: var(--accent); }
+  .logo3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+  .logo-pick { display: flex; gap: 8px; align-items: center; }
+  .logo-pick img { width: 48px; height: 48px; object-fit: contain; background: #111; border: 1px solid var(--line); border-radius: 6px; }
+  .logo-pick button { flex: 0 0 auto; }
   .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; }
   .drop.over { border-color: var(--accent); color: var(--text); background: rgba(49,195,146,.06); }
   .sponsor-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
@@ -243,7 +251,18 @@
       <label class="toggle" style="margin:0"><input type="checkbox" id="draft-delay-on"> Delay the draft by</label>
       <input type="number" id="draft-delay" min="0" max="600" step="1" style="width:80px;flex:0 0 auto"> <span class="note" style="margin:0">seconds (2:30 = 150, the spectator delay)</span>
     </div>
+    <div class="countdown" id="draft-countdown">Time until bans: --:--</div>
+    <div class="logo3">
+      <div><label>Tournament logo (middle)</label>
+        <div class="logo-pick"><img id="draft-logo-img" alt=""><button type="button" id="draft-logo-upload">Upload…</button>
+          <button type="button" id="draft-logo-reset" title="Back to the SCC logo">SCC logo</button>
+          <input type="file" id="draft-logo-file" accept=".png,.jpg,.jpeg,.webp,.svg" hidden></div></div>
+      <div><label>Left team logo</label><div class="note" style="margin:0">From Teams. Size and position here are for the draft only.</div></div>
+      <div><label>Right team logo</label><div class="note" style="margin:0">&nbsp;</div></div>
+    </div>
+    <div class="logo3" id="draft-adjust"></div>
     <div class="checks" style="margin-top:6px">
+      <label><input type="checkbox" id="draft-team-logos"> Team logos by the team names</label>
       <label><input type="checkbox" id="draft-score"> Series score</label>
       <label><input type="checkbox" id="draft-coaches"> Coaches</label>
       <label><input type="checkbox" id="draft-spells"> Summoner spells</label>
@@ -378,6 +397,9 @@
       <button data-view="bar">Top bar</button><button data-view="full">Full 16:9</button>
     </div>
     <div class="preview" id="preview"><iframe src="/overlay" title="Overlay preview"></iframe></div>
+    <label style="margin-top:12px">Draft</label>
+    <div class="preview draft" id="preview-draft"><iframe src="/draft" title="Draft preview"></iframe>
+      <div class="preview-empty" id="preview-draft-empty">No draft on air</div></div>
   </section>
 
   <section>
@@ -776,6 +798,44 @@ $("draft-delay").onchange = e => draftPost({ delay: Math.max(0, Number(e.target.
 for (const k of ["score", "coaches", "spells"]) $(`draft-${k}`).onchange = e => draftPost({ [k]: e.target.checked });
 for (const side of ["left", "right"]) $(`draft-coach-${side}`).onchange = e => draftPost({ [`coach_${side}`]: e.target.value.trim() });
 $("draft-demo").onclick = () => post("/api/draft/demo", { on: !(state.app.draft || {}).demo });
+// Draft logos: the tournament logo, and each logo's size / nudge (draft only).
+$("draft-logo-upload").onclick = () => $("draft-logo-file").click();
+$("draft-logo-file").onchange = async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.readAsDataURL(file); });
+  post("/api/draft/logo", { filename: file.name, data });
+};
+$("draft-logo-reset").onclick = () => draftPost({ logo: "" });
+$("draft-team-logos").onchange = e => draftPost({ team_logos: e.target.checked });
+const DRAFT_ADJ = [["scale", "Size", 0.3, 3, 0.05, v => Math.round(v * 100) + "%"],
+                   ["x", "Left / right", -80, 80, 1, v => v], ["y", "Up / down", -60, 60, 1, v => v]];
+$("draft-adjust").innerHTML = ["event", "left", "right"].map(k => `<div>${DRAFT_ADJ.map(([a, label, min, max, step]) =>
+  `<label>${label} <span id="dadj-${k}-${a}-val"></span></label><input type="range" id="dadj-${k}-${a}" min="${min}" max="${max}" step="${step}">`).join("")}
+  <button type="button" id="dadj-${k}-reset" style="margin-top:6px">Reset</button></div>`).join("");
+for (const k of ["event", "left", "right"]) {
+  let t = null;
+  const send = () => draftPost({ logo_adjust: { [k]: Object.fromEntries(DRAFT_ADJ.map(([a]) => [a, Number($(`dadj-${k}-${a}`).value)])) } });
+  for (const [a, , , , , fmt] of DRAFT_ADJ)
+    $(`dadj-${k}-${a}`).addEventListener("input", e => {
+      $(`dadj-${k}-${a}-val`).textContent = fmt(Number(e.target.value));
+      clearTimeout(t); t = setTimeout(send, 120);
+    });
+  $(`dadj-${k}-reset`).onclick = () => draftPost({ logo_adjust: { [k]: { scale: 1, x: 0, y: 0 } } });
+}
+// Time until bans: counts down between updates.
+let banClock = null;
+function tickBans() {
+  const el = $("draft-countdown");
+  if (!banClock) { el.textContent = "Time until bans: --:--"; el.classList.remove("live"); return; }
+  if (banClock.onAir) { el.textContent = "Time until bans: on air"; el.classList.add("live"); return; }
+  const left = Math.max(0, Math.ceil(banClock.left - (performance.now() - banClock.at) / 1000));
+  el.textContent = `Time until bans: ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  el.classList.toggle("live", left === 0);
+}
+setInterval(tickBans, 200);
+
 function applyDraft(s) {
   const d = s.config.draft || {}, info = s.app.draft || {};
   $("url-draft").textContent = `${location.origin}/draft`;
@@ -785,6 +845,20 @@ function applyDraft(s) {
   for (const k of ["score", "coaches", "spells"]) $(`draft-${k}`).checked = d[k] !== false;
   for (const side of ["left", "right"]) setIfIdle($(`draft-coach-${side}`), d[`coach_${side}`] || "");
   $("draft-demo").textContent = info.demo ? "Stop demo draft" : "Play demo draft";
+  $("draft-team-logos").checked = d.team_logos !== false;
+  const logoUrl = d.logo || "assets/logos/scc.png";
+  if ($("draft-logo-img").dataset.src !== logoUrl) { $("draft-logo-img").dataset.src = logoUrl; $("draft-logo-img").src = "/" + logoUrl.split("/").map(encodeURIComponent).join("/"); }
+  for (const k of ["event", "left", "right"]) {
+    const a = Object.assign({ scale: 1, x: 0, y: 0 }, (d.logo_adjust || {})[k]);
+    for (const [key, , , , , fmt] of DRAFT_ADJ) {
+      const input = $(`dadj-${k}-${key}`);
+      if (document.activeElement !== input) { input.value = a[key]; $(`dadj-${k}-${key}-val`).textContent = fmt(Number(a[key])); }
+    }
+  }
+  banClock = info.shown_active ? { onAir: true }
+    : info.starts_in == null ? null : { left: info.starts_in, at: performance.now(), onAir: false };
+  tickBans();
+  $("preview-draft-empty").style.display = info.shown_active ? "none" : "";
   $("draft-demo").classList.toggle("on", !!info.demo);
   const parts = [];
   if (d.read) parts.push(info.reader || "");
@@ -1061,6 +1135,13 @@ document.querySelectorAll("#preview-mode button").forEach(b => b.onclick = () =>
 });
 new ResizeObserver(fitPreview).observe($("preview"));
 fitPreview();
+// The draft: its bottom part (y 660-1080), where the Europe layout sits.
+function fitDraftPreview() {
+  const box = $("preview-draft"), k = box.clientWidth / 1920;
+  box.querySelector("iframe").style.transform = `scale(${k}) translateY(-660px)`;
+}
+new ResizeObserver(fitDraftPreview).observe($("preview-draft"));
+fitDraftPreview();
 
 // Collapsible sections, remembered by title.
 const folded = new Set(stored("foldedSections", []));

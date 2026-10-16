@@ -7,6 +7,14 @@
      layout of RCVolus' lol-pick-ban-ui (MIT, see draft/LICENSE-lol-pick-ban-ui.txt),
      driven by the app's /api/draft. -->
 <link rel="stylesheet" href="draft/europe.css">
+<style>
+  /* SCC: team logos by the team names, and the logo nudges (scale / x / y). */
+  .Europe .Team .TeamLogo { flex: 0 0 auto; width: 53px; height: 53px; margin-left: 12px;
+                            display: flex; align-items: center; justify-content: center; }
+  .Europe .Team.TeamRed .TeamLogo { margin-left: 0; margin-right: 12px; }
+  .Europe .Team .TeamLogo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .Europe .Logo img { transform-origin: 50% 50%; }
+</style>
 </head>
 <body>
 <div id="overlay" class="Overlay Europe TheAbsoluteVoid">
@@ -63,6 +71,8 @@ function buildTeam(side) {
   }
   const bansRow = el("div", "Bans", el("div", "BansWrapper", root));
   const score = el("div", "TeamScore");
+  const logoBox = el("div", "TeamLogo");
+  const logo = el("img", "", logoBox);
   const teamName = el("div", "TeamName");
   const nameText = document.createTextNode("");
   teamName.appendChild(nameText);
@@ -75,17 +85,26 @@ function buildTeam(side) {
     t.bans.push({ imgBox, img: el("img", "", imgBox) });
   }
   // Blue: score, name, bans. Red: bans, name, score (mirrored).
-  if (side === "blue") bansRow.append(score, teamName, bansBox);
-  else bansRow.append(bansBox, teamName, score);
-  Object.assign(t, { bansRow, score, teamName, nameText, coach });
+  if (side === "blue") bansRow.append(score, logoBox, teamName, bansBox);
+  else bansRow.append(bansBox, teamName, logoBox, score);
+  Object.assign(t, { bansRow, score, teamName, nameText, coach, logoBox, logo });
   teams[side] = t;
 }
 buildTeam("blue"); buildTeam("red");
 
 function setSrc(img, src) { if (img.getAttribute("src") !== src) img.setAttribute("src", src); }
 
+function nudge(img, a) {
+  a = a || {};
+  const k = Number(a.scale ?? 1), x = Number(a.x || 0), y = Number(a.y || 0);
+  img.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+}
+
 function renderTeam(side, team, info, show) {
   const t = teams[side];
+  const logo = show.team_logos && info.logo;
+  t.logoBox.style.display = logo ? "" : "none";
+  if (logo) { setSrc(t.logo, url(info.logo)); nudge(t.logo, info.logo_adjust); }
   t.bansRow.classList.toggle("WithScore", !!show.score);
   t.score.style.display = show.score ? "" : "none";
   t.score.textContent = info.score ?? 0;
@@ -135,7 +154,8 @@ function render(s) {
   const root = $("overlay");
   root.style.setProperty("--color-blue", s.teams.blue.color || "rgb(0,151,196)");
   root.style.setProperty("--color-red", s.teams.red.color || "rgb(222,40,70)");
-  setSrc($("logo"), url(params.get("logo") || "assets/logos/scc.png"));
+  setSrc($("logo"), url(params.get("logo") || s.logo || "assets/logos/scc.png"));
+  nudge($("logo"), s.logo_adjust);
   if (!d.active) { if (shown) close(); return; }
   if (!shown) open();
   $("phase").textContent = d.phase || "";

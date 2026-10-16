@@ -67,7 +67,12 @@ DEFAULTS = {
     # PC). "delay": show it this many seconds late (the spectator delay), when
     # delay_on. Coaches' names, and what the Europe layout shows.
     "draft": {"read": False, "delay_on": True, "delay": 150, "score": True, "coaches": True, "spells": True,
-              "coach_left": "", "coach_right": "", "league_path": ""},
+              "coach_left": "", "coach_right": "", "league_path": "",
+              # The tournament logo in the middle ("" = the SCC logo), team logos by
+              # the team names, and each one's size and nudge (draft only).
+              "logo": "", "team_logos": True,
+              "logo_adjust": {"event": {"scale": 1, "x": 0, "y": 0}, "left": {"scale": 1, "x": 0, "y": 0},
+                              "right": {"scale": 1, "x": 0, "y": 0}}},
     # The sponsor box: covers the spectator's observer controls (camera mode
     # and fog of war, bottom left) with the background loop, tinted in both
     # teams' colours, and sponsor logos in turn. rect is x, y, w, h on the

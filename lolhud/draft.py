@@ -203,11 +203,26 @@ class DraftFeed:
         out.pop("timer_left", None)
         return out
 
+    def starts_in(self, delay=0.0):
+        """Seconds until the live champ select goes on air (its start plus the
+        delay), 0 once it's showing, None when there's none."""
+        with self._lock:
+            if not self.timeline or self.timeline[-1][1] is None:
+                return None
+            start = self.timeline[-1][0]
+            for at, d in reversed(self.timeline):
+                if d is None:
+                    break
+                start = at
+        return max(0.0, start + float(delay or 0) - time.time())
+
     def info(self, delay=0.0):
         live = self.timeline[-1][1] if self.timeline else None
+        starts = self.starts_in(delay)
         return {"source": self.source, "age": round(time.time() - self.received_at, 1) if self.received_at else None,
                 "live_active": bool(live), "live_phase": (live or {}).get("phase", ""),
-                "shown_active": bool(self.view(delay).get("active")), "delay": delay}
+                "shown_active": bool(self.view(delay).get("active")), "delay": delay,
+                "starts_in": None if starts is None else round(starts, 1)}
 
 
 def _same(a, b):
