@@ -139,6 +139,7 @@
   details li { margin-bottom: 4px; }
   @media (max-width: 600px) { .teams { grid-template-columns: 1fr; } }
 </style>
+<link rel="stylesheet" href="shell.css">
 </head>
 <body>
 <header>
@@ -164,7 +165,7 @@
 </header>
 <div class="layout">
 <main>
-  <section class="wide">
+  <section class="wide" data-page="editor">
     <h2>HUD profile</h2>
     <div class="row">
       <select id="profile" aria-label="HUD profile"></select>
@@ -200,7 +201,7 @@
     </details>
   </section>
 
-  <section class="wide">
+  <section class="wide" data-page="teams">
     <h2>Teams</h2>
     <div class="teams">
       <div class="team left" data-side="left"></div>
@@ -214,13 +215,13 @@
     </div>
   </section>
 
-  <section>
+  <section data-page="live">
     <h2>Claimed objectives</h2>
     <div id="counters" class="checks"></div>
     <p class="note">Each team's count of dragons, Rift Heralds and void grubs taken, in the HUD. Switching one off hides its icon and number.</p>
   </section>
 
-  <section>
+  <section data-page="live">
     <h2>Match time</h2>
     <div class="note" id="match-local" style="margin:0 0 10px"></div>
     <button type="button" id="sync-all" style="width:100%">Sync all clients to 0:00</button>
@@ -229,7 +230,7 @@
     <p class="note">Jumps the League spectator client on this PC, and on every Observer Client connected to it, to 0:00 at the same moment. Needs League's Replay API: click "Turn on time control" once on each PC, then restart the League client.</p>
   </section>
 
-  <section>
+  <section data-page="editor">
     <h2>Animations</h2>
     <div class="checks">
       <label><input type="checkbox" id="anim-first-blood"><span class="dot" style="background:#c0392b">FB</span>First blood</label>
@@ -241,7 +242,7 @@
     <p class="note">When a team draws first blood, a stinger wipes across their side of the top bar, which fills with their colour and logo and "FIRST BLOOD", then wipes back (under 3 seconds). Preview plays it on the overlay now.</p>
   </section>
 
-  <section class="wide">
+  <section class="wide" data-page="draft">
     <h2>Draft</h2>
     <div class="out"><span>Draft overlay (OBS / vMix browser source, 1920×1080)</span>
       <div class="row"><code id="url-draft"></code><button data-copy="url-draft">Copy</button></div></div>
@@ -295,7 +296,7 @@
     <p class="note">The Europe layout from RCVolus' lol-pick-ban-ui. Bans and picks come up one by one at the pace they were made; with the delay on they come up that much later, in step with the spectator feed. Team names, colours and series score come from Teams; blue side is the left team unless "Left team is on red side" is ticked. An Observer Client in the lobby can read champ select instead and send it here.</p>
   </section>
 
-  <section class="wide">
+  <section class="wide" data-page="tournament">
     <h2>Sponsors</h2>
     <label class="toggle"><input type="checkbox" id="sb-on"> Sponsor box over the observer controls (bottom left)</label>
     <div id="sponsor-drop" class="drop" tabindex="0">Drop sponsor logos here, or <u>choose files</u>
@@ -329,7 +330,7 @@
     </div>
   </section>
 
-  <section class="wide">
+  <section class="wide" data-page="teams">
     <h2>Webcams</h2>
     <div class="cam-opts">
       <label class="toggle"><input type="checkbox" id="cams-on"> Show webcams on the HUD</label>
@@ -359,7 +360,7 @@
     </details>
   </section>
 
-  <section>
+  <section data-page="live">
     <h2>Objective timers</h2>
     <div class="row" style="margin-bottom:10px;align-items:center">
       <button type="button" id="timers-auto" style="flex:1">Auto objective timers</button>
@@ -376,7 +377,7 @@
     <p class="note">Shown in the top-left of the overlay. A timer appears while its objective is counting down or LIVE, and drops off once it's gone for the game. Elder appears after a team takes soul. Switched-off timers are also left blank in the CSV.</p>
   </section>
 
-  <section>
+  <section data-page="live">
     <h2>Gold</h2>
     <label for="gold-mode">Source</label>
     <select id="gold-mode">
@@ -402,13 +403,13 @@
     <p class="note">League's game client doesn't share other players' gold, so this is an estimate. If you see it running high or low against the in-game scoreboard, nudge the adjustment.</p>
   </section>
 
-  <section class="wide">
+  <section class="wide" data-page="overview">
     <h2>Live fields <span style="text-transform:none;letter-spacing:0">(click to copy the name)</span></h2>
     <div class="fields" id="fields"></div>
   </section>
 </main>
 <aside>
-  <section>
+  <section data-page="editor live">
     <h2>Preview</h2>
     <div class="seg preview-mode" id="preview-mode" role="group" aria-label="Preview size">
       <button data-view="bar">Top bar</button><button data-view="full">Full 16:9</button>
@@ -419,7 +420,7 @@
       <div class="preview-empty" id="preview-draft-empty">No draft on air</div></div>
   </section>
 
-  <section>
+  <section data-page="overview">
     <h2>Outputs</h2>
     <div class="out"><span>Overlay (OBS / vMix browser source, 1920×1080)</span>
       <div class="row"><code id="url-overlay"></code><button data-copy="url-overlay">Copy</button></div></div>
@@ -433,7 +434,7 @@
     <p class="note">In GT Title Designer, name your fields to match the Live fields list, then bind them in vMix's Data Sources Manager. Image fields (logos, pips) are file paths.</p>
   </section>
 
-  <section>
+  <section data-page="overview">
     <h2>Companion</h2>
     <div class="out"><span>In Companion, add an "SCC League HUD" connection with this address and port</span>
       <div class="row"><code id="companion-addr"></code><button data-copy="companion-addr">Copy</button></div></div>
@@ -441,12 +442,14 @@
     <p class="note">Stream Deck buttons for the HUD's toggles, Match time and the background video, lit green while a setting is on. Get <b>SCC-LoL-Companion-module.tgz</b> from the latest release, then in Companion go to Modules, Import module package. The Presets tab has a button for everything.</p>
   </section>
 
-  <section>
+  <section data-page="overview">
     <h2>Log</h2>
     <div class="log" id="log"></div>
   </section>
 </aside>
 </div>
+<script>window.SHELL = {"app": "League HUD", "logo": "assets/lol_logo.svg", "pages": [{"id": "overview", "label": "Overview"}, {"id": "editor", "label": "HUD Editor"}, {"id": "teams", "label": "Players & Teams", "group": "Event setup"}, {"id": "tournament", "label": "Sponsors", "icon": "sponsors", "group": "Event setup"}, {"id": "live", "label": "Live Game", "group": "Live game"}, {"id": "draft", "label": "Champ Select", "group": "Live game"}]};</script>
+<script src="shell.js"></script>
 <script src="update.js"></script>
 <script>
 const $ = id => document.getElementById(id);
