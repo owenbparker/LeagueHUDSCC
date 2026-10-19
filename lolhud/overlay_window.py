@@ -308,14 +308,16 @@ def self_test(port, out_dir):
         def red(p):
             return p[0] > 200 and p[1] < 60 and p[2] < 60
 
-        empties = [px(fx, fy) for fx, fy in ((0.5, 0.6), (0.1, 0.5), (0.9, 0.9), (0.5, 0.2), (0.3, 0.4))]
+        # The HUD's empty middle, whatever the screen's shape (on a 4:3 screen
+        # the 16:9 HUD is at the top, and its scoreboard is at 60% down).
+        empties = [px(fx, fy) for fx, fy in ((0.5, 0.45), (0.1, 0.4), (0.9, 0.45), (0.5, 0.2), (0.3, 0.3))]
         huds = [px(fx, 35 / 1080) for fx in (0.45, 0.5, 0.55)]
         see_through = all(red(p) for p in empties)
         drawn = not any(red(p) for p in huds)
         empty, hud = empties, huds
         # Click in the empty middle of the screen.
         before = bg.evaluate_js("window.clicks||0")
-        ctypes.windll.user32.SetCursorPos(x + w // 2, y + int(h * 0.6))
+        ctypes.windll.user32.SetCursorPos(x + w // 2, y + int(h * 0.45))
         ctypes.windll.user32.mouse_event(0x2, 0, 0, 0, 0)
         ctypes.windll.user32.mouse_event(0x4, 0, 0, 0, 0)
         time.sleep(1)
