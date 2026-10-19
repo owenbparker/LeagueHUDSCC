@@ -6,6 +6,10 @@
 // Positions come from the PSD (tools/scoreboard_from_psd.py ->
 // assets/scoreboard/layout.json). Drawn under the webcams.
 //
+// The lined frames round the champion info and the minimap play the HUD's
+// background loop in their shape, tinted in that side's colour; the static
+// lines stand in until there is one (overlay.html's setVideo drives them).
+//
 // Riot's live game data has no health, mana or other players' gold: the
 // health bar empties while a player is dead, the level bar fills to level 18,
 // and gold is the HUD's estimate.
@@ -39,7 +43,12 @@
     #scoreboard .bar.right { background-position: right; }
     #scoreboard .t { position: absolute; white-space: nowrap; line-height: 1; }
     #scoreboard .row.dead .t.name { opacity: .55; }
-    #scoreboard .diff { font-weight: 600; }`;
+    #scoreboard .diff { font-weight: 600; }
+    #scoreboard .loop { position: absolute; }
+    #scoreboard .loop img, #scoreboard .loop .wrap { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #scoreboard .loop .wrap { display: none; isolation: isolate; mask-size: 100% 100%; -webkit-mask-size: 100% 100%; }
+    #scoreboard .loop video { display: block; width: 100%; height: 100%; object-fit: cover; }
+    #scoreboard .loop .tint { position: absolute; inset: 0; mix-blend-mode: multiply; }`;
   document.head.appendChild(style);
 
   let layout = null, built = false;
@@ -64,7 +73,22 @@
   const setSrc = (img, src) => { if ((img.getAttribute("src") || "") !== (src || "")) img.setAttribute("src", src || ""); };
   const setText = (n, v) => { v = v == null ? "" : String(v); if (n.textContent !== v) n.textContent = v; };
 
+  // The background loop areas, for overlay.html: [{video, tint, still, side}].
+  window.SCOREBOARD_LOOPS = [];
+
   function build() {
+    for (const a of layout.loop_areas || []) {
+      const box = place(el("div", "loop", layer), a.rect);
+      const still = el("img", "", box);
+      still.src = BASE + a.src;
+      const wrap = el("div", "wrap", box);
+      const m = `url("${BASE}${a.src}")`;
+      Object.assign(wrap.style, { maskImage: m, webkitMaskImage: m });
+      const video = el("video", "", wrap);
+      video.muted = video.loop = video.autoplay = video.playsInline = true;
+      const tint = el("div", "tint", wrap);
+      window.SCOREBOARD_LOOPS.push({ video, tint, still, side: a.side });
+    }
     const frame = el("img", "frame", layer);
     frame.src = BASE + "frame.png";
     frame.style.top = layout.top + "px";
@@ -145,6 +169,10 @@
       setText(row.vision, here ? p.vision : "");
     });
     const cfg = s.config || {};
+    for (const l of window.SCOREBOARD_LOOPS) {
+      const c = lighten((cfg[l.side] || {}).color, .35);
+      if (l.tint.dataset.c !== c) { l.tint.dataset.c = c; l.tint.style.background = c; }
+    }
     diffs.forEach((n, i) => {
       const d = sb.gold_diff[i] || 0;
       const lead = Math.abs(d) >= 100 ? (d > 0 ? "left" : "right") : "";

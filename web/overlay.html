@@ -446,9 +446,28 @@ function drawTimers(f, enabled, nextDragon) {
 // Background video: plays the file chosen in the control panel at the chosen
 // speed. Until there is one (or if it won't play), elements marked
 // hideWithVideo (the static lines) stand in for it.
+// The bottom third's loop areas (overlay_scoreboard.js) play the same loop,
+// but only with a profile that has one.
+function allVideos() {
+  if (!videos.length) {
+    for (const { video: v } of window.SCOREBOARD_LOOPS || []) {
+      if (v.dataset.src) { delete v.dataset.src; v.removeAttribute("src"); v.load(); }
+    }
+    return videos;
+  }
+  for (const l of window.SCOREBOARD_LOOPS || []) {
+    if (!l.video.tint) {
+      l.video.tint = l.tint;
+      l.video.addEventListener("error", () => { l.video.dataset.failed = "1"; showVideo(); });
+      l.video.addEventListener("playing", showVideo);
+    }
+  }
+  return videos.concat((window.SCOREBOARD_LOOPS || []).map(l => l.video));
+}
+
 function setVideo(src, speed, tinted, brightness) {
   const b = Math.min(3, Math.max(0, Number(brightness ?? 1)));
-  for (const v of videos) {
+  for (const v of allVideos()) {
     v.parentElement.style.filter = b === 1 ? "" : `brightness(${b})`;
     v.tint.style.display = tinted ? "" : "none";
     v.style.filter = tinted ? "grayscale(1) brightness(1.6)" : "";
@@ -468,6 +487,11 @@ function showVideo() {
   const active = videos.some(v => v.dataset.src && !v.dataset.failed);
   for (const v of videos) v.parentElement.style.display = v.dataset.src && !v.dataset.failed ? "block" : "none";
   for (const n of videoStandIns) n.style.display = active ? "none" : "";
+  for (const l of window.SCOREBOARD_LOOPS || []) {
+    const on = videos.length > 0 && !!l.video.dataset.src && !l.video.dataset.failed;
+    l.video.parentElement.style.display = on ? "block" : "none";
+    l.still.style.display = on ? "none" : "";
+  }
 }
 
 // Smooth the clock between polls, but stop if the game is paused.

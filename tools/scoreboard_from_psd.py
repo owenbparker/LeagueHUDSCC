@@ -2,6 +2,9 @@
 designer's HUD PSD (design/lol-hud-SCC27.psd):
 
     frame.png        the bottom third's artwork (y 788 down), empty slots and all
+    loop_left.png    the lined frames round the champion info (left) and the
+    loop_right.png   minimap (right): the background loop plays in their shape,
+                     and they stand in for it when there's no loop
     sponsor.png      the sponsor logo in the design, shown when no sponsors are set
     bar_hp.png ...   the resource bars, filled (the overlay crops them)
     layout.json      where every player's champion, items, spells, numbers... go
@@ -38,8 +41,10 @@ TEXT_GROUPS = {
     "kda": ("kda-left", "kda-right"),
     "vision": ("vision-score-left", "vision-score-right"),
 }
+# Lined frames that the background loop plays in, like the HUD bar's lines.
+LOOP_AREAS = {"left": "champion-info-holder", "right": "minimap-cover"}
 # Shown live, so left out of the frame.
-DYNAMIC = {"HUD BAR", "TEAM LEFT", "TEAM RIGHT", "team logo left", "team logo right", "sponsor-logo", "objs", "objs-alive"}
+DYNAMIC = {*LOOP_AREAS.values(), "HUD BAR", "TEAM LEFT", "TEAM RIGHT", "team logo left", "team logo right", "sponsor-logo", "objs", "objs-alive"}
 
 
 def walk(layer):
@@ -119,6 +124,12 @@ def main(psd_path):
     holder = next((l for l in walk(board) if l.name == "sponsor-holder"), None)
     if holder is not None:
         layout["sponsor_holder"] = rect(holder)
+    layout["loop_areas"] = []
+    for side, name in LOOP_AREAS.items():
+        layer = next((l for l in walk(board) if l.name == name), None)
+        if layer is not None:
+            layer.composite().save(os.path.join(OUT, f"loop_{side}.png"), optimize=True)
+            layout["loop_areas"].append({"side": side, "rect": rect(layer), "src": f"loop_{side}.png"})
     # The frame: everything in the bottom third that isn't filled in live.
     hide = set()
     for layer in walk(board):

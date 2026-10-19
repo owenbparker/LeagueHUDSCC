@@ -1325,5 +1325,27 @@
   177,
   295,
   119
+ ],
+ "loop_areas": [
+  {
+   "side": "left",
+   "rect": [
+    -1,
+    31,
+    291,
+    149
+   ],
+   "src": "loop_left.png"
+  },
+  {
+   "side": "right",
+   "rect": [
+    1631,
+    3,
+    289,
+    290
+   ],
+   "src": "loop_right.png"
+  }
  ]
 }
