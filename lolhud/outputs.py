@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import threading
 from xml.sax.saxutils import escape
 
 
@@ -50,11 +51,15 @@ class FileWriter:
         self.out_dir = out_dir
         os.makedirs(out_dir, exist_ok=True)
         self._last = None
+        # The poller and the control panel both refresh: one write at a time
+        # (they share the .tmp files).
+        self._lock = threading.Lock()
 
     def write(self, fields):
-        if fields == self._last:
-            return
-        self._last = dict(fields)
-        _write(os.path.join(self.out_dir, "hud.csv"), to_csv(fields))
-        _write(os.path.join(self.out_dir, "hud.json"), json.dumps([fields], indent=2))
-        _write(os.path.join(self.out_dir, "hud.xml"), to_xml(fields))
+        with self._lock:
+            if fields == self._last:
+                return
+            self._last = dict(fields)
+            _write(os.path.join(self.out_dir, "hud.csv"), to_csv(fields))
+            _write(os.path.join(self.out_dir, "hud.json"), json.dumps([fields], indent=2))
+            _write(os.path.join(self.out_dir, "hud.xml"), to_xml(fields))
