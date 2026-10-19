@@ -77,6 +77,8 @@ DEFAULTS = {
               "bg_video": "profiles/scc-2026/bg_loop.mp4", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
               "logo_adjust": {"event": {"scale": 1, "x": 0, "y": 0}, "left": {"scale": 1, "x": 0, "y": 0},
                               "right": {"scale": 1, "x": 0, "y": 0}}},
+    # The SCC GFX Engine this HUD sends its game and series to (see lolhud/enginelink.py).
+    "gfx_engine": {"url": "", "name": "", "connected": False},
     # The scoreboard and bottom third along the bottom (the built-in profiles).
     "scoreboard": {"show": True},
     # Fearless draft: each team's picks in the series' earlier games (kept as

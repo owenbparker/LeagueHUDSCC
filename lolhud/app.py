@@ -21,6 +21,7 @@ from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
 from . import companion, fearless
+from .enginelink import EngineLink, save_logo_bytes
 from .draft import DraftFeed, DraftReader, play_recording
 from .log import log, since
 from .matchtime import MatchSync, ReplayClient, enable_replay_api, run_follower
@@ -84,6 +85,10 @@ class HudApp:
         self.match_sync = MatchSync(ReplayClient(cfg["api_url"]))
         self._lock = threading.Lock()
         self._stop = threading.Event()
+        # The SCC GFX Engine: the game and series go to it; its teams can come here.
+        self.engine = EngineLink("League HUD", "lol", self._engine_snapshot, self._engine_apply_global,
+                                 load=lambda: self.config.get().get("gfx_engine"),
+                                 save=lambda d: self.config.update({"gfx_engine": d}), log=log)
         self._was_connected = None
         self._last_error = None
         self._seen_unknown = set()
@@ -370,6 +375,42 @@ class HudApp:
         log(self.match_sync.status)
         return reply
 
+    def _engine_snapshot(self):
+        """What the GFX Engine gets: the HUD's fields and the series."""
+        cfg = self.config.get()
+        with self._lock:
+            fields = dict(self.state["fields"])
+        series = {side: {"name": cfg[side]["name"], "short": cfg[side]["tricode"], "score": int(cfg[side]["wins"] or 0),
+                         "color": cfg[side]["color"]} for side in ("left", "right")}
+        series["best_of"] = int(cfg.get("best_of") or 3)
+        return {"fields": fields, "series": series}
+
+    def _engine_apply_global(self, g, fetch):
+        """The GFX Engine's teams (names, short names, logos) into the HUD."""
+        changes, done = {}, []
+        for side in ("left", "right"):
+            t = g.get(side) or {}
+            team = {}
+            if t.get("name"):
+                team["name"] = t["name"]
+            if t.get("short"):
+                team["tricode"] = t["short"][:6]
+            if t.get("logo_url"):
+                try:
+                    blob = fetch(t["logo_url"])
+                    name = save_logo_bytes(LOGO_DIR, f"engine-{t.get('short') or t.get('name') or side}", blob)
+                    team["logo"] = f"assets/logos/{name}"
+                except Exception as e:
+                    log(f"Couldn't fetch the {side} logo from the GFX Engine: {e}", "warn")
+            if team:
+                changes[side] = team
+                done.append(f"{side}: {team.get('name') or team.get('tricode') or 'logo'}")
+        if not changes:
+            raise ValueError("The engine's Global configuration has no team names or logos yet")
+        self.config.update(changes)
+        self.refresh(fetch=False)
+        return ", ".join(done)
+
     def swap_teams(self):
         cfg = self.config.get()
         pin = cfg["cams"].get("pin") or {}
@@ -408,6 +449,7 @@ class HudApp:
             self._draft_demo[1].set()
         self.screen_gold.stop()
         self.director.stop()
+        self.engine.stop()
         if self.server:
             self.server.stop()
 
@@ -689,6 +731,8 @@ def make_handler(app):
                 self._static(path[1:] + ".html")
             elif path == "/api/state":
                 self._send(json.dumps(app.snapshot()))
+            elif path == "/api/engine":
+                self._send(json.dumps(app.engine.status()))
             elif path == "/api/log":
                 after = int((parse_qs(url.query).get("after") or ["0"])[0])
                 self._send(json.dumps(since(after)))
@@ -783,6 +827,16 @@ def make_handler(app):
             # change it.
             if not _is_local(self.client_address[0]):
                 return self._send('{"error":"Changes can only be made on the HUD PC"}', status=403)
+            if path.startswith("/api/engine/"):
+                # Connect to GFX Engine (see enginelink.py).
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    reply = app.engine.handle("POST", path, body)
+                    if reply is None:
+                        return self._send('{"error":"not found"}', status=404)
+                    return self._send(json.dumps(reply))
+                except (ValueError, TypeError, KeyError, OSError) as e:
+                    return self._send(json.dumps({"error": str(e)}), status=400)
             if path == "/api/media":
                 # A background video, sent as raw bytes (too big for JSON).
                 try:
