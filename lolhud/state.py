@@ -171,6 +171,63 @@ def asset_path(rel):
 
 SCREEN_TEAM = {"ORDER": "blue", "CHAOS": "red"}
 
+ROLE_KEYS = {"TOP": "top", "JUNGLE": "jg", "MIDDLE": "mid", "BOTTOM": "adc", "UTILITY": "supp"}
+SEAT_ROLES = ["top", "jg", "mid", "adc", "supp"]
+TRINKETS = {3340, 3363, 3364, 3330, 3348}   # Stealth Ward, Farsight, Oracle Lens, Scarecrow, Arcane Sweeper
+
+
+def scoreboard(team_players, game_time, ddragon, cfg):
+    """Each player's line on the scoreboard (1-5 left, 6-10 right) and the
+    gold difference between the laners. Riot's live game data has no health,
+    mana or other players' gold: gold is the HUD's estimate (see gold.py)."""
+    players, gold = [], {}
+    for side in SIDES:
+        tp = team_players[side][:5] + [{}] * (5 - len(team_players[side][:5]))
+        gold[side] = []
+        for seat, p in enumerate(tp):
+            s = p.get("scores") or {}
+            if p and cfg.get("gold_mode") == "items":
+                g = goldlib.item_value(p, ddragon)
+            elif p:
+                g = max(goldlib.estimate_player(p, game_time, cfg.get("passive_gold_start", goldlib.PASSIVE_START)),
+                        goldlib.item_value(p, ddragon))
+            else:
+                g = 0
+            gold[side].append(g)
+            items, trinket = [""] * 6, ""
+            for it in p.get("items") or []:
+                icon = ddragon.item_icon(it.get("itemID")) if ddragon else ""
+                slot = it.get("slot")
+                if slot == 6 or it.get("itemID") in TRINKETS:
+                    trinket = icon
+                elif isinstance(slot, int) and 0 <= slot < 6 and not items[slot]:
+                    items[slot] = icon
+                elif "" in items:
+                    items[items.index("")] = icon
+            spells = p.get("summonerSpells") or {}
+            spell = lambda k: ddragon.spell_icon_by_name((spells.get(k) or {}).get("rawDisplayName")
+                                                         or (spells.get(k) or {}).get("rawDescription")) if ddragon else ""
+            key = ddragon.champion_key(p) if (p and ddragon) else ""
+            players.append({
+                "name": p.get("riotIdGameName") or (p.get("summonerName") or "").split("#")[0],
+                "champion": p.get("championName", ""),
+                "icon": ddragon.champion_icon(p) if (p and ddragon) else "",
+                "ult": ddragon.ult_icon(key) if (p and ddragon) else "",
+                "level": int(p.get("level") or 0),
+                "kda": f"{s.get('kills', 0)}/{s.get('deaths', 0)}/{s.get('assists', 0)}" if p else "",
+                "cs": int(s.get("creepScore") or 0) if p else "",
+                "vision": int(s.get("wardScore") or 0) if p else "",
+                "dead": bool(p.get("isDead")),
+                "respawn": int(round(p.get("respawnTimer") or 0)) if p.get("isDead") else 0,
+                "items": items, "trinket": trinket,
+                "spells": [spell("summonerSpellOne"), spell("summonerSpellTwo")],
+                "keystone": ddragon.rune_icon(((p.get("runes") or {}).get("keystone") or {}).get("id")) if ddragon else "",
+                "role": ROLE_KEYS.get(p.get("position") or "", SEAT_ROLES[seat]),
+                "gold": int(g),
+                "present": bool(p),
+            })
+    return {"players": players, "gold_diff": [int(gold["left"][i] - gold["right"][i]) for i in range(5)]}
+
 
 class SeenObjectives:
     """When the top bar's dragon / grub / herald counters went up.
@@ -411,6 +468,7 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
 
     detail = {
         "connected": connected,
+        "scoreboard": scoreboard(team_players, game_time, ddragon, cfg),
         "roster": roster,
         "fight": fight,
         "game_time": game_time,

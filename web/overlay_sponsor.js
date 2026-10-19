@@ -57,6 +57,20 @@
     const on = b.enabled !== false;
     box.style.display = on ? "block" : "none";
     if (!on) { video.pause(); return; }
+    // With the bottom third's frame (overlay_scoreboard.js): just the logos,
+    // in the design's sponsor holder; the design's own logo when none are set.
+    const framed = window.BOTTOM_THIRD && window.BOTTOM_THIRD.sponsor;
+    if (framed) {
+      const [fx, fy, fw, fh] = framed;
+      Object.assign(box.style, { left: fx + "px", top: fy + "px", width: fw + "px", height: fh + "px", background: "transparent" });
+      box.classList.remove("outline");
+      video.pause();
+      video.style.display = still.style.display = tint.style.display = "none";
+      for (const img of logos) Object.assign(img.style, { width: "100%", height: "100%" });
+      rotate((b.sponsors || []).length ? b.sponsors : [window.BOTTOM_THIRD.default_sponsor], b.seconds);
+      return;
+    }
+    box.style.background = "";
     const [x, y, w, h] = b.rect || [0, 964, 304, 116];
     Object.assign(box.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
     box.classList.toggle("outline", !!b.outline);

@@ -13,6 +13,7 @@ HUD works it out one of three ways (set "gold_mode" in the control panel):
 
 import json
 import os
+import re
 import threading
 import urllib.request
 
@@ -41,6 +42,9 @@ class DataDragon:
         self.item_totals = {}
         self.champions = {}   # numeric key -> {"id": "MonkeyKing", "name": "Wukong"}
         self.spells = {}      # numeric key -> image file name (SummonerFlash.png)
+        self.runes = {}       # rune id -> icon path (perk-images/...)
+        self.ults = {}        # champion id (MonkeyKing) -> its R's image file name
+        self._ult_fetching = set()
         self.cache_path = os.path.join(cache_dir, "ddragon_cache.json")
         self._load_cache()
         threading.Thread(target=self._refresh, daemon=True).start()
@@ -53,6 +57,8 @@ class DataDragon:
             self.item_totals = {int(k): v for k, v in cached["items"].items()}
             self.champions = {int(k): v for k, v in cached.get("champions", {}).items()}
             self.spells = {int(k): v for k, v in cached.get("spells", {}).items()}
+            self.runes = {int(k): v for k, v in cached.get("runes", {}).items()}
+            self.ults = dict(cached.get("ults", {}))
         except (OSError, ValueError, KeyError):
             pass
 
@@ -69,13 +75,25 @@ class DataDragon:
             champions = {int(c["key"]): {"id": c["id"], "name": c["name"]} for c in champs.values()}
             spells = self._get(f"{DDRAGON}/cdn/{version}/data/en_US/summoner.json")["data"]
             spells = {int(sp["key"]): sp["image"]["full"] for sp in spells.values() if str(sp.get("key", "")).isdigit()}
+            runes = {}
+            for tree in self._get(f"{DDRAGON}/cdn/{version}/data/en_US/runesReforged.json"):
+                runes[int(tree["id"])] = tree["icon"]
+                for slot in tree.get("slots", []):
+                    for r in slot.get("runes", []):
+                        runes[int(r["id"])] = r["icon"]
         except Exception:
             return
-        self.version, self.item_totals, self.champions, self.spells = version, totals, champions, spells
+        if version != self.version:
+            self.ults = {}   # (a new patch can change an ult's picture)
+        self.version, self.item_totals, self.champions, self.spells, self.runes = version, totals, champions, spells, runes
+        self._save()
+
+    def _save(self):
         try:
             os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
             with open(self.cache_path, "w", encoding="utf-8") as f:
-                json.dump({"version": version, "items": totals, "champions": champions, "spells": spells}, f)
+                json.dump({"version": self.version, "items": self.item_totals, "champions": self.champions,
+                           "spells": self.spells, "runes": self.runes, "ults": self.ults}, f)
         except OSError:
             pass
 
@@ -94,6 +112,47 @@ class DataDragon:
     def spell_icon(self, key):
         name = self.spells.get(int(key or 0))
         return f"{DDRAGON}/cdn/{self.version}/img/spell/{name}" if name else ""
+
+    def item_icon(self, item_id):
+        return f"{DDRAGON}/cdn/{self.version}/img/item/{int(item_id)}.png" if item_id else ""
+
+    def spell_icon_by_name(self, raw):
+        """A summoner spell's icon from the live game's name for it
+        ("GeneratedTip_SummonerSpell_SummonerFlash_DisplayName")."""
+        m = re.search(r"_(Summoner[A-Za-z0-9]+)_(?:DisplayName|Description)", raw or "")
+        return f"{DDRAGON}/cdn/{self.version}/img/spell/{m.group(1)}.png" if m else ""
+
+    def rune_icon(self, rune_id):
+        icon = self.runes.get(int(rune_id or 0))
+        return f"{DDRAGON}/cdn/img/{icon}" if icon else ""
+
+    def ult_icon(self, champ_key):
+        """The champion's ultimate's icon; looked up in the background the
+        first time ("" until then)."""
+        if not champ_key:
+            return ""
+        name = self.ults.get(champ_key)
+        if name:
+            return f"{DDRAGON}/cdn/{self.version}/img/spell/{name}"
+        if champ_key not in self._ult_fetching:
+            self._ult_fetching.add(champ_key)
+            threading.Thread(target=self._fetch_ult, args=(champ_key,), daemon=True).start()
+        return ""
+
+    def _fetch_ult(self, champ_key):
+        try:
+            data = self._get(f"{DDRAGON}/cdn/{self.version}/data/en_US/champion/{champ_key}.json")["data"]
+            self.ults[champ_key] = next(iter(data.values()))["spells"][3]["image"]["full"]
+            self._save()
+        except Exception:
+            pass
+        finally:
+            self._ult_fetching.discard(champ_key)
+
+    @staticmethod
+    def champion_key(player):
+        """Data Dragon's id for a live player's champion (MonkeyKing for Wukong)."""
+        return (player.get("rawChampionName") or "").rsplit("_", 1)[-1] or player.get("championName", "")
 
     def champion_icon(self, player):
         # rawChampionName ends in the internal key (e.g. MonkeyKing for Wukong),

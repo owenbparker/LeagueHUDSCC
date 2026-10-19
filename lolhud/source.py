@@ -74,6 +74,9 @@ _ITEMS = [
     (3036, "Lord Dominik's Regards", 3000), (3135, "Void Staff", 3000), (3075, "Thornmail", 2450),
 ]
 _DRAGONS = ["Fire", "Water", "Earth", "Air", "Hextech", "Chemtech"]
+# By role: summoner spells (second one), keystone rune.
+_ROLE_KIT = {"TOP": ("SummonerTeleport", 8010), "JUNGLE": ("SummonerSmite", 8112), "MIDDLE": ("SummonerTeleport", 8214),
+             "BOTTOM": ("SummonerHeal", 8008), "UTILITY": ("SummonerExhaust", 8439)}
 
 
 class DemoSource:
@@ -98,7 +101,14 @@ class DemoSource:
                 "items": [], "riotId": f"{tag}#DEMO", "riotIdGameName": tag, "summonerName": tag,
                 "team": team, "skinID": 0,
                 "scores": {"kills": 0, "deaths": 0, "assists": 0, "creepScore": 0, "wardScore": 0.0},
+                "summonerSpells": {
+                    "summonerSpellOne": {"rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"},
+                    "summonerSpellTwo": {"rawDisplayName": f"GeneratedTip_SummonerSpell_{_ROLE_KIT[pos][0]}_DisplayName"}},
+                "runes": {"keystone": {"id": _ROLE_KIT[pos][1]}},
             })
+            # Everyone starts with a ward trinket (supports swap to a sweeper later).
+            self._players[-1]["items"].append({"itemID": 3340, "displayName": "Stealth Ward", "price": 0, "count": 1,
+                                               "slot": 6, "canUse": True, "consumable": False})
             self._gold.append(500.0)
         self._turrets = {"ORDER": self._turret_names("T1"), "CHAOS": self._turret_names("T2")}
         self._dragon_alive_at = 300.0
@@ -201,12 +211,13 @@ class DemoSource:
     def _buy(self, i):
         p = self._players[i]
         spent = sum(it["price"] for it in p["items"])
-        if len(p["items"]) >= 6:
+        owned = [it for it in p["items"] if it.get("slot") != 6]
+        if len(owned) >= 6:
             return
-        item_id, name, cost = self._ITEM_ORDER[i % 4][len(p["items"]) % 6]
+        item_id, name, cost = self._ITEM_ORDER[i % 4][len(owned) % 6]
         if self._gold[i] - spent >= cost:
             p["items"].append({"itemID": item_id, "displayName": name, "price": cost, "count": 1,
-                               "slot": len(p["items"]), "canUse": False, "consumable": False})
+                               "slot": len(owned), "canUse": False, "consumable": False})
 
     _ITEM_ORDER = [
         [_ITEMS[0], _ITEMS[8], _ITEMS[3], _ITEMS[9], _ITEMS[10], _ITEMS[6]],

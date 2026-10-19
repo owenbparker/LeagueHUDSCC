@@ -134,6 +134,13 @@
   .report .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .report .chips span { background: #252a2f; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
   details ul { margin: 6px 0 0; padding-left: 18px; }
+  .fearless-box { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .fearless-games { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .fearless-game { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .fearless-game b { width: 64px; font-size: 12px; }
+  .fearless-game .fl-team { font-size: 12px; color: var(--muted); margin: 0 4px 0 10px; }
+  .fearless-game img, .fearless-game i { width: 28px; height: 28px; border-radius: 4px; background: #111; display: inline-block; }
+  .fearless-game button { margin-left: auto; padding: 2px 8px; }
   .bg-video { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
   .bg-video label span { color: var(--text); float: right; }
   details li { margin-bottom: 4px; }
@@ -174,6 +181,7 @@
       <input type="file" id="psd-file" accept=".psd,.psb" hidden>
       <input type="file" id="font-file" accept=".ttf,.otf,.woff,.woff2" hidden>
     </div>
+    <label class="toggle"><input type="checkbox" id="scoreboard-show"> Scoreboard and bottom third (SCC 2026 profiles): every player's champion, items, spells, KDA, CS and vision, the webcam, sponsor and minimap frames</label>
     <div id="bg-video" class="bg-video" hidden>
       <div class="row">
         <div><label>Background video</label><div id="bg-name" class="note" style="margin:0"></div></div>
@@ -288,12 +296,24 @@
     <div class="row" style="margin-top:8px">
       <div><label>Coach: left team</label><input id="draft-coach-left" placeholder="Coach name"></div>
       <div><label>Coach: right team</label><input id="draft-coach-right" placeholder="Coach name"></div>
+      <div><label>Sponsor line (SCC 2027 look, middle)</label><input id="draft-sponsor" placeholder="e.g. ALIENWARE"></div>
+    </div>
+    <div class="fearless-box">
+      <div class="row" style="align-items:center">
+        <label class="toggle" style="margin:0"><input type="checkbox" id="fearless-show"> Fearless bans (SCC 2027 look): show each team's picks from earlier games, from game 2</label>
+      </div>
+      <div id="fearless-games" class="fearless-games"></div>
+      <div class="row" style="align-items:center;margin-top:6px">
+        <button type="button" id="fearless-record" style="flex:0 0 auto" title="Add the draft just finished (if it wasn't added when the lobby closed)">Add the last draft</button>
+        <button type="button" id="fearless-clear" style="flex:0 0 auto">Clear (new series)</button>
+        <span class="note" style="margin:0">Each draft is added when the lobby closes with all ten picks in. Going back to 0-0 in the series clears it.</span>
+      </div>
     </div>
     <div class="row" style="margin-top:10px;align-items:center">
       <button type="button" id="draft-demo" style="flex:0 0 auto">Play demo draft</button>
       <span class="note" style="margin:0">A recorded tournament draft (about 4 minutes), through the same delay.</span>
     </div>
-    <p class="note">The Europe layout from RCVolus' lol-pick-ban-ui. Bans and picks come up one by one at the pace they were made; with the delay on they come up that much later, in step with the spectator feed. Team names, colours and series score come from Teams; blue side is the left team unless "Left team is on red side" is ticked. An Observer Client in the lobby can read champ select instead and send it here.</p>
+    <p class="note">Looks: SCC 2027 (fearless) from the designer's DRAFT-HUD-SCC-2027.psd, LEC, and the Europe layout from RCVolus' lol-pick-ban-ui. Bans and picks come up one by one at the pace they were made; with the delay on they come up that much later, in step with the spectator feed. Team names, colours and series score come from Teams; blue side is the left team unless "Left team is on red side" is ticked. An Observer Client in the lobby can read champ select instead and send it here.</p>
   </section>
 
   <section class="wide" data-page="tournament">
@@ -601,6 +621,7 @@ $("bg-file").addEventListener("change", e => {
 $("ow-btn").onclick = () => post("/api/overlay-window", { open: !state.app.overlay_window.open });
 $("ow-screen").onchange = e => post("/api/overlay-window", { open: state.app.overlay_window.open, screen: Number(e.target.value) });
 $("bg-tint").onchange = e => post("/api/config", { bg_tint: e.target.checked });
+$("scoreboard-show").onchange = e => post("/api/config", { scoreboard: { show: e.target.checked } });
 let speedTimer = null;
 let brightTimer = null;
 $("bg-bright").addEventListener("input", e => {
@@ -831,6 +852,10 @@ $("draft-logo-reset").onclick = () => draftPost({ logo: "" });
 $("draft-team-logos").onchange = e => draftPost({ team_logos: e.target.checked });
 $("draft-champ-names").onchange = e => draftPost({ champ_names: e.target.checked });
 $("draft-layout").onchange = e => draftPost({ layout: e.target.value });
+$("draft-sponsor").onchange = e => draftPost({ sponsor: e.target.value.trim() });
+$("fearless-show").onchange = e => post("/api/config", { fearless: { show: e.target.checked } });
+$("fearless-record").onclick = () => post("/api/fearless/record", {});
+$("fearless-clear").onclick = () => { if (confirm("Clear the earlier games' picks?")) post("/api/fearless/clear", {}); };
 $("dbg-choose").onclick = () => $("dbg-file").click();
 $("dbg-remove").onclick = () => draftPost({ bg_video: "" });
 $("dbg-default").onclick = () => draftPost({ bg_video: DEFAULT_BG });
@@ -892,6 +917,19 @@ function applyDraft(s) {
   $("draft-demo").textContent = info.demo ? "Stop demo draft" : "Play demo draft";
   $("draft-team-logos").checked = d.team_logos !== false;
   $("draft-champ-names").checked = d.champ_names !== false;
+  setIfIdle($("draft-sponsor"), d.sponsor || "");
+  const fl = info.fearless || { games: [] };
+  $("fearless-show").checked = fl.show !== false;
+  $("fearless-record").disabled = !fl.finished;
+  const flKey = JSON.stringify(fl.games);
+  if ($("fearless-games").dataset.key !== flKey) {
+    $("fearless-games").dataset.key = flKey;
+    $("fearless-games").innerHTML = fl.games.length ? fl.games.map((g, i) => `<div class="fearless-game"><b>Game ${i + 1}</b>` +
+      g.teams.map(t => `<span class="fl-team">${esc(t.key)}</span>` + t.champs.map(c => c ? `<img src="${esc(c)}" alt="">` : "<i></i>").join("")).join("") +
+      `<button type="button" data-fl-remove="${i}" title="Remove this game">✕</button></div>`).join("")
+      : `<div class="note" style="margin:0">No earlier games in this series yet (game 1: the panel stays hidden).</div>`;
+    $("fearless-games").querySelectorAll("[data-fl-remove]").forEach(b => b.onclick = () => post("/api/fearless/remove", { index: Number(b.dataset.flRemove) }));
+  }
   if (!$("dbg-name").textContent.startsWith("Copying"))
     $("dbg-name").textContent = d.bg_video === DEFAULT_BG ? "Default SCC loop" : d.bg_video ? d.bg_video.split("/").pop() : "None: just the team colours";
   $("dbg-remove").hidden = !d.bg_video;
@@ -984,6 +1022,7 @@ function apply(s) {
   $("bg-remove").hidden = !cfg.bg_video;
   $("bg-default").hidden = cfg.bg_video === DEFAULT_BG;
   $("bg-tint").checked = cfg.bg_tint !== false;
+  $("scoreboard-show").checked = (cfg.scoreboard || {}).show !== false;
   if (document.activeElement !== $("bg-bright")) {
     $("bg-bright").value = cfg.bg_brightness ?? 1;
     $("bg-bright-val").textContent = Math.round((cfg.bg_brightness ?? 1) * 100) + "%";

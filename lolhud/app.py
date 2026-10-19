@@ -20,7 +20,7 @@ from . import outputs
 from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
-from . import companion
+from . import companion, fearless
 from .draft import DraftFeed, DraftReader, play_recording
 from .log import log, since
 from .matchtime import MatchSync, ReplayClient, enable_replay_api, run_follower
@@ -41,7 +41,8 @@ mimetypes.add_type("video/webm", ".webm")
 BUNDLED_LOGO_DIR = os.path.join(WEB_DIR, "assets", "logos")
 # Draft overlay looks ("draft profiles"): id -> (name, page in web/).
 DRAFT_LAYOUTS = {"europe": ("Europe (lol-pick-ban-ui)", "draft.html"),
-                 "lec": ("LEC", "draft-lec.html")}
+                 "lec": ("LEC", "draft-lec.html"),
+                 "scc27": ("SCC 2027 (fearless)", "draft-scc27.html")}
 
 
 class HudApp:
@@ -78,6 +79,7 @@ class HudApp:
         self.draft_feed = DraftFeed()
         self.draft_reader = DraftReader(self._draft_send, self._league_paths)
         self._draft_demo = None   # (thread, stop event) while the demo draft plays
+        self._finished_draft = None   # the live draft once all ten picks are in (for fearless)
         # Match time: every PC's League client at the same moment (see matchtime.py).
         self.match_sync = MatchSync(ReplayClient(cfg["api_url"]))
         self._lock = threading.Lock()
@@ -220,7 +222,44 @@ class HudApp:
             except Exception as e:
                 self.draft_reader.status = f"Couldn't send the draft to the GFX PC: {getattr(e, 'reason', e)}"
         else:
-            self.draft_feed.push(draft, "this PC")
+            self.push_draft(draft, "this PC")
+
+    def push_draft(self, draft, source):
+        """A reading of champ select (this PC's or an observer's). A finished
+        draft goes into the series' fearless history when the lobby closes."""
+        self.draft_feed.push(draft, source)
+        if source == "demo":
+            return   # (the demo draft isn't part of the series)
+        if draft is not None:
+            if fearless.complete(draft):
+                self._finished_draft = draft
+            elif not any(int(p.get("champion") or 0) for side in ("blue", "red")
+                         for p in (draft.get(side) or {}).get("picks") or []):
+                self._finished_draft = None   # a new lobby
+        elif self._finished_draft is not None:
+            self.record_fearless(self._finished_draft)
+            self._finished_draft = None
+
+    def record_fearless(self, draft=None):
+        """Adds a finished draft (default: the latest one read) to the fearless history."""
+        if draft is None:
+            draft = self._finished_draft or self.draft_feed.latest()
+        if not fearless.complete(draft):
+            raise ValueError("There's no finished draft to add (all ten champions locked in)")
+        cfg = self.config.get()
+        games, added = fearless.add((cfg.get("fearless") or {}).get("games"), fearless.game_of(draft, cfg))
+        if added:
+            self.config.update({"fearless": {"games": games}})
+            log(f"Fearless: game {len(games)}'s picks kept (" + " vs ".join(fearless.sides(cfg)) + ")")
+        return games
+
+    def series_check(self, before):
+        """Back to 0-0 in the series: a new series, so a new fearless history."""
+        cfg = self.config.get()
+        wins = lambda c: int((c.get("left") or {}).get("wins") or 0) + int((c.get("right") or {}).get("wins") or 0)
+        if wins(before) > 0 and wins(cfg) == 0 and (cfg.get("fearless") or {}).get("games"):
+            self.config.update({"fearless": {"games": []}})
+            log("Fearless: series score back to 0-0, earlier games' picks cleared")
 
     def set_draft_read(self, on):
         self.config.update({"draft": {"read": bool(on)}})
@@ -279,7 +318,12 @@ class HudApp:
         # The game's patch (Data Dragon 15.20.1 is patch 25.20).
         ver = (dd.version or "").split(".")
         patch = f"{int(ver[0]) + 10}.{ver[1]}" if len(ver) > 1 and ver[0].isdigit() and int(ver[0]) < 20 else ".".join(ver[:2])
+        fl = cfg.get("fearless") or {}
+        demo = bool(self._draft_demo and self._draft_demo[0].is_alive())
         return {"draft": view, "layout": self.draft_layout(), "best_of": cfg.get("best_of", 3), "patch": patch, "teams": {"blue": team(blue), "red": team(red)},
+                # Earlier games' picks by role, from the second game on (the demo shows a sample).
+                "fearless": {**fearless.view(fl.get("games"), cfg, champ, sample=demo), "show": fl.get("show", True)},
+                "sponsor": d.get("sponsor", ""),
                 "logo": d.get("logo") or "assets/logos/scc.png", "logo_adjust": adjust.get("event") or {},
                 "show": {"score": d.get("score", True), "coaches": d.get("coaches", True), "spells": d.get("spells", True),
                          "team_logos": d.get("team_logos", True), "champ_names": d.get("champ_names", True)},
@@ -385,6 +429,7 @@ class HudApp:
                 "draft": {"reader": self.draft_reader.status if self.draft_reader.enabled else "off",
                           "demo": bool(self._draft_demo and self._draft_demo[0].is_alive()),
                           "layouts": [{"id": k, "name": v[0]} for k, v in DRAFT_LAYOUTS.items()],
+                          "fearless": self.fearless_info(cfg),
                           **self.draft_feed.info(self.draft_delay())},
                 "match_time": {"status": self.match_sync.status,
                                "local": {**self.match_sync.local,
@@ -392,6 +437,16 @@ class HudApp:
                                "enabled": self.match_sync.enabled},
                 "lan_url": f"http://{lan}:{port}" if lan else None, "data_dir": DATA_DIR,
                 "companion": {"lan": bool(cfg.get("companion_lan")), "host": lan_ip() or "127.0.0.1", "port": port}}
+
+    def fearless_info(self, cfg):
+        """The fearless history for the control panel: each game's picks by team."""
+        dd = self.ddragon
+        out = []
+        for g in (cfg.get("fearless") or {}).get("games") or []:
+            out.append({"teams": [{"key": k, "champs": [((dd.champion(c) or {}).get("square") or "") for c in v]}
+                                  for k, v in g.get("teams", {}).items()]})
+        return {"games": out, "show": (cfg.get("fearless") or {}).get("show", True),
+                "finished": fearless.complete(self._finished_draft)}
 
     def snapshot(self):
         cfg = self.config.get()
@@ -706,7 +761,7 @@ def make_handler(app):
                     draft = body.get("draft")
                     if draft is not None and not isinstance(draft, dict):
                         raise ValueError("Expected a draft object")
-                    app.draft_feed.push(draft, "observer")
+                    app.push_draft(draft, "observer")
                     return self._send('{"ok":true}')
                 except (ValueError, TypeError) as e:
                     return self._send(json.dumps({"error": str(e)}), status=400)
@@ -745,7 +800,9 @@ def make_handler(app):
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if path == "/api/config":
+                    before = app.config.get()
                     app.config.update(body)
+                    app.series_check(before)
                 elif path == "/api/sponsor":
                     return self._send(json.dumps({"path": app.save_sponsor(body.get("filename"), body["data"])}))
                 elif path == "/api/sponsors":
@@ -808,6 +865,15 @@ def make_handler(app):
                     app.save_draft_logo(body.get("filename"), body["data"])
                 elif path == "/api/draft/demo":
                     app.draft_demo(bool(body.get("on")))
+                elif path == "/api/fearless/record":
+                    app.record_fearless()
+                elif path == "/api/fearless/remove":
+                    games = list((app.config.get().get("fearless") or {}).get("games") or [])
+                    games.pop(int(body["index"]))
+                    app.config.update({"fearless": {"games": games}})
+                elif path == "/api/fearless/clear":
+                    app.config.update({"fearless": {"games": []}})
+                    log("Fearless: earlier games' picks cleared")
                 elif path == "/api/companion/network":
                     app.set_companion_lan(body.get("enabled"))
                 elif path == "/api/match/sync-all":

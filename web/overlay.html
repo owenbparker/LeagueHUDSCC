@@ -15,6 +15,7 @@
     dragons=1  show each team's dragons as coloured dots
     idle=0     hide the whole HUD while no game is running
     cams=0     hide the player webcams
+    scoreboard=0  hide the scoreboard and bottom third
     fit=1      scale the HUD to the window, centred at the top (used by the
                desktop app's window over the game, whatever the screen size)
 -->
@@ -86,13 +87,15 @@
   <g id="stage"></g>
 </svg>
 <div id="fx"></div>
+<script src="overlay_scoreboard.js"></script>
 <script src="overlay_cams.js"></script>
 <script src="overlay_sponsor.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const opt = (k, d) => params.has(k) ? params.get(k) !== "0" : d;
 const SHOW = { timers: opt("timers", true), diff: opt("diff", true), dragons: opt("dragons", false), idle: opt("idle", true),
-               cams: opt("cams", true), sponsors: opt("sponsors", true) };
+               cams: opt("cams", true), sponsors: opt("sponsors", true), scoreboard: opt("scoreboard", true) };
+let hasScoreboard = false;   // the profile has the bottom third (scoreboard)
 const $ = id => document.getElementById(id);
 if (opt("fit", false)) {
   // Scales with the screen's height like League's own top bar does.
@@ -161,6 +164,7 @@ function build(p, id) {
   base = `/profiles/${id}/`;
   texts = []; logos = {}; pips = {}; diffs = {}; drakes = {}; objectiveEls = []; tints = {}; timers = null;
   videos = []; videoStandIns = [];
+  hasScoreboard = false;
   fxSetup(p);
   loadFonts(p.fonts);
   const stage = $("stage");
@@ -273,6 +277,9 @@ function build(p, id) {
       case "timers":
         timers = buildTimers(el("g", { class: "timers", transform: `translate(${e.x},${e.y})` }, stage));
         node = timers.g;
+        break;
+      case "scoreboard":
+        hasScoreboard = true;   // drawn by overlay_scoreboard.js
         break;
     }
     if (node && e.objective) objectiveEls.push({ node, key: e.objective });
@@ -624,6 +631,8 @@ function render(s) {
   }
   drawTimers(f, cfg.objective_timers || {}, cfg.next_dragon || s.detail.next_dragon);
   checkAnimations(s);
+  renderScoreboard(s, SHOW.scoreboard && hasScoreboard && (cfg.scoreboard || {}).show !== false
+                   && (s.detail.connected || !SHOW.idle));
   renderCams(s, SHOW.cams);
   if (SHOW.sponsors) renderSponsorBox(s);
   setVideo(cfg.bg_video, cfg.bg_speed, cfg.bg_tint !== false, cfg.bg_brightness);

@@ -138,6 +138,20 @@ Text keeps the PSD's paragraph alignment, so right-align numbers that sit to the
 
 Settings are saved to `config.json` and survive restarts.
 
+## Scoreboard and bottom third
+
+Both SCC 2026 profiles have the scoreboard along the bottom (from `design/lol-hud-SCC27.psd`): for each player the champion (greyed with a respawn countdown while dead), level, ultimate (dim until level 6), six items and trinket, summoner spells, keystone rune, role, name, CS, KDA and vision score, with the gold difference between the laners in the middle in the leading team's colour; plus the frames for the webcams, the sponsor logos and the minimap. Switch it off under **HUD Editor -> HUD profile**, or add `?scoreboard=0` to the overlay's address.
+
+Riot's live game data doesn't include health, mana or other players' gold, so the health and mana bars are full while a player is alive and empty while dead, the level bar fills up to level 18, and the lane gold difference uses the HUD's gold estimate (see Gold). The layout comes from the PSD: after a design change, run `python tools/scoreboard_from_psd.py design/lol-hud-SCC27.psd` (needs `pip install psd-tools aggdraw`) to update `web/assets/scoreboard/`.
+
+## Champ select (draft)
+
+`/draft` is a browser source for champ select, read from the League client in the lobby on this PC or an Observer Client. Three looks (**Champ Select -> Draft look**):
+
+- **SCC 2027 (fearless)**, from `design/DRAFT-HUD-SCC-2027.psd`: bans and coaches each side, a timer bar that runs down to the middle in the acting team's colour, the ban or pick being made lit up in the team's colour, ten pick cards, and the match in the middle (series score, team logos, tricodes, a sponsor line and the patch).
+  **Fearless bans:** from the second game of a series, a panel above shows the champions each team played in the earlier games, by role (oldest first; the blue side's team on top). Each draft is added when the lobby closes with all ten picks in, and the list starts again when the series score goes back to 0-0. It's listed under Champ Select, where a game can be removed, the last draft added by hand, or the list cleared. The demo draft shows a sample.
+- **LEC**, and **Europe** (RCVolus' lol-pick-ban-ui).
+
 ## Webcams
 
 Each team gets a player cam along the bottom of the HUD, spaced like the LEC's: left cam at x 288-462, right cam at x 1458-1632, from y 821 to the bottom (174x259 each, set in `cams.slots` in `config.json`). Each one shows the player the action is on. The rest of the bottom section is left for your own design.

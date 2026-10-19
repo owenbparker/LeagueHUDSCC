@@ -54,6 +54,33 @@ class StateTests(unittest.TestCase):
         self.assertEqual(f["P2 CHAMPION"], "Wukong")
         self.assertEqual(f["P6 CHAMPION"], "K'Sante")
 
+    def test_scoreboard(self):
+        from lolhud.gold import DataDragon
+        dd = DataDragon(tempfile.mkdtemp())
+        dd.runes = {8010: "perk-images/Styles/Precision/Conqueror/Conqueror.png"}
+        dd.ults = {k: f"{k}R.png" for k in ("Gnar", "MonkeyKing", "KSante")}
+        raw = load()
+        p = raw["allPlayers"][0]
+        p["items"] = [{"itemID": 3071, "slot": 2, "price": 3000, "count": 1}, {"itemID": 3340, "slot": 6, "price": 0, "count": 1}]
+        p["summonerSpells"] = {"summonerSpellOne": {"rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"},
+                               "summonerSpellTwo": {"rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSmite_DisplayName"}}
+        p["runes"] = {"keystone": {"id": 8010}}
+        sb = build_state(raw, cfg(), dd)["detail"]["scoreboard"]
+        self.assertEqual(len(sb["players"]), 10)
+        top, jungle = sb["players"][0], sb["players"][1]
+        self.assertEqual((top["champion"], top["dead"], top["respawn"]), ("Gnar", True, 12))
+        self.assertEqual(top["role"], "top")
+        self.assertTrue(top["ult"].endswith("/img/spell/GnarR.png"))
+        self.assertEqual(jungle["champion"], "Wukong")
+        self.assertTrue(jungle["items"][2].endswith("/img/item/3071.png"))      # in its own slot
+        self.assertEqual(jungle["items"][0], "")
+        self.assertTrue(jungle["trinket"].endswith("/img/item/3340.png"))
+        self.assertTrue(jungle["spells"][1].endswith("/img/spell/SummonerSmite.png"))
+        self.assertTrue(jungle["keystone"].endswith("/cdn/img/perk-images/Styles/Precision/Conqueror/Conqueror.png"))
+        self.assertEqual((jungle["kda"], jungle["cs"], jungle["vision"]), ("2/1/3", 110, 10))
+        self.assertEqual(len(sb["gold_diff"]), 5)
+        self.assertEqual(sb["gold_diff"][1], jungle["gold"] - sb["players"][6]["gold"])
+
     def test_timers(self):
         f = build_state(load(), cfg())["fields"]
         # Last dragon at 12:40 -> next at 17:40, 1:26 after 16:14.

@@ -70,11 +70,19 @@ DEFAULTS = {
               "coach_left": "", "coach_right": "", "league_path": "",
               # The tournament logo in the middle ("" = the SCC logo), team logos by
               # the team names, and each one's size and nudge (draft only).
-              "logo": "", "team_logos": True, "champ_names": True, "layout": "europe",
+              "logo": "", "team_logos": True, "champ_names": True, "layout": "scc27",
+              # The SCC 2027 look's sponsor line in the middle ("" none).
+              "sponsor": "",
               # Its own background loop (middle box), like the HUD's: "" none.
               "bg_video": "profiles/scc-2026/bg_loop.mp4", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
               "logo_adjust": {"event": {"scale": 1, "x": 0, "y": 0}, "left": {"scale": 1, "x": 0, "y": 0},
                               "right": {"scale": 1, "x": 0, "y": 0}}},
+    # The scoreboard and bottom third along the bottom (the built-in profiles).
+    "scoreboard": {"show": True},
+    # Fearless draft: each team's picks in the series' earlier games (kept as
+    # each draft finishes; cleared when the series score goes back to 0-0),
+    # shown by the SCC 2027 draft look from the second game.
+    "fearless": {"show": True, "games": []},
     # The sponsor box: covers the spectator's observer controls (camera mode
     # and fog of war, bottom left) with the background loop, tinted in both
     # teams' colours, and sponsor logos in turn. rect is x, y, w, h on the

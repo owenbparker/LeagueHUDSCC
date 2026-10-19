@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Draft (SCC 2027)</title>
+<!-- Champ select overlay (OBS / vMix browser source, 1920x1080) in the SCC
+     2027 look (design/DRAFT-HUD-SCC-2027.psd): the bans and coaches each side,
+     the fearless bans in the middle (from the second game of a series), a
+     timer bar that runs down to the middle in the acting team's colour, ten
+     pick cards and the match in the middle. Driven by the app's /api/draft. -->
+<style>
+  @font-face { font-family: "SCC Franklin"; src: local("Franklin Gothic Book"), local("FranklinGothic-Book"), url("fonts/LibreFranklin-400.woff2") format("woff2"); }
+  @font-face { font-family: "Anton"; src: local("Anton"), local("Anton-Regular"), url("fonts/Anton.woff2") format("woff2"); }
+  @property --blue { syntax: "<color>"; inherits: true; initial-value: #0a6d4c; }
+  @property --red { syntax: "<color>"; inherits: true; initial-value: #bd1313; }
+  :root { --franklin: "SCC Franklin", "Franklin Gothic Book", "Libre Franklin", Arial, sans-serif; }
+  html, body { margin: 0; width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
+  * { box-sizing: border-box; }
+  #draft { position: absolute; inset: 0; color: #fff; font-family: var(--franklin);
+           --blue-hi: color-mix(in srgb, var(--blue) 65%, white); --red-hi: color-mix(in srgb, var(--red) 65%, white);
+           transition: --blue 1s, --red 1s; }
+  #draft.Gone { visibility: hidden; }
+  .abs { position: absolute; }
+
+  /* Comes up from the bottom when champ select starts, goes back down at the end. */
+  .rise { transform: translateY(440px); transition: transform .9s cubic-bezier(.55, 0, .75, .3); }
+  #draft.On .rise { transform: none; transition: transform .9s cubic-bezier(.2, .7, .3, 1); }
+  #draft.On .rise.late { transition-delay: .15s; }
+
+  /* --- bans and coaches, each side --- */
+  .bansbox { top: 664px; width: 366px; height: 112px; background: #000; }
+  .bansbox.blue { left: 0; }
+  .bansbox.red { left: 1553px; width: 368px; top: 663px; }
+  .coach { position: absolute; left: 0; right: 0; top: 7px; text-align: center; font-size: 27px; line-height: 32px;
+           text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+  .ban { position: absolute; top: 37px; width: 76px; height: 76px; overflow: hidden; border: 1px solid rgba(255,255,255,.85); }
+  .ban img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.1); display: block;
+             filter: grayscale(.6) brightness(.8); }
+  .ban img[src=""] { display: none; }
+  /* Struck through, empty or banned, as in the design. */
+  .ban::after { content: ""; position: absolute; left: 50%; top: 50%; width: 108px; height: 1.5px; background: #fff;
+                transform: translate(-50%, -50%) rotate(45deg); box-shadow: 0 0 2px rgba(0,0,0,.7); }
+  .ban .hi { position: absolute; inset: 0; opacity: 0; transition: opacity .3s; }
+  .blue .ban .hi { background: linear-gradient(135deg, var(--blue-hi), var(--blue)); }
+  .red .ban .hi { background: linear-gradient(135deg, var(--red-hi), var(--red)); }
+  .ban.Active .hi { opacity: 1; animation: pulse 1.1s ease-in-out infinite alternate; }
+  .ban.Active { border-color: #fff; box-shadow: inset 0 0 0 2px #fff; }
+
+  /* --- the fearless bans: earlier games' picks by role (from game 2) --- */
+  #fearless { left: 519px; top: 663px; width: 881px; height: 121px; background: #000; opacity: 0;
+              transition: opacity .6s ease, transform .9s cubic-bezier(.55, 0, .75, .3); }
+  #draft.On #fearless.Shown { opacity: 1; }
+  #fearless .title { position: absolute; left: 0; right: 0; top: 13px; text-align: center; font-size: 21px; line-height: 24px; letter-spacing: .02em; }
+  #fearless .sample { position: absolute; right: 12px; top: 12px; font-size: 13px; color: #ffcf66; }
+  .role { position: absolute; top: 45px; height: 62px; }
+  .role .ico { position: absolute; top: 19px; width: 23px; height: 23px; object-fit: contain; }
+  .role .grid { position: absolute; left: 0; top: 0; height: 62px; display: grid; grid-template-rows: 31px 31px; grid-auto-flow: column; gap: 0; }
+  .role .slot { position: relative; width: 41px; height: 31px; border: 1px solid rgba(255,255,255,.35); background: #111; overflow: hidden; }
+  .role .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .role .slot img[src=""] { display: none; }
+  .role .slot.blue { box-shadow: inset 3px 0 0 var(--blue); }
+  .role .slot.red { box-shadow: inset 3px 0 0 var(--red); }
+
+  /* --- the timer bar: full at the start of a turn, runs down to the middle --- */
+  .timerline { left: 0; top: 773px; width: 1920px; height: 18px; background: rgba(0,0,0,.55); }
+  #bar { position: absolute; left: 50%; top: 0; height: 100%; width: 0; transform: translateX(-50%); background: #2a90c0; }
+  #bar.blue { background: linear-gradient(to right, var(--blue), var(--blue-hi) 50%, var(--blue)); }
+  #bar.red { background: linear-gradient(to right, var(--red), var(--red-hi) 50%, var(--red)); }
+
+  /* --- pick cards --- */
+  .cards { top: 788px; height: 292px; }
+  .cards .bg { position: absolute; left: 0; top: 1px; width: 100%; height: 291px; background: rgba(0,0,0,.51); }
+  .card { position: absolute; top: 0; width: 161px; height: 292px; overflow: hidden; }
+  .card .empty { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .78; }
+  .card .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%;
+               opacity: 0; transform: scale(1.08); transition: opacity .5s ease, transform .9s ease, filter .5s; }
+  .card.Picked .art { opacity: 1; transform: scale(1); }
+  /* Picking: the card glows in the team colour, the champion being hovered faint in it. */
+  .card .glow { position: absolute; inset: 0; opacity: 0; transition: opacity .4s ease; mix-blend-mode: screen; }
+  .blue .card .glow { background: linear-gradient(to top, var(--blue-hi) 0%, color-mix(in srgb, var(--blue) 60%, transparent) 45%, transparent 100%); }
+  .red .card .glow { background: linear-gradient(to top, var(--red-hi) 0%, color-mix(in srgb, var(--red) 60%, transparent) 45%, transparent 100%); }
+  .card.Active .glow { opacity: .85; animation: pulse 1.1s ease-in-out infinite alternate; }
+  .card.Active .art { opacity: .45; transform: scale(1.03); filter: grayscale(.4); }
+  .card .edge { position: absolute; inset: 0; border: 3px solid transparent; transition: border-color .3s; pointer-events: none; }
+  .blue .card.Active .edge { border-color: var(--blue-hi); }
+  .red .card.Active .edge { border-color: var(--red-hi); }
+  .card .shade { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; opacity: 0; transition: opacity .5s;
+                 background: linear-gradient(to top, rgba(0,0,0,.85), rgba(0,0,0,0)); }
+  .card.Picked .shade, .card.Active .shade { opacity: 1; }
+  .card .names { position: absolute; left: 4px; right: 4px; bottom: 21px; text-align: center; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .card .champ { font-size: 15px; line-height: 18px; letter-spacing: .06em; text-transform: uppercase; opacity: .85;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .player { font-size: 18px; line-height: 22px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .spells { position: absolute; top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .blue .card .spells { right: 8px; } .red .card .spells { left: 8px; }
+  .card .spells img { width: 24px; height: 24px; display: block; border: 1px solid rgba(255,255,255,.35); }
+  @keyframes pulse { from { filter: brightness(.85); } to { filter: brightness(1.25); } }
+
+  /* --- the middle --- */
+  .center { left: 799px; top: 789px; width: 321px; height: 291px; overflow: hidden; }
+  .center > img.art { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .center .glowside { position: absolute; inset: 0; opacity: 0; transition: opacity .6s; mix-blend-mode: screen; }
+  .center .glowside.blue { background: radial-gradient(ellipse 70% 60% at 0% 100%, color-mix(in srgb, var(--blue) 70%, transparent), transparent 70%); }
+  .center .glowside.red { background: radial-gradient(ellipse 70% 60% at 100% 100%, color-mix(in srgb, var(--red) 70%, transparent), transparent 70%); }
+  .center .glowside.On { opacity: .9; }
+  .sponsor { position: absolute; left: 0; right: 0; top: 14px; text-align: center; font-size: 27px; line-height: 30px; text-transform: uppercase; }
+  .pips { position: absolute; top: 58px; width: 105px; height: 21px; display: flex; gap: 1px; }
+  .pips.blue { left: 11px; } .pips.red { left: 208px; flex-direction: row-reverse; }
+  .pip { flex: 1; border: 1.5px solid #fff; }
+  .pip.Won { background: #fff; }
+  .tlogo { position: absolute; top: 111px; width: 88px; height: 68px; display: flex; align-items: center; justify-content: center; }
+  .tlogo.blue { left: 19px; } .tlogo.red { left: 216px; }
+  .tlogo img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: 50% 50%; }
+  .vs { position: absolute; left: 135px; top: 138px; width: 67px; height: 38px; }
+  .tri { position: absolute; top: 205px; width: 120px; text-align: center; font-family: "Anton", Impact, sans-serif; font-size: 43.4px;
+         line-height: 52px; text-transform: uppercase; white-space: nowrap; }
+  .tri.blue { left: 1px; } .tri.red { left: 200px; }
+  .patch { position: absolute; left: 0; right: 0; top: 260px; text-align: center; font-size: 18.2px; line-height: 22px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="draft" class="Gone">
+  <div class="abs bansbox blue rise" id="bans-blue"><div class="coach" id="coach-blue"></div></div>
+  <div class="abs bansbox red rise" id="bans-red"><div class="coach" id="coach-red"></div></div>
+  <div class="abs rise late" id="fearless"><div class="title">FEARLESS BANS</div><div class="sample" id="fearless-sample"></div></div>
+  <div class="abs timerline rise"><div id="bar"></div></div>
+  <div class="abs cards blue rise" id="cards-blue" style="left:0;width:799px"><div class="bg"></div></div>
+  <div class="abs center rise">
+    <img class="art" src="draft/scc27/center.png" alt="">
+    <div class="glowside blue" id="glow-blue"></div>
+    <div class="glowside red" id="glow-red"></div>
+    <div class="sponsor" id="sponsor"></div>
+    <div class="pips blue" id="pips-blue"></div>
+    <div class="pips red" id="pips-red"></div>
+    <div class="tlogo blue"><img id="logo-blue" alt=""></div>
+    <img class="vs" src="draft/scc27/vs.png" alt="">
+    <div class="tlogo red"><img id="logo-red" alt=""></div>
+    <div class="tri blue" id="tri-blue"></div>
+    <div class="tri red" id="tri-red"></div>
+    <div class="patch" id="patch"></div>
+  </div>
+  <div class="abs cards red rise" id="cards-red" style="left:1119px;width:801px"><div class="bg"></div></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const url = p => !p ? "" : /^https?:/.test(p) ? p : "/" + p.split("/").map(encodeURIComponent).join("/");
+const LAYOUT = "scc27";
+
+if (params.get("fit") === "1") {
+  const fit = () => {
+    const k = Math.min(innerHeight / 1080, innerWidth / 1920);
+    Object.assign(document.body.style, { transformOrigin: "0 0", transform: `translateX(${(innerWidth - 1920 * k) / 2}px) scale(${k})` });
+  };
+  addEventListener("resize", fit); fit();
+}
+
+function el(tag, cls, parent) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function setSrc(img, src) { if (img.getAttribute("src") !== src) img.setAttribute("src", src); }
+function nudge(img, a) {
+  a = a || {};
+  img.style.transform = `translate(${Number(a.x || 0)}px, ${Number(a.y || 0)}px) scale(${Number(a.scale ?? 1)})`;
+}
+
+// Positions from the design. Cards: top to support, left to right on both
+// sides. Bans: B1 at the far left, R1 next to the middle.
+const CARD_X = { blue: [0, 160, 319, 479, 638], red: [0, 160, 320, 480, 640] };
+const BAN_X = { blue: [-2, 71, 143, 217, 289], red: [0, 73, 145, 219, 291] };
+// The fearless panel: a group per role (3 earlier games, blue on top), its icon to the left.
+const ROLES = [["top", 584 - 519], ["jg", 742 - 519], ["mid", 904 - 519], ["adc", 1065 - 519], ["supp", 1227 - 519]];
+const sides = {};
+for (const side of ["blue", "red"]) {
+  const t = { cards: [], bans: [] };
+  const cards = $(`cards-${side}`);
+  for (let i = 0; i < 5; i++) {
+    const card = el("div", "card", cards);
+    card.style.left = CARD_X[side][i] + "px";
+    const empty = el("img", "empty", card);
+    empty.src = `draft/scc27/card_${side[0]}${i + 1}.png`;
+    const art = el("img", "art", card);
+    el("div", "glow", card);
+    el("div", "shade", card);
+    el("div", "edge", card);
+    const names = el("div", "names", card);
+    const champ = el("div", "champ", names);
+    const player = el("div", "player", names);
+    const spells = el("div", "spells", card);
+    const s1 = el("img", "", spells), s2 = el("img", "", spells);
+    t.cards.push({ card, art, champ, player, spells, s1, s2 });
+    const ban = el("div", "ban", $(`bans-${side}`));
+    ban.style.left = BAN_X[side][i] + "px";
+    el("div", "hi", ban);
+    t.bans.push({ ban, img: el("img", "", ban) });
+  }
+  sides[side] = t;
+}
+const roleBoxes = ROLES.map(([name, x]) => {
+  const box = el("div", "role", $("fearless"));
+  box.style.left = x + "px";
+  const ico = el("img", "ico", box);
+  ico.src = `draft/scc27/role_${name}.png`;
+  ico.style.left = "-28px";
+  const grid = el("div", "grid", box);
+  return { box, grid };
+});
+
+function pips(side, bestOf, wins) {
+  const box = $(`pips-${side}`), need = Math.max(1, Math.ceil((Number(bestOf) || 1) / 2));
+  if (box.children.length !== need) { box.replaceChildren(); for (let i = 0; i < need; i++) el("div", "pip", box); }
+  [...box.children].forEach((p, i) => p.classList.toggle("Won", i < wins));
+}
+
+function renderSide(side, team, info, show) {
+  const t = sides[side];
+  $(`coach-${side}`).textContent = show.coaches && info.coach ? `Coach: ${info.coach}` : "";
+  $(`tri-${side}`).textContent = info.tricode || "";
+  const logo = $(`logo-${side}`);
+  logo.style.display = info.logo && show.team_logos !== false ? "" : "none";
+  if (info.logo) { setSrc(logo, url(info.logo)); nudge(logo, info.logo_adjust); }
+  for (let i = 0; i < 5; i++) {
+    const p = (team.picks || [])[i] || {}, v = t.cards[i];
+    const champ = p.champion || {};
+    if (champ.loading) setSrc(v.art, champ.loading);
+    v.card.classList.toggle("Picked", !!champ.loading && !p.active);
+    v.card.classList.toggle("Active", !!p.active);
+    v.player.textContent = p.name || "";
+    v.champ.textContent = show.champ_names && champ.name && !p.active ? champ.name : "";
+    const spells = show.spells && champ.name && !p.active && p.spell1 && p.spell2;
+    v.spells.style.display = spells ? "" : "none";
+    if (spells) { setSrc(v.s1, p.spell1); setSrc(v.s2, p.spell2); }
+    const b = (team.bans || [])[i] || {}, bv = t.bans[i];
+    setSrc(bv.img, (b.champion || {}).square || "");
+    bv.ban.classList.toggle("Active", !!b.active);
+  }
+}
+
+// Earlier games' picks by role: a column per game (oldest on the left), the
+// blue side's team on top. Shown from the second game of a series.
+function renderFearless(f) {
+  const box = $("fearless");
+  const on = !!(f && f.show !== false && f.games > 0);
+  box.classList.toggle("Shown", on);
+  $("fearless-sample").textContent = on && f.sample ? "DEMO SAMPLE" : "";
+  if (!on) return;
+  const cols = Math.max(3, f.games);
+  const w = Math.floor(124 / cols);   // three games fit the design's slots; more get narrower
+  roleBoxes.forEach((r, i) => {
+    const key = JSON.stringify([cols, (f.blue || [])[i], (f.red || [])[i]]);
+    if (r.grid.dataset.key === key) return;
+    r.grid.dataset.key = key;
+    r.grid.replaceChildren();
+    for (let g = 0; g < cols; g++) {
+      for (const side of ["blue", "red"]) {
+        const c = ((f[side] || [])[i] || [])[g];
+        const slot = el("div", "slot" + (c && c.square ? " " + side : ""), r.grid);
+        slot.style.width = w + "px";
+        const img = el("img", "", slot);
+        img.alt = (c && c.name) || "";
+        setSrc(img, (c && c.square) || "");
+      }
+    }
+  });
+}
+
+// The timer bar: when a turn starts it's set to the time left and runs down
+// to nothing in that time (smoothly, without waiting for each second).
+let barKey = "", barEnd = 0, timerTotal = 30;
+function renderBar(d) {
+  const bar = $("bar");
+  const secs = Number(d.timer || 0);
+  if (d.timer_total) timerTotal = d.timer_total; else if (secs > timerTotal) timerTotal = secs;
+  const side = d.blue.active ? "blue" : d.red.active ? "red" : "";
+  bar.className = side;
+  const key = `${d.phase}|${side}|${JSON.stringify([d.blue.picks.map(p => p.active), d.red.picks.map(p => p.active),
+    d.blue.bans.map(b => b.active), d.red.bans.map(b => b.active)])}`;
+  const now = performance.now() / 1000;
+  const drift = Math.abs((barEnd - now) - secs);
+  if (!d.phase || !secs) {
+    bar.style.transition = "none"; bar.style.width = "0";
+    barKey = key; barEnd = now;
+    return;
+  }
+  if (key === barKey && drift < 1.5) return;
+  barKey = key;
+  barEnd = now + secs;
+  bar.style.transition = "none";
+  bar.style.width = Math.min(1, secs / (timerTotal || 30)) * 100 + "%";
+  bar.offsetWidth;   // (start the run from there)
+  bar.style.transition = `width ${secs}s linear`;
+  bar.style.width = "0";
+}
+
+let shown = false, hideTimer = 0;
+function open() {
+  shown = true;
+  clearTimeout(hideTimer);
+  $("draft").classList.remove("Gone");
+  requestAnimationFrame(() => requestAnimationFrame(() => $("draft").classList.add("On")));
+}
+function close() {
+  shown = false;
+  $("draft").classList.remove("On");
+  hideTimer = setTimeout(() => $("draft").classList.add("Gone"), 1100);
+}
+
+function render(s) {
+  if (s.layout && s.layout !== LAYOUT && !params.get("layout")) { location.reload(); return; }
+  const d = s.draft || {};
+  const blue = s.teams.blue.color || "#0a6d4c", red = s.teams.red.color || "#bd1313";
+  const root = $("draft").style;
+  root.setProperty("--blue", blue);
+  root.setProperty("--red", red);
+  if (!d.active) { if (shown) close(); return; }
+  if (!shown) open();
+  renderBar(d);
+  for (const side of ["blue", "red"]) $(`glow-${side}`).classList.toggle("On", !!d[side].active);
+  const show = s.show || {};
+  renderSide("blue", d.blue, s.teams.blue, show);
+  renderSide("red", d.red, s.teams.red, show);
+  renderFearless(s.fearless);
+  pips("blue", s.best_of, Number(s.teams.blue.score || 0));
+  pips("red", s.best_of, Number(s.teams.red.score || 0));
+  $("pips-blue").style.display = $("pips-red").style.display = show.score ? "" : "none";
+  $("sponsor").textContent = s.sponsor || "";
+  $("patch").textContent = s.patch ? `Patch ${s.patch}` : "";
+}
+
+async function poll() {
+  try { render(await (await fetch("/api/draft", { cache: "no-store" })).json()); } catch (e) { /* app restarting */ }
+  setTimeout(poll, 250);
+}
+poll();
+</script>
+</body>
+</html>

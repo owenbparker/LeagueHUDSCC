@@ -96,6 +96,60 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(find_client([path]), (50123, "s3cret"))
 
 
+def finished(blue, red):
+    """A draft with all ten picks in (champion ids, top to support)."""
+    side = lambda ids: {"picks": [{"champion": c, "active": False} for c in ids], "bans": [], "active": False}
+    return {"active": True, "phase": "", "blue": side(blue), "red": side(red)}
+
+
+class FearlessTests(unittest.TestCase):
+    def test_finished_drafts_are_kept_by_team(self):
+        from lolhud import fearless
+        from lolhud.app import HudApp
+        from lolhud.config import Config
+        from lolhud.source import DemoSource
+        with tempfile.TemporaryDirectory() as d:
+            config = Config(os.path.join(d, "config.json"))
+            config.update({"left": {"tricode": "SCC", "wins": 0}, "right": {"tricode": "GMU", "wins": 0}})
+            app = HudApp(config, DemoSource(), mode="demo")
+            champs = {i: {"id": f"C{i}", "name": f"Champ {i}"} for i in range(1, 40)}
+            app.ddragon.champions = champs
+            # Game 1: SCC blue. Not finished yet, then finished, then the lobby closes.
+            half = finished([1, 2, 3, 4, 5], [6, 7, 8, 9, 10])
+            half["red"]["picks"][4] = {"champion": 0, "active": True}
+            app.push_draft(half, "this PC")
+            app.push_draft(None, "this PC")
+            self.assertEqual(config.get()["fearless"]["games"], [])                 # unfinished: not kept
+            app.push_draft(finished([1, 2, 3, 4, 5], [6, 7, 8, 9, 10]), "this PC")
+            self.assertTrue(app.app_info()["draft"]["fearless"]["finished"])
+            app.push_draft(None, "this PC")
+            app.push_draft(None, "this PC")                                         # (once)
+            self.assertEqual(config.get()["fearless"]["games"],
+                             [{"teams": {"SCC": [1, 2, 3, 4, 5], "GMU": [6, 7, 8, 9, 10]}}])
+            # Game 2: SCC on red. Each side's row is its own team's earlier picks.
+            config.update({"left": {"wins": 1}, "swap_sides": True})
+            app.push_draft(finished([11, 12, 13, 14, 15], [16, 17, 18, 19, 20]), "observer")
+            view = fearless.view(config.get()["fearless"]["games"], config.get(), lambda c: app.ddragon.champion(c))
+            self.assertEqual(view["games"], 1)
+            self.assertEqual(view["blue"][0][0]["name"], "Champ 6")                 # GMU (blue now) played 6 top
+            self.assertEqual(view["red"][4][0]["name"], "Champ 5")                  # SCC's support
+            app.push_draft(None, "observer")
+            self.assertEqual(len(config.get()["fearless"]["games"]), 2)
+            self.assertEqual(config.get()["fearless"]["games"][1]["teams"]["SCC"], [16, 17, 18, 19, 20])
+            # The demo draft isn't kept; back to 0-0 starts a new series.
+            app.push_draft(finished([21, 22, 23, 24, 25], [26, 27, 28, 29, 30]), "demo")
+            app.push_draft(None, "demo")
+            self.assertEqual(len(config.get()["fearless"]["games"]), 2)
+            before = config.get()
+            config.update({"left": {"wins": 0}})
+            app.series_check(before)
+            self.assertEqual(config.get()["fearless"]["games"], [])
+            # Shown in the draft from game 2; the demo shows a sample.
+            self.assertEqual(fearless.view([], config.get(), lambda c: None, sample=True)["games"], 2)
+            self.assertTrue(fearless.view([], config.get(), lambda c: None, sample=True)["sample"])
+            self.assertEqual(fearless.view([], config.get(), lambda c: None)["games"], 0)
+
+
 class ApiTests(unittest.TestCase):
     def test_ingest_and_overlay_state(self):
         from lolhud.app import HudApp, start
@@ -133,9 +187,10 @@ class ApiTests(unittest.TestCase):
                     bg = json.loads(r.read())["bg"]
                 self.assertEqual((bg["on"], bg["speed"]), (False, 0.5))       # removed; its own settings
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
-                    self.assertIn(b"europe.css", r.read())
+                    self.assertIn(b'const LAYOUT = "scc27"', r.read())              # the SCC 2027 look by default
                 self.assertEqual(app.app_info()["draft"]["source"], "observer")
-                self.assertEqual([l["id"] for l in app.app_info()["draft"]["layouts"]], ["europe", "lec"])
+                self.assertEqual([l["id"] for l in app.app_info()["draft"]["layouts"]], ["europe", "lec", "scc27"])
+                self.assertEqual(s["fearless"]["games"], 0)                         # game 1: nothing earlier
                 config.update({"draft": {"layout": "lec"}})
                 with urllib.request.urlopen("http://127.0.0.1:8871/draft", timeout=5) as r:
                     self.assertIn(b'const LAYOUT = "lec"', r.read())                # the chosen look

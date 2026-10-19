@@ -204,6 +204,14 @@ class DraftFeed:
         out.pop("timer_left", None)
         return out
 
+    def latest(self):
+        """The newest draft read (champ select or not), or None."""
+        with self._lock:
+            for _, d in reversed(self.timeline):
+                if d is not None:
+                    return copy.deepcopy(d)
+        return None
+
     def starts_in(self, delay=0.0):
         """Seconds until the live champ select goes on air (its start plus the
         delay), 0 once it's showing, None when there's none."""
