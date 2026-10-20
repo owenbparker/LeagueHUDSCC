@@ -426,8 +426,13 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
     # Players: 1-5 left, 6-10 right.
     n = 0
     for side in SIDES:
+        # Each player's gold: their share of the team's (Riot doesn't report it),
+        # by the estimate, so the five add up to the team gold shown.
+        est = [max(goldlib.estimate_player(p, game_time, cfg.get("passive_gold_start", goldlib.PASSIVE_START)),
+                   goldlib.item_value(p, ddragon)) for p in team_players[side]]
+        share = gold_raw[side] / sum(est) if sum(est) else 0
         tp = team_players[side] + [{}] * (5 - len(team_players[side]))
-        for p in tp[:5]:
+        for i, p in enumerate(tp[:5]):
             n += 1
             s = p.get("scores") or {}
             f[f"P{n} NAME"] = p.get("riotIdGameName") or p.get("summonerName") or ""
@@ -436,6 +441,10 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
             f[f"P{n} LEVEL"] = p.get("level", "")
             f[f"P{n} KDA"] = f"{s.get('kills', 0)}/{s.get('deaths', 0)}/{s.get('assists', 0)}" if p else ""
             f[f"P{n} CS"] = s.get("creepScore", "") if p else ""
+            f[f"P{n} VISION"] = round(s.get("wardScore") or 0) if p else ""
+            gold = est[i] * share if p and i < len(est) else 0
+            f[f"P{n} GOLD RAW"] = int(gold) if p else ""
+            f[f"P{n} GOLD"] = goldlib.format_gold(gold, cfg["gold_decimals"], cfg["decimal_separator"]) if p else ""
             f[f"P{n} DEAD"] = int(bool(p.get("isDead")))
             f[f"P{n} RESPAWN"] = int(p.get("respawnTimer") or 0) if p.get("isDead") else ""
 

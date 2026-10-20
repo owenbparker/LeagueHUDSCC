@@ -270,6 +270,12 @@ class ScreenGoldTests(unittest.TestCase):
         f = build_state(load(), cfg(swap_sides=True), screen_gold={"blue": 8000, "red": 8900})["fields"]
         self.assertEqual(f["GOLD RIGHT"], "8.0K")
 
+    def test_player_gold_adds_up_to_the_team(self):
+        f = build_state(load(), cfg(), screen_gold={"blue": 8000, "red": 8900})["fields"]
+        self.assertAlmostEqual(sum(f[f"P{n} GOLD RAW"] for n in range(1, 6)), 8000, delta=5)
+        self.assertTrue(f["P1 GOLD"].endswith("K"))
+        self.assertIsInstance(f["P1 VISION"], int)
+
     def test_falls_back_to_estimate(self):
         state = build_state(load(), cfg(), screen_gold=None)
         self.assertEqual(state["detail"]["gold_source"], "estimate")
@@ -531,3 +537,18 @@ class ObserverTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PostGameTests(unittest.TestCase):
+    def test_end_of_game_stats_on_the_last_game(self):
+        from lolhud import postgame
+        block = {"gameId": 7, "teams": [{"players": [
+            {"riotIdGameName": "Faker", "stats": {"TOTAL_DAMAGE_DEALT_TO_CHAMPIONS": 23456, "GOLD_EARNED": 13900,
+                                                   "CHAMPIONS_KILLED": 9, "NUM_DEATHS": 1, "ASSISTS": 7,
+                                                   "MINIONS_KILLED": 250, "NEUTRAL_MINIONS_KILLED": 12}}]}]}
+        game = postgame.parse(block)
+        fields = {"P1 NAME": "Faker", "P1 KDA": "8/1/7", "P2 NAME": "Nobody"}
+        self.assertEqual(postgame.apply(fields, game, lambda g: f"{g / 1000:.1f}K"), 1)
+        self.assertEqual((fields["P1 DMG"], fields["P1 GOLD"], fields["P1 KDA"], fields["P1 CS"]), (23456, "13.9K", "9/1/7", 262))
+        self.assertIsNone(postgame.parse({"teams": []}))
+

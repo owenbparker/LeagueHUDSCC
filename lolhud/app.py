@@ -20,9 +20,11 @@ from . import outputs
 from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
+from . import gold as goldlib
 from . import companion, fearless
 from .enginelink import EngineLink, save_logo_bytes
 from .draft import DraftFeed, DraftReader, play_recording
+from .postgame import PostGameReader, apply as apply_postgame
 from .log import log, since
 from .matchtime import MatchSync, ReplayClient, enable_replay_api, run_follower
 from .matchtime import fmt as fmt_time
@@ -79,6 +81,9 @@ class HudApp:
         # The draft (champ select), for /draft: read here or sent by an observer.
         self.draft_feed = DraftFeed()
         self.draft_reader = DraftReader(self._draft_send, self._league_paths)
+        # The end-of-game stats (damage, exact gold) for GFX Engine's post-game graphics.
+        self.postgame = PostGameReader(self._league_paths)
+        self._last_game = None   # (the players' fields of the last game, and when it ended)
         self._draft_demo = None   # (thread, stop event) while the demo draft plays
         self._finished_draft = None   # the live draft once all ten picks are in (for fearless)
         # Match time: every PC's League client at the same moment (see matchtime.py).
@@ -124,6 +129,11 @@ class HudApp:
                             self.screen_gold.fresh() if live else None,
                             self.screen_gold.fresh_counts() if live else None, self.seen_objectives)
         state["detail"]["error"] = self.source.last_error
+        if live and state["detail"].get("connected") and state["fields"].get("P1 NAME"):
+            players = {k: v for k, v in state["fields"].items() if k.startswith("P") and k[1:2].isdigit()}
+            self._last_game = {"fields": players, "ended": None}
+        elif self._last_game and self._last_game["ended"] is None:
+            self._last_game["ended"] = time.time()
         with self._lock:
             self.state = state
             self.updated_at = time.time()
@@ -380,6 +390,12 @@ class HudApp:
         cfg = self.config.get()
         with self._lock:
             fields = dict(self.state["fields"])
+        # After the game: its players again, with the end-of-game damage and gold.
+        game, last = self.postgame.game, self._last_game
+        if game and last and last["ended"] and game["at"] > last["ended"] - 5 and not fields.get("P1 NAME"):
+            post = dict(last["fields"])
+            if apply_postgame(post, game, lambda g: goldlib.format_gold(g, cfg["gold_decimals"], cfg["decimal_separator"])) >= 5:
+                fields.update(post)
         series = {side: {"name": cfg[side]["name"], "short": cfg[side]["tricode"], "score": int(cfg[side]["wins"] or 0),
                          "color": cfg[side]["color"]} for side in ("left", "right")}
         series["best_of"] = int(cfg.get("best_of") or 3)
