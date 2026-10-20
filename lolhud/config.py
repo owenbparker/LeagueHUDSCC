@@ -107,6 +107,9 @@ DEFAULTS = {
         "auto": True,
         # Shortest time a cam stays on one player before switching (seconds).
         "hold": 3.0,
+        # Hold the connected cams back by this long (seconds) so they match
+        # the game on air: League's spectator feed is 2:30 behind. 0 = live.
+        "delay": 150,
         # Keep a team's cam on one player (1-5), or 0 to switch automatically.
         "pin": {"left": 0, "right": 0},
         # Read this PC's League screen (the player name tags) to see who's on

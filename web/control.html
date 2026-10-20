@@ -357,6 +357,7 @@
       <label class="toggle"><input type="checkbox" id="cams-auto"> Switch to the players in the action</label>
       <label class="toggle" title="Reads the player name tags on this PC's League screen. Turn it on on the PC whose game goes to air (here, or in the Observer Client)."><input type="checkbox" id="cams-director"> Read this PC's screen to see who's on camera</label>
       <label class="toggle">Stay on a player at least <input type="number" id="cams-hold" min="0" max="30" step="0.5" style="width:64px;padding:4px 6px"> s</label>
+      <label class="toggle" title="League's spectator feed is 2:30 behind the game, so the cams wait the same time to show the players' reactions with the play. A cam appears that long after it connects. 0:00 = live. Links (VDO.Ninja) aren't delayed.">Delay the cams by <input id="cams-delay" placeholder="2:30" style="width:64px;padding:4px 6px"> (m:ss)</label>
     </div>
     <div class="teams cam-teams">
       <div class="cam-team" data-side="left"><h3></h3></div>
@@ -1166,6 +1167,17 @@ $("cams-on").onchange = e => post("/api/config", { cams: { enabled: e.target.che
 $("cams-auto").onchange = e => post("/api/config", { cams: { auto: e.target.checked } });
 $("cams-director").onchange = e => post("/api/config", { cams: { director: e.target.checked } });
 $("cams-hold").onchange = e => post("/api/config", { cams: { hold: Math.max(0, Number(e.target.value) || 0) } });
+// "2:30" or "150" (seconds) -> 150
+function mss(t) {
+  const [m, sec] = String(t).trim().includes(":") ? String(t).split(":") : [0, t];
+  return Math.max(0, Math.round((Number(m) || 0) * 60 + (Number(sec) || 0)));
+}
+const fmtMss = n => `${Math.floor(n / 60)}:${String(Math.round(n % 60)).padStart(2, "0")}`;
+$("cams-delay").onchange = e => {
+  const delay = mss(e.target.value);
+  e.target.value = fmtMss(delay);
+  post("/api/config", { cams: { delay } });
+};
 $("cams-test").onclick = async () => {
   $("cams-test-result").innerHTML = '<p class="note">Reading the screen…</p>';
   try {
@@ -1183,6 +1195,7 @@ function applyCams(s) {
   $("cams-auto").checked = cams.auto !== false;
   $("cams-director").checked = !!cams.director;
   setIfIdle($("cams-hold"), cams.hold ?? 3);
+  setIfIdle($("cams-delay"), fmtMss(cams.delay ?? 150));
   const focus = info.focus || {};
   for (const box of document.querySelectorAll(".cam-team")) {
     const side = box.dataset.side;

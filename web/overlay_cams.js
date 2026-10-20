@@ -6,6 +6,12 @@
 // Player Cam client), received peer to peer over the network (WebRTC). The
 // app only passes the connection messages along; the video doesn't go
 // through it.
+//
+// League's spectator feed runs behind the real game (2:30 by default), so
+// connected cams are held back by the same amount (cams.delay, seconds) to
+// show the players' reactions in time with the play: the overlay records each
+// cam as it arrives and plays the recording back that far behind. Links
+// aren't delayed.
 (function () {
   const ME = Math.random().toString(16).slice(2, 18);
   const SIDES = ["left", "right"];
@@ -64,6 +70,7 @@
     const p = peers[id];
     if (!p) return;
     delete peers[id];
+    if (p.stop) p.stop();
     try { p.pc.close(); } catch (e) { /* already closed */ }
   }
 
@@ -76,13 +83,78 @@
     });
   }
 
-  async function connect(id, video) {
+  // A recording format both the recorder and the player handle.
+  const TYPES = ["video/webm;codecs=vp8", "video/webm;codecs=vp9", "video/webm"];
+  const delayType = () => window.MediaRecorder && window.MediaSource &&
+    TYPES.find(t => MediaRecorder.isTypeSupported(t) && MediaSource.isTypeSupported(t));
+
+  // Play a stream `delay` seconds late. Each piece of the recording is handed
+  // to the player a second before it's due, so the video has nothing to show
+  // (and the cam isn't picked) until the delay has passed. Returns a stop.
+  function playDelayed(stream, video, delay) {
+    const type = delayType();
+    if (!type) { video.srcObject = stream; video.play().catch(() => {}); return () => {}; }
+    const source = new MediaSource();
+    const url = URL.createObjectURL(source);
+    const pieces = [];   // { at, blob }: recorded, not yet handed over
+    let buffer = null, busy = false, start = 0, timer = 0, stopped = false;
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1500000 });
+    rec.ondataavailable = e => {
+      if (!e.data || !e.data.size) return;
+      const at = performance.now();
+      if (!start) start = at - 250;  // the recording's time 0: its first frame, within a piece
+      pieces.push({ at, blob: e.data });
+    };
+
+    async function pump() {
+      if (stopped || busy || !buffer || buffer.updating || !pieces.length) return;
+      if (performance.now() - pieces[0].at < (delay - 1) * 1000) return;
+      busy = true;
+      const piece = pieces.shift();
+      try { buffer.appendBuffer(await piece.blob.arrayBuffer()); }
+      catch (e) { if (!stopped) pieces.unshift(piece); busy = false; }
+    }
+    function tick() {
+      if (start && buffer && video.buffered.length) {
+        // Keep to the delay (after a stall, say), and let go of what's played.
+        const due = (performance.now() - start) / 1000 - delay;
+        const from = video.buffered.start(0), to = video.buffered.end(video.buffered.length - 1);
+        if (due < from) video.pause();
+        else {
+          delete video.dataset.wait;
+          if (Math.abs(video.currentTime - due) > 0.75 && due < to) video.currentTime = due;
+          if (video.paused) video.play().catch(() => {});
+          if (!busy && !buffer.updating && video.currentTime - from > 20) buffer.remove(from, video.currentTime - 10);
+        }
+      }
+      pump();
+    }
+    source.addEventListener("sourceopen", () => {
+      if (stopped) return;
+      buffer = source.addSourceBuffer(type);
+      buffer.addEventListener("updateend", () => { busy = false; pump(); });
+    }, { once: true });
+    video.dataset.wait = "1";  // not ready to be shown yet
+    video.src = url;
+    rec.start(250);
+    timer = setInterval(tick, 250);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      try { rec.stop(); } catch (e) { /* already stopped */ }
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  async function connect(id, video, delay) {
     const pc = new RTCPeerConnection({ iceServers: [] });
-    peers[id] = { pc, video, started: Date.now() };
+    const p = peers[id] = { pc, video, started: Date.now(), stop: null };
     pc.addTransceiver("video", { direction: "recvonly" });
     pc.ontrack = e => {
-      video.srcObject = e.streams[0] || new MediaStream([e.track]);
-      video.play().catch(() => {});
+      if (p.stop) return;
+      const stream = e.streams[0] || new MediaStream([e.track]);
+      if (delay > 0) p.stop = playDelayed(stream, video, delay);
+      else { video.srcObject = stream; video.play().catch(() => {}); }
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed" || pc.connectionState === "closed") drop(id);
@@ -120,7 +192,7 @@
   function ready(seat) {
     const f = feeds[seat];
     if (!f) return false;
-    return f.el.tagName === "IFRAME" || f.el.readyState >= 2;
+    return f.el.tagName === "IFRAME" || (f.el.readyState >= 2 && !f.el.dataset.wait);
   }
 
   window.renderCams = function (s, show) {
@@ -128,6 +200,7 @@
     const on = show && cams.enabled !== false;
     layer.style.display = on ? "" : "none";
     const pubs = on ? info.publishers || {} : {};
+    const delay = Math.max(0, Number(cams.delay) || 0);
     const wanted = new Set();
     for (const side of SIDES) {
       if (!slots[side]) {
@@ -150,15 +223,15 @@
           });
         } else if (pub) {
           wanted.add(pub.id);
-          const f = setFeed(seat, side, "cam:" + pub.id, () => {
+          const f = setFeed(seat, side, `cam:${pub.id}:${delay}`, () => {
             const v = document.createElement("video");
             v.autoplay = v.muted = v.playsInline = true;
             return v;
           });
           const p = peers[pub.id];
           const stuck = p && p.pc.connectionState !== "connected" && Date.now() - p.started > 10000;
-          if (stuck) drop(pub.id);
-          if (registered && (!peers[pub.id])) connect(pub.id, f.el);
+          if (stuck || (p && p.video !== f.el)) drop(pub.id);  // or the delay changed
+          if (registered && (!peers[pub.id])) connect(pub.id, f.el, delay);
         } else {
           setFeed(seat, side, "", null);
         }

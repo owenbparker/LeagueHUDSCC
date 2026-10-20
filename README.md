@@ -170,6 +170,8 @@ The green dot shows which players have a cam. The row of the player on air is hi
 2. **Read this PC's screen** (Windows): reads the player name tags over the champions on League's screen and puts each team's cam on their player nearest the middle. Turn it on for the PC whose game goes to air: the GFX Controller, or the **Observer Client** (which tells the GFX PC). League must be in Borderless or Windowed. **Test screen read** shows what it found. It only looks between the top bar and the bottom HUD (`cams.director_area`). A player has to be seen twice running before the cam switches.
 3. Otherwise the cams follow the **latest kill**: the killer's and the victim's cams, for 12 seconds.
 
+**Delay the cams by** (2:30 by default) holds the player cams back to match League's spectator delay, so the players' reactions line up with the play on air. Each overlay records the cams and plays them back that late, so a cam appears that long after it connects. Set it to 0:00 for live cams. Links (VDO.Ninja) aren't delayed.
+
 **Stay on a player at least** (3 s by default) stops the cams flicking between players. **Switch to the players in the action** off keeps the cams where they are. When the chosen player has no cam, the team's cam stays on the last player shown.
 
 Add `?cams=0` to the overlay URL to leave the cams out of an overlay.
