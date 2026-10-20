@@ -226,6 +226,30 @@ class EngineLink:
         self._wake.set()
         return {"summary": summary, "global": g}
 
+    def roster(self, link=None):
+        """The engine's rosters for the two teams, with which of the HUD's
+        players are linked to a roster player by in-game ID ("Save IGN to
+        player"). link={"side", "player" (roster index), "ign"} saves one first."""
+        if not self.url or not self.connected:
+            raise ValueError("Connect to a GFX Engine first")
+        try:
+            snap = self.snapshot() or {}
+        except Exception:
+            snap = {}
+        body = {"game": self.game, "fields": snap.get("fields") or {}}
+        try:
+            if link:
+                reply = _post(self.url + "/api/roster/link", dict(body, **link), 5)
+                if not reply.get("error"):
+                    self.log(f"Saved {link.get('ign')} as a player's in-game ID on {self.name}")
+            else:
+                reply = _post(self.url + "/api/roster/links", body, 5)
+        except Exception as e:
+            raise ValueError(f"Couldn't reach the GFX Engine: {getattr(e, 'reason', e)}")
+        if reply.get("error"):
+            raise ValueError(reply["error"])
+        return reply
+
     def send_now(self):
         self._wake.set()
 
@@ -274,6 +298,8 @@ class EngineLink:
             POST /api/engine/connect    {"url"}
             POST /api/engine/disconnect
             POST /api/engine/use-global
+            POST /api/engine/roster     the teams' rosters, and who's linked
+            POST /api/engine/link       {"side", "player", "ign"}: Save IGN to player
         """
         if not path.startswith("/api/engine"):
             return None
@@ -290,6 +316,11 @@ class EngineLink:
             return self.disconnect()
         if path == "/api/engine/use-global":
             return self.use_global()
+        if path == "/api/engine/roster":
+            return self.roster()
+        if path == "/api/engine/link":
+            b = body or {}
+            return self.roster({"side": b.get("side"), "player": b.get("player"), "ign": b.get("ign")})
         return None
 
 

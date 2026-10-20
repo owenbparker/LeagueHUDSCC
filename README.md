@@ -130,6 +130,7 @@ Text keeps the PSD's paragraph alignment, so right-align numbers that sit to the
 - **Swap teams left/right:** swaps names, logos and scores.
 - **Left team is on red side:** by default the left of the bar is blue side. Tick this when the left team plays red.
 - **Series:** Bo1 / Bo3 / Bo5 (pips follow).
+- **Players:** links each player in the game to their player in the team's roster on the connected GFX Engine (Teams > Team members). Next to each player: **linked** (green, with who) or **unlinked** (red), and **Save IGN to player**, a list of that team's members: picking one saves the in-game name as their In-game ID on the engine. Linked players show on the engine's graphics with their player name, headshot and flag.
 - **Claimed objectives:** switch each team's dragon, Rift Herald and void grub counters in the HUD on or off.
 - **Objective timers:** switch Void Grubs, Dragon, Rift Herald, Elder Drake and Baron on or off. Each shows while its objective is counting down or up, and drops off once it's gone for the game; the rest close up. They follow the designer's objective-timer design (`web/assets/objectives/`): counting down, a dark box with the objective's icon on a tinted tile and the time; once it's up, just the icon.
 - **Next dragon:** the dragon timer shows the next dragon's element. **Automatic** knows it once the rift has formed (the third dragon's element; every dragon after it is the same). Until then it shows a grey dragon, or pick the element by hand.

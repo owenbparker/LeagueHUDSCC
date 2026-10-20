@@ -73,6 +73,14 @@
   .team.right { border-top-color: var(--right); }
   .team img { width: 48px; height: 48px; object-fit: contain; background: #000; border-radius: 6px; flex: 0 0 48px; }
   .wins { display: flex; align-items: center; gap: 8px; }
+  .link-team { border-top: 4px solid var(--left); padding-top: 8px; }
+  .link-team.right { border-top-color: var(--right); }
+  .link-team h3 { margin: 0 0 6px; font-size: 13px; }
+  .link-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 190px; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .link-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-row select { padding: 5px 8px; }
+  .linked { color: #3ecf6e; font-size: 12px; }
+  .unlinked { color: #ff5a5a; font-size: 12px; }
   .wins b { font-size: 22px; min-width: 28px; text-align: center; }
   .wins button { flex: 0 0 40px; font-size: 18px; padding: 4px; }
   /* Just the HUD, on a dark checkerboard that shows where it's see-through. */
@@ -220,6 +228,19 @@
       <label class="row" style="margin:0;color:var(--text)"><input type="checkbox" id="swap-sides" style="flex:0"> Left team is on red side</label>
       <label class="row" style="margin:0;color:var(--text)">Series
         <select id="best-of"><option value="1">Bo1</option><option value="3">Bo3</option><option value="5">Bo5</option></select></label>
+    </div>
+  </section>
+
+  <section class="wide" data-page="teams">
+    <h2>Players</h2>
+    <p class="note" style="margin-top:0">Links each player in the game to their player in the team's roster on GFX Engine (Teams &gt; Team members), by their in-game name. Linked players show on the engine's graphics with their player name, headshot and flag.</p>
+    <div class="teams">
+      <div class="link-team left" id="links-left"></div>
+      <div class="link-team right" id="links-right"></div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:center">
+      <button type="button" id="links-refresh" style="flex:0 0 auto">Refresh</button>
+      <span class="note" id="links-note" style="margin:0"></span>
     </div>
   </section>
 
@@ -1187,6 +1208,51 @@ $("cams-test").onclick = async () => {
     $("cams-test-result").innerHTML = `<p class="note">Found: ${esc(found)}. Text read (yellow boxes): ${esc(r.lines.join(" · ") || "none")}</p><img src="${r.image}" alt="What was read">`;
   } catch (e) { $("cams-test-result").innerHTML = '<p class="note warn">Couldn\'t read the screen</p>'; }
 };
+// Players: "Save IGN to player" links each in-game player to their player in
+// the GFX Engine's team roster (by in-game name).
+async function linksCall(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  return r.json();
+}
+function renderLinks(data) {
+  const attr = t => esc(t).replace(/"/g, "&quot;");
+  for (const side of ["left", "right"]) {
+    const box = $(`links-${side}`), s = data && data.sides && data.sides[side];
+    if (!s) { box.innerHTML = ""; continue; }
+    const members = s.members.map(m => `<option value="${m.index}">${esc(m.name || m.ign || `Player ${m.index + 1}`)}</option>`).join("");
+    const rows = s.players.map(p => {
+      const m = p.linked === null ? null : s.members[p.linked];
+      return `<div class="link-row"><b title="${attr(p.ign)}">${esc(p.ign)}</b>` +
+        (m ? `<span class="linked">linked: ${esc(m.name || m.ign)}</span>` : `<span class="unlinked">unlinked</span>`) +
+        `<select data-side="${side}" data-ign="${attr(p.ign)}"${s.members.length ? "" : " disabled"}><option value="">Save IGN to player ▾</option>${members}</select></div>`;
+    }).join("");
+    box.innerHTML = `<h3>${esc(s.team || side + " team")}</h3>` +
+      (!s.found ? `<p class="note">No team called "${esc(s.team)}" in GFX Engine's Teams, so there's no roster to link to.</p>`
+        : !s.members.length ? `<p class="note">${esc(s.team)} has no team members in GFX Engine yet (Teams &gt; Team members).</p>` : "") +
+      (rows || `<p class="note">No players yet: they show once a game is on.</p>`);
+  }
+  for (const sel of document.querySelectorAll(".link-row select")) sel.addEventListener("change", async () => {
+    if (sel.value === "") return;
+    const data = await linksCall("/api/engine/link", { side: sel.dataset.side, player: Number(sel.value), ign: sel.dataset.ign });
+    if (data.error) { alert(data.error); sel.value = ""; return; }
+    $("links-note").textContent = `Saved ${sel.dataset.ign}.`;
+    renderLinks(data);
+  });
+}
+async function refreshLinks(force) {
+  const box = $("links-left").closest("section");
+  if (!force && (document.hidden || !box.offsetParent || box.contains(document.activeElement))) return;
+  try {
+    const data = await linksCall("/api/engine/roster");
+    if (data.error) { renderLinks(null); $("links-note").textContent = data.error.startsWith("Connect") ? "Connect to a GFX Engine (GFX Engine page) to link players." : data.error; return; }
+    if (!$("links-note").textContent.startsWith("Saved")) $("links-note").textContent = "";
+    renderLinks(data);
+  } catch (e) { /* the HUD is restarting */ }
+}
+$("links-refresh").addEventListener("click", () => { $("links-note").textContent = ""; refreshLinks(true); });
+setInterval(refreshLinks, 4000);
+refreshLinks();
+
 function esc(t) { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; }
 
 function applyCams(s) {
