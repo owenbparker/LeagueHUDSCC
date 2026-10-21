@@ -92,7 +92,7 @@ DEFAULTS = {
     # "image" a still picture (bg_image), "colours" just the team colours.
     "sponsor_box": {"enabled": True, "rect": [0, 964, 304, 116], "sponsors": [], "seconds": 5,
                     "bg_video": "", "bg_image": "", "bg_speed": 1.0, "bg_tint": True, "bg_brightness": 1.0,
-                    "logo_size": 0.75, "outline": False},
+                    "logo_size": 0.75, "outline": False, "white": []},
     # Which screen the "HUD on the game" window covers (0 = main screen).
     "overlay_screen": 0,
     # Observer client: the GFX PC whose HUD to show, e.g. http://192.168.2.40:8777/overlay
@@ -143,6 +143,12 @@ DEFAULTS = {
         "red": {"towers": [1185, 16, 26, 24], "grubs": [1250, 16, 26, 24], "heralds": [1328, 16, 26, 24],
                 "dragons": [1407, 16, 26, 24]},
     },
+    # Each player's health and mana on the scoreboard, measured off the
+    # spectator side bars on this PC's League window (sidebar.py). Where the
+    # bars are at 1080p: x from that side's edge, y of the first player's
+    # bars, rows apart. Only change if they misread.
+    "screen_bars": True,
+    "sidebar_bars": {"x": [31, 73], "hp_y": 209, "mana_y": 218, "step": 102.75},
     "manual_gold": {"left": 0, "right": 0},
     # Multiplies the estimate if you find it runs consistently high or low.
     "gold_estimate_scale": 1.0,

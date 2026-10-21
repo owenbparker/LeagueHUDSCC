@@ -34,8 +34,12 @@
   };
   let rotation = { key: "", i: 0, timer: null, front: 0 };
 
+  // Logos shown in white, like the design's own (the GFX Engine's sponsors
+  // say which); only in the bottom third's holder.
+  let whiteOnes = new Set();
+
   function rotate(list, seconds) {
-    const key = JSON.stringify([list, seconds]);
+    const key = JSON.stringify([list, seconds, [...whiteOnes]]);
     if (key === rotation.key) return;
     rotation.key = key;
     clearInterval(rotation.timer);
@@ -44,7 +48,9 @@
     if (!list.length) return;
     const show = () => {
       const img = logos[rotation.front = 1 - rotation.front];
-      img.src = urlOf(list[rotation.i++ % list.length]);
+      const p = list[rotation.i++ % list.length];
+      img.src = urlOf(p);
+      img.style.filter = whiteOnes.has(p) ? "brightness(0) invert(1) drop-shadow(0 1px 3px rgba(0,0,0,.6))" : "";
       img.classList.add("on");
       logos[1 - rotation.front].classList.remove("on");
     };
@@ -67,6 +73,7 @@
       video.pause();
       video.style.display = still.style.display = tint.style.display = "none";
       for (const img of logos) Object.assign(img.style, { width: "100%", height: "100%" });
+      whiteOnes = new Set(b.white || []);
       rotate((b.sponsors || []).length ? b.sponsors : [window.BOTTOM_THIRD.default_sponsor], b.seconds);
       return;
     }
@@ -109,6 +116,7 @@
     // Logos: a share of the box, centred.
     const size = Math.min(1, Math.max(0.2, Number(b.logo_size) || 0.75));
     for (const img of logos) Object.assign(img.style, { width: size * 100 + "%", height: size * 100 + "%" });
+    whiteOnes = new Set();
     rotate(b.sponsors || [], b.seconds);
   };
 })();

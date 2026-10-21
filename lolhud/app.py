@@ -14,7 +14,7 @@ import threading
 import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import outputs
 from .cams import CamHub, Director, get_json, post_json
@@ -127,7 +127,8 @@ class HudApp:
             self.seen_objectives.spawned = (element, game_time)
         state = build_state(self.raw, self.config.get(), self.ddragon,
                             self.screen_gold.fresh() if live else None,
-                            self.screen_gold.fresh_counts() if live else None, self.seen_objectives)
+                            self.screen_gold.fresh_counts() if live else None, self.seen_objectives,
+                            self.screen_gold.fresh_bars() if live else None)
         state["detail"]["error"] = self.source.last_error
         if live and state["detail"].get("connected") and state["fields"].get("P1 NAME"):
             players = {k: v for k, v in state["fields"].items() if k.startswith("P") and k[1:2].isdigit()}
@@ -421,11 +422,51 @@ class HudApp:
             if team:
                 changes[side] = team
                 done.append(f"{side}: {team.get('name') or team.get('tricode') or 'logo'}")
+        sponsors = self._engine_sponsors(g.get("sponsors"), fetch)
+        if sponsors is not None:
+            changes["sponsor_box"] = sponsors
+            done.append(f"{len(sponsors['sponsors'])} sponsor(s)")
         if not changes:
             raise ValueError("The engine's Global configuration has no team names or logos yet")
         self.config.update(changes)
         self.refresh(fetch=False)
         return ", ".join(done)
+
+    def _engine_sponsors(self, entries, fetch):
+        """The GFX Engine's sponsors ([{"logo", "secs", "white", "logo_url"}])
+        downloaded into the sponsors folder, as the sponsor box's settings;
+        None when the engine sends none (the HUD's own sponsors stay)."""
+        if not isinstance(entries, list):
+            return None
+        paths, white, secs = [], [], []
+        for sp in entries:
+            if not isinstance(sp, dict) or not sp.get("logo"):
+                continue
+            url = sp.get("logo_url") or sp["logo"]
+            if not re.match(r"https?://", url):
+                if not self.engine.url:
+                    continue
+                url = self.engine.url + "/" + quote(sp["logo"].lstrip("/"))
+            try:
+                blob = fetch(url)
+            except Exception as e:
+                log(f"Couldn't fetch the sponsor {sp['logo']} from the GFX Engine: {e}", "warn")
+                continue
+            stem = os.path.splitext(os.path.basename(sp["logo"].split("?")[0]))[0] or "sponsor"
+            name = save_logo_bytes(SPONSOR_DIR, f"engine-{stem}", blob)
+            paths.append(f"sponsors/{name}")
+            if sp.get("white", True) is not False:
+                white.append(f"sponsors/{name}")
+            try:
+                secs.append(max(1.0, float(sp.get("secs") or 0)))
+            except (TypeError, ValueError):
+                pass
+        if not paths:
+            return None
+        out = {"sponsors": paths, "white": white}
+        if secs:
+            out["seconds"] = min(60.0, sum(secs) / len(secs))   # the box has one time for all
+        return out
 
     def swap_teams(self):
         cfg = self.config.get()
@@ -878,7 +919,8 @@ def make_handler(app):
                 elif path == "/api/sponsors":
                     sponsors = [str(p) for p in body.get("sponsors", []) if web_file(str(p))]
                     seconds = max(1.0, min(60.0, float(body.get("seconds") or 5)))
-                    app.config.update({"sponsor_box": {"sponsors": sponsors, "seconds": seconds}})
+                    white = [p for p in app.config.get()["sponsor_box"].get("white", []) if p in sponsors]
+                    app.config.update({"sponsor_box": {"sponsors": sponsors, "seconds": seconds, "white": white}})
                     log(f"Sponsors saved: {len(sponsors)} logo(s), {seconds:g} s each" if sponsors
                         else "Sponsors saved: none (the box shows just the background loop)")
                 elif path == "/api/logo":

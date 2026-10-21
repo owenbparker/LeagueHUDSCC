@@ -262,6 +262,32 @@ class GoldTests(unittest.TestCase):
         self.assertEqual(f["GOLD LEFT"], "3.2K")
 
 
+class SidebarTests(unittest.TestCase):
+    def test_reads_health_and_mana_off_the_side_bars(self):
+        from PIL import Image
+        from lolhud.sidebar import plausible, read_bars
+        image = Image.open(os.path.join(os.path.dirname(__file__), "fixtures", "spectator_sidebars.png"))
+        bars = read_bars(image, 1080)
+        hp = [round(p["hp"], 1) for p in bars["blue"]] + [round(p["hp"], 1) for p in bars["red"]]
+        self.assertEqual(hp, [1.0, 1.0, 1.0, 0.9, 1.0, 0.7, 0.8, 0.9, 1.0, 1.0])
+        self.assertAlmostEqual(bars["blue"][0]["mana"], 0.62, delta=0.05)
+        self.assertEqual(bars["blue"][2]["mana"], 0.0)      # an empty bar reads empty
+        self.assertAlmostEqual(bars["red"][1]["mana"], 0.25, delta=0.05)
+        self.assertTrue(plausible(bars))
+        # No side bars on screen: nothing read.
+        blank = read_bars(Image.new("RGB", (1920, 650), (70, 110, 70)), 1080)
+        self.assertFalse(plausible(blank))
+
+    def test_scoreboard_takes_the_bars_by_team(self):
+        bars = {"blue": [{"hp": 0.5, "mana": 0.25}] * 5, "red": [{"hp": 0.75, "mana": None}] * 5}
+        sb = build_state(load(), cfg(), screen_bars=bars)["detail"]["scoreboard"]["players"]
+        self.assertEqual((sb[0]["hp"], sb[0]["mana"], sb[5]["hp"], sb[5]["mana"]), (0.5, 0.25, 0.75, None))
+        sb = build_state(load(), cfg(swap_sides=True), screen_bars=bars)["detail"]["scoreboard"]["players"]
+        self.assertEqual(sb[0]["hp"], 0.75)    # blue is still blue on the right
+        sb = build_state(load(), cfg())["detail"]["scoreboard"]["players"]
+        self.assertIsNone(sb[0]["hp"])
+
+
 class ScreenGoldTests(unittest.TestCase):
     def test_screen_values_used_by_team(self):
         f = build_state(load(), cfg(), screen_gold={"blue": 8000, "red": 8900})["fields"]

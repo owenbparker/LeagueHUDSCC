@@ -176,12 +176,16 @@ SEAT_ROLES = ["top", "jg", "mid", "adc", "supp"]
 TRINKETS = {3340, 3363, 3364, 3330, 3348}   # Stealth Ward, Farsight, Oracle Lens, Scarecrow, Arcane Sweeper
 
 
-def scoreboard(team_players, game_time, ddragon, cfg):
+def scoreboard(team_players, game_time, ddragon, cfg, bars=None, side_team=None):
     """Each player's line on the scoreboard (1-5 left, 6-10 right) and the
     gold difference between the laners. Riot's live game data has no health,
-    mana or other players' gold: gold is the HUD's estimate (see gold.py)."""
+    mana or other players' gold: gold is the HUD's estimate (see gold.py),
+    and health and mana come off the spectator side bars when they've been
+    read (bars, see sidebar.py; hp / mana are None otherwise)."""
     players, gold = [], {}
+    side_team = side_team or {"left": "ORDER", "right": "CHAOS"}
     for side in SIDES:
+        seen = (bars or {}).get(SCREEN_TEAM[side_team[side]]) or []
         tp = team_players[side][:5] + [{}] * (5 - len(team_players[side][:5]))
         gold[side] = []
         for seat, p in enumerate(tp):
@@ -224,6 +228,8 @@ def scoreboard(team_players, game_time, ddragon, cfg):
                 "keystone": ddragon.rune_icon(((p.get("runes") or {}).get("keystone") or {}).get("id")) if ddragon else "",
                 "role": ROLE_KEYS.get(p.get("position") or "", SEAT_ROLES[seat]),
                 "gold": int(g),
+                "hp": (seen[seat].get("hp") if p and seat < len(seen) else None),
+                "mana": (seen[seat].get("mana") if p and seat < len(seen) else None),
                 "present": bool(p),
             })
     return {"players": players, "gold_diff": [int(gold["left"][i] - gold["right"][i]) for i in range(5)]}
@@ -272,14 +278,15 @@ class SeenObjectives:
         return t[-1] if t else None
 
 
-def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, seen_objectives=None):
+def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, seen_objectives=None, screen_bars=None):
     """Return {"fields": flat dict for CSV/vMix, "detail": extra structure}.
 
     screen_gold: {"blue": 8000, "red": 8900} and screen_counts:
     {"blue": {"dragons": 1, "heralds": 0, "grubs": 3}, "red": {...}} as read
     off the spectator top bar, or None when not available right now. When
     present they're used instead of the game's events, which don't report
-    every objective."""
+    every objective. screen_bars: each player's health and mana off the
+    side bars (see sidebar.py), for the scoreboard."""
     connected = raw is not None
     raw = raw or {}
     players = raw.get("allPlayers") or []
@@ -477,7 +484,7 @@ def build_state(raw, cfg, ddragon=None, screen_gold=None, screen_counts=None, se
 
     detail = {
         "connected": connected,
-        "scoreboard": scoreboard(team_players, game_time, ddragon, cfg),
+        "scoreboard": scoreboard(team_players, game_time, ddragon, cfg, screen_bars if connected else None, side_team),
         "roster": roster,
         "fight": fight,
         "game_time": game_time,

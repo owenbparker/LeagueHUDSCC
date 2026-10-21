@@ -12,6 +12,9 @@
 // show the players' reactions in time with the play: the overlay records each
 // cam as it arrives and plays the recording back that far behind. Links
 // aren't delayed.
+//
+// A box with no cam to show (nobody on that team has one, or theirs isn't
+// ready yet) shows the team's logo instead.
 (function () {
   const ME = Math.random().toString(16).slice(2, 18);
   const SIDES = ["left", "right"];
@@ -24,10 +27,16 @@
     #cams .cam { position: absolute; overflow: hidden; }
     #cams .feed { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: cover;
                   opacity: 0; transition: opacity .35s ease; background: transparent; }
-    #cams .feed.on { opacity: 1; }`;
+    #cams .feed.on { opacity: 1; }
+    #cams .nocam { position: absolute; inset: 0; opacity: 0; transition: opacity .35s ease; background: #0b0d10; }
+    #cams .nocam.on { opacity: 1; }
+    #cams .nocam img { position: absolute; inset: 0; margin: auto; width: 70%; height: 70%; object-fit: contain;
+                       filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+    #cams .nocam img:not([src]), #cams .nocam img[src=""] { display: none; }`;
   document.head.appendChild(style);
 
   const slots = {};   // side -> element
+  const logos = {};   // side -> the team logo shown when there's no cam
   const feeds = {};   // "left-1" -> { key, el }
   const peers = {};   // cam (publisher) id -> { pc, video, started, seat }
   const shown = { left: null, right: null };
@@ -207,6 +216,10 @@
         slots[side] = document.createElement("div");
         slots[side].className = "cam " + side;
         layer.appendChild(slots[side]);
+        logos[side] = document.createElement("div");
+        logos[side].className = "nocam";
+        logos[side].appendChild(document.createElement("img"));
+        slots[side].appendChild(logos[side]);
       }
       const [x, y, w, h] = (cams.slots || {})[side] || (side === "left" ? [288, 821, 174, 259] : [1458, 821, 174, 259]);
       Object.assign(slots[side].style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
@@ -243,6 +256,11 @@
       else if (shown[side] && ready(shown[side])) pick = shown[side];
       else for (let slot = 1; slot <= 5 && !pick; slot++) if (ready(`${side}-${slot}`)) pick = `${side}-${slot}`;
       shown[side] = pick;
+      const team = cfg[side] || {}, logo = logos[side], img = logo.firstChild;
+      if ((img.getAttribute("src") || "") !== (team.logo || "")) img.setAttribute("src", team.logo || "");
+      const tint = `radial-gradient(circle at 50% 45%, ${team.color || "#333"}55 0%, #0b0d10 75%)`;
+      if (logo.dataset.tint !== tint) { logo.dataset.tint = tint; logo.style.background = tint; }
+      logo.classList.toggle("on", !pick && cams.no_cam_logo !== false);
       for (let slot = 1; slot <= 5; slot++) {
         const f = feeds[`${side}-${slot}`];
         if (f) f.el.classList.toggle("on", `${side}-${slot}` === pick);

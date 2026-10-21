@@ -10,9 +10,11 @@
 // background loop in their shape, tinted in that side's colour; the static
 // lines stand in until there is one (overlay.html's setVideo drives them).
 //
-// Riot's live game data has no health, mana or other players' gold: the
-// health bar empties while a player is dead, the level bar fills to level 18,
-// and gold is the HUD's estimate.
+// Riot's live game data has no health, mana or other players' gold: health
+// and mana come off the spectator side bars on the GFX PC's screen when they
+// can be read (p.hp / p.mana, 0-1; sidebar.py), otherwise the bars are full
+// and empty while a player is dead. The level bar fills to level 18, and gold
+// is the HUD's estimate.
 (function () {
   const BASE = "assets/scoreboard/";
   const layer = document.createElement("div");
@@ -116,6 +118,7 @@
         b.style.backgroundImage = `url("${BASE}bar_${kind}.png")`;
         if (side === "right") { b.style.left = ""; b.style.right = 1920 - (r[0] + r[2]) + "px"; }
         b.dataset.full = r[2];
+        b.style.backgroundSize = r[2] + "px 100%";   // a shorter bar cuts the art, doesn't squash it
         row.bars[kind] = b;
       }
       row.name = text(p.name, "name");
@@ -161,8 +164,9 @@
       setSrc(row.keystone, p.keystone);
       setSrc(row.role, here ? `draft/scc27/role_${p.role}.png` : "");
       bar(row.bars.xp, here ? (p.level || 0) / 18 : 0);
-      bar(row.bars.hp, here && !p.dead ? 1 : 0);
-      bar(row.bars.mana, here && !p.dead ? 1 : 0);
+      const alive = here && !p.dead;
+      bar(row.bars.hp, alive ? (p.hp ?? 1) : 0);
+      bar(row.bars.mana, alive ? (p.mana ?? 1) : 0);
       setText(row.name, p.name);
       setText(row.cs, here ? p.cs : "");
       setText(row.kda, p.kda);

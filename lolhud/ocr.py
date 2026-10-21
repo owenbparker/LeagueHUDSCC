@@ -430,6 +430,7 @@ class ScreenGold:
         self.dragon_spawned = (None, 0.0)   # (element or None, when its banner was read)
         self._pending_counts = {}
         self._last_missed = []
+        self.bars, self.bars_at = None, 0.0   # each player's health and mana (sidebar.py)
         self.status = "starting"
         self.ocr = None
         self._pending = {"blue": None, "red": None}
@@ -475,12 +476,20 @@ class ScreenGold:
                    for c, v in counts.items()} for t, counts in self.counts.items()}
         return out if any(v is not None for c in out.values() for v in c.values()) else None
 
+    def fresh_bars(self):
+        """Each player's health and mana off the side bars, if read recently:
+        {"blue": [{"hp": 0.9, "mana": 0.4}, ...], "red": [...]}, else None."""
+        if not self.bars or time.time() - self.bars_at > self.STALE_AFTER:
+            return None
+        return self.bars
+
     def reset(self):
         self.values = {"blue": None, "red": None}
         self._pending = {"blue": None, "red": None}
         self.counts = {t: {c: None for c in COUNTERS} for t in ("blue", "red")}
         self.counts_at = {}
         self._pending_counts = {}
+        self.bars, self.bars_at = None, 0.0
 
     def _accept_count(self, team, name, value):
         """Counters only go up, a few at a time; anything else needs two
@@ -512,13 +521,28 @@ class ScreenGold:
         self._pending[team] = value
         return False
 
+    def _wanted(self, cfg):
+        """What to read off the screen: (gold and the top bar, the side bars)."""
+        return cfg.get("gold_mode") == "screen", cfg.get("screen_bars", True) is not False
+
     def read_once(self):
         from .dragons import TOP_ROWS
-        captured, reason = capture_league(top=TOP_ROWS)
+        from .sidebar import ROWS, plausible, read_bars
+        cfg = self.config.get()
+        gold, bars = self._wanted(cfg)
+        captured, reason = capture_league(top=max(TOP_ROWS, ROWS if bars else 0))
         if not captured:
             return None, reason
         image, height = captured
-        cfg = self.config.get()
+        if bars:
+            try:
+                found = read_bars(image, height, cfg.get("sidebar_bars"))
+                if plausible(found):
+                    self.bars, self.bars_at = found, time.time()
+            except Exception as e:   # a bonus; never lose the gold over it
+                log(f"Couldn't read the side bars: {e!r}", "warn")
+        if not gold:
+            return {}, None
         result = read_image(image, self.ocr, height, cfg.get("gold_ocr_boxes"))
         try:
             result["_counters"] = read_counters(image, self.ocr, height, cfg.get("counter_ocr_boxes"))
@@ -545,10 +569,12 @@ class ScreenGold:
     def _run(self):
         last_reason = None
         while not self._stop.is_set():
-            if self.config.get().get("gold_mode") == "screen" and not self.paused:
+            if any(self._wanted(self.config.get())) and not self.paused:
                 try:
                     result, reason = self.read_once()
-                    if result:
+                    if result == {}:
+                        reason = None if self.fresh_bars() else "Couldn't see the side bars (health and mana)"
+                    elif result:
                         counters = result.pop("_counters", {})
                         if "error" not in counters:
                             for t, r in counters.items():
@@ -573,7 +599,8 @@ class ScreenGold:
                 if reason != last_reason and reason:
                     log(reason, "warn")
                 elif reason != last_reason:
-                    log("Reading team gold from the spectator top bar")
+                    log("Reading the spectator screen (" + " and ".join(
+                        n for n, on in zip(("team gold", "health and mana"), self._wanted(self.config.get())) if on) + ")")
                 last_reason = reason
             self._stop.wait(0.5)
 

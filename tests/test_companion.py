@@ -52,6 +52,45 @@ class SponsorTests(unittest.TestCase):
                     app.stop()
 
 
+class EngineSponsorTests(unittest.TestCase):
+    def test_global_pull_brings_the_engines_sponsors(self):
+        from unittest import mock
+        from lolhud import app as app_module, config as config_module
+        from lolhud.app import HudApp
+        from lolhud.config import Config
+        from lolhud.source import DemoSource
+        with tempfile.TemporaryDirectory() as d:
+            folder = os.path.join(d, "sponsors")
+            with mock.patch.object(app_module, "SPONSOR_DIR", folder), mock.patch.object(config_module, "SPONSOR_DIR", folder), \
+                    mock.patch.object(app_module, "LOGO_DIR", os.path.join(d, "logos")):
+                config = Config(os.path.join(d, "config.json"))
+                config.update({"output_dir": os.path.join(d, "out")})
+                app = HudApp(config, DemoSource(), mode="demo")
+                files = {"http://e:8782/assets/sponsors/Intel%20logo.png": b"\x89PNG\r\n\x1a\nintel",
+                         "http://e:8782/assets/sponsors/Subway.png": b"\x89PNG\r\n\x1a\nsub"}
+                g = {"left": {"name": "SCC"}, "right": {},
+                     "sponsors": [{"logo": "assets/sponsors/Intel logo.png", "secs": 10, "white": True,
+                                   "logo_url": "http://e:8782/assets/sponsors/Intel%20logo.png"},
+                                  {"logo": "assets/sponsors/Subway.png", "secs": 6, "white": False,
+                                   "logo_url": "http://e:8782/assets/sponsors/Subway.png"},
+                                  {"logo": "assets/sponsors/gone.png", "logo_url": "http://e:8782/gone.png"}]}
+                def fetch(url):
+                    if url not in files:
+                        raise OSError("404")
+                    return files[url]
+                summary = app._engine_apply_global(g, fetch)
+                box = config.get()["sponsor_box"]
+                self.assertEqual(box["sponsors"], ["sponsors/engine-Intel_logo.png", "sponsors/engine-Subway.png"])
+                self.assertEqual(box["white"], ["sponsors/engine-Intel_logo.png"])
+                self.assertEqual(box["seconds"], 8)
+                self.assertIn("2 sponsor(s)", summary)
+                self.assertTrue(os.path.isfile(os.path.join(folder, "engine-Subway.png")))
+                # An engine without sponsors leaves the HUD's own alone.
+                app._engine_apply_global({"left": {"name": "SCC"}}, fetch)
+                self.assertEqual(len(config.get()["sponsor_box"]["sponsors"]), 2)
+                app.stop()
+
+
 class CompanionTests(unittest.TestCase):
     def test_module_lists_match_the_app(self):
         # companion-module/src/definitions.js names the same settings and commands.
