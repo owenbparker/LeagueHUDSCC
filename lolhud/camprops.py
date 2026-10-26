@@ -28,6 +28,10 @@ CAMERA = {"pan": 0, "tilt": 1, "zoom": 3, "exposure": 4, "focus": 6}
 AUTO, MANUAL = 1, 2
 
 _lock = threading.Lock()   # one driver conversation at a time
+# The camera opened last, kept open: {"label", "amp", "cam"} (opening a
+# camera's driver again for every look is slow, and some drivers put their
+# settings back on each opening).
+_open_cam = {}
 
 if sys.platform == "win32":
     from ctypes import POINTER, byref, c_long, c_ulong, c_void_p, c_wchar_p, wintypes
@@ -79,12 +83,16 @@ if sys.platform == "win32":
         _oleaut32.VariantClear(byref(v))
         return text
 
-    def _devices():
-        """[(friendly name, device path, moniker)] of the video inputs; release the monikers."""
+    def _com():
+        """COM on this thread (the app's web server answers on many)."""
         try:
             _ole32.CoInitializeEx(None, 0)
         except OSError:
             pass   # already set up on this thread
+
+    def _devices():
+        """[(friendly name, device path, moniker)] of the video inputs; release the monikers."""
+        _com()
         dev_enum = c_void_p()
         _ole32.CoCreateInstance(byref(CLSID_SystemDeviceEnum), None, 1, byref(IID_ICreateDevEnum), byref(dev_enum))
         out = []
@@ -157,22 +165,43 @@ if sys.platform == "win32":
                 "value": value.value, "auto": bool(flags.value & AUTO) if caps.value & AUTO else None}
 
 
+def _camera(label):
+    """(amp, cam) for the camera, kept open (call with _lock held)."""
+    if _open_cam.get("label") != label:
+        _close()
+        amp, cam = _open(label)
+        if not amp and not cam:
+            return None, None
+        _open_cam.update(label=label, amp=amp, cam=cam)
+    return _open_cam["amp"], _open_cam["cam"]
+
+
+def _close():
+    for key in ("amp", "cam"):
+        _release(_open_cam.get(key))
+    _open_cam.clear()
+
+
+def _read_all(amp, cam):
+    out = {}
+    for obj, table in ((amp, PROC_AMP), (cam, CAMERA)):
+        if obj:
+            for name, prop in table.items():
+                r = _range(obj, prop)
+                if r:
+                    out[name] = r
+    return out
+
+
 def props(label):
     if sys.platform != "win32":
         return {}
     with _lock:
-        amp, cam = _open(label)
-        out = {}
-        try:
-            for obj, table in ((amp, PROC_AMP), (cam, CAMERA)):
-                if obj:
-                    for name, prop in table.items():
-                        r = _range(obj, prop)
-                        if r:
-                            out[name] = r
-        finally:
-            _release(amp)
-            _release(cam)
+        _com()
+        out = _read_all(*_camera(label))
+        if not out and _open_cam:
+            _close()   # (unplugged, say: open it again next time)
+            out = _read_all(*_camera(label))
         return out
 
 
@@ -181,21 +210,18 @@ def set_props(label, values):
     if sys.platform != "win32":
         return {}
     with _lock:
-        amp, cam = _open(label)
-        try:
-            for name, want in (values or {}).items():
-                obj, prop = (amp, PROC_AMP[name]) if name in PROC_AMP else (cam, CAMERA.get(name))
-                if not obj or prop is None or not isinstance(want, dict):
-                    continue
-                now = _range(obj, prop)
-                if not now:
-                    continue
-                auto = bool(want.get("auto")) and now["auto"] is not None
-                value = want.get("value", now["value"])
-                value = int(min(now["max"], max(now["min"], round(float(value)))))
-                _call(obj, 4, c_long(prop), c_long(value), c_long(AUTO if auto else MANUAL),
-                      argtypes=[c_long, c_long, c_long])
-        finally:
-            _release(amp)
-            _release(cam)
+        _com()
+        amp, cam = _camera(label)
+        for name, want in (values or {}).items():
+            obj, prop = (amp, PROC_AMP[name]) if name in PROC_AMP else (cam, CAMERA.get(name))
+            if not obj or prop is None or not isinstance(want, dict):
+                continue
+            now = _range(obj, prop)
+            if not now:
+                continue
+            auto = bool(want.get("auto")) and now["auto"] is not None
+            value = want.get("value", now["value"])
+            value = int(min(now["max"], max(now["min"], round(float(value)))))
+            _call(obj, 4, c_long(prop), c_long(value), c_long(AUTO if auto else MANUAL),
+                  argtypes=[c_long, c_long, c_long])
     return props(label)

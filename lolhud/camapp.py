@@ -126,11 +126,14 @@ def find_huds_for(game):
 
 
 def _camprops(fn, *args):
+    """{"props": ...}, with "error" when the driver couldn't be reached."""
     try:
-        return fn(*args)
+        found = fn(*args)
+        return {"props": found} if found or sys.platform != "win32" else \
+            {"props": {}, "error": "the camera's driver lists no settings for it (or it wasn't found)"}
     except Exception as e:   # (no such camera, or its driver said no)
         log(f"Camera settings: {e!r}", "warn")
-        return {}
+        return {"props": {}, "error": repr(e)}
 
 
 def make_handler(updater):
@@ -160,7 +163,7 @@ def make_handler(updater):
             if path == "/api/camprops":
                 # The camera's driver settings the browser can't reach (gain...).
                 label = (parse_qs(urlparse(self.path).query).get("label") or [""])[0]
-                return self._send(json.dumps({"props": _camprops(camprops.props, label)}))
+                return self._send(json.dumps(_camprops(camprops.props, label)))
             if path == "/api/find":
                 # The PCs on the network running this game's HUD.
                 game = (parse_qs(urlparse(self.path).query).get("game") or ["lol"])[0]
@@ -178,8 +181,8 @@ def make_handler(updater):
             try:
                 if path == "/api/camprops":
                     body = json.loads(raw or b"{}")
-                    return self._send(json.dumps({"props": _camprops(camprops.set_props, str(body.get("label") or ""),
-                                                                     body.get("set") or {})}))
+                    return self._send(json.dumps(_camprops(camprops.set_props, str(body.get("label") or ""),
+                                                           body.get("set") or {})))
                 if path == "/api/update/check":
                     updater.check()
                 elif path == "/api/update/install":

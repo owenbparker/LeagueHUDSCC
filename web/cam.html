@@ -306,6 +306,7 @@ const CAN_CROP = typeof MediaStreamTrackProcessor === "function" && typeof Media
 let view = { zoom: 1, pan: 0, tilt: 0 };   // the digital zoom
 let crop = null;                            // { track, stop } while it's cropping
 let driverKeys = {};                        // key -> the driver's name, for this camera
+let driverError = "";                       // why the driver gave nothing (shown in the control room)
 
 const rawTrack = () => stream && stream.getVideoTracks()[0];
 const outTrack = () => (crop ? crop.track : rawTrack());
@@ -356,8 +357,10 @@ async function driver(set) {
     const r = set
       ? await fetch("/api/camprops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: t.label, set }) })
       : await fetch("/api/camprops?label=" + encodeURIComponent(t.label));
-    return (await r.json()).props || {};
-  } catch (e) { return {}; }
+    const data = await r.json();
+    driverError = data.error || "";
+    return data.props || {};
+  } catch (e) { driverError = "couldn't ask the app (" + (e.message || e) + ")"; return {}; }
 }
 
 // Every setting this camera has: [{key, label, group, min, max, step, value,
@@ -365,7 +368,13 @@ async function driver(set) {
 async function cameraControls() {
   const t = rawTrack();
   if (!t) return [];
-  const caps = t.getCapabilities ? t.getCapabilities() : {}, now = t.getSettings();
+  let caps = t.getCapabilities ? t.getCapabilities() : {};
+  if (!Object.values(BROWSER).some(b => caps[b[2]]) && typeof ImageCapture === "function") {
+    // (the browser reads what the camera has once asked: ask, then look again)
+    try { await new ImageCapture(t).getPhotoCapabilities(); } catch (e) { /* none */ }
+    caps = t.getCapabilities();
+  }
+  const now = t.getSettings();
   const out = {};
   for (const [key, [label, group, name, mode]] of Object.entries(BROWSER)) {
     const c = caps[name];
@@ -379,6 +388,10 @@ async function cameraControls() {
   for (const [name, p] of Object.entries(await driver())) {
     const [key, label, group] = DRIVER[name] || [];
     if (!key || out[key]) continue;   // (the browser's own comes first)
+    // The browser's "exposure compensation" on Windows is the camera's gain:
+    // one slider, the driver's.
+    const ec = out.exposureCompensation;
+    if (name === "gain" && ec && ec.min === p.min && ec.max === p.max) delete out.exposureCompensation;
     driverKeys[key] = name;
     out[key] = { key, label, group, min: p.min, max: p.max, step: p.step, value: p.value, auto: p.auto };
     if (name === "powerline") out[key].options = [[0, "Off"], [1, "50 Hz"], [2, "60 Hz"]].filter(([v]) => v >= p.min && v <= p.max);
@@ -406,6 +419,13 @@ async function applySettings(set) {
       if (want.value !== undefined && !want.auto) browser[b[2]] = Number(want.value);
     } else if (driverKeys[key]) toDriver[driverKeys[key]] = want;
     else if (["zoom", "pan", "tilt"].includes(key) && want.value !== undefined) digital[key] = Number(want.value);
+  }
+  // Gain (and exposure compensation) only hold with the exposure set by hand:
+  // on automatic, the camera sets them itself straight back.
+  if ((set.gain || set.exposureCompensation) && !set.exposure) {
+    const b = BROWSER.exposure;
+    if ((caps[b[3]] || []).includes("manual")) browser[b[3]] = "manual";
+    else if (driverKeys.exposure) toDriver.exposure = { auto: false };
   }
   if (Object.keys(browser).length) {
     // The mode first (a camera on automatic ignores a value).
@@ -439,6 +459,15 @@ async function restoreLook() {
   if (look) await applySettings(look);
 }
 
+// One at a time, in order (a slider being dragged sends several a second),
+// answering only the latest of a run from the same control room.
+let controlChain = Promise.resolve();
+const controlsWaiting = {};
+function queueControl(m) {
+  controlsWaiting[m.from] = (controlsWaiting[m.from] || 0) + 1;
+  controlChain = controlChain.then(() => cameraControl(m)).catch(() => {}).finally(() => controlsWaiting[m.from]--);
+}
+
 async function cameraControl(m) {
   if (m.reset) {
     const key = deviceKey();
@@ -451,10 +480,16 @@ async function cameraControl(m) {
     await applySettings(m.set);
     remember(m.set);
   }
+  if (controlsWaiting[m.from] > 1) return;   // (the next one answers)
+  // (what the camera's at now, not what was asked: give it a moment to take it)
+  if (m.set || m.reset) await sleep(300);
+  if (controlsWaiting[m.from] > 1) return;
   const t = rawTrack();
   await post("/api/cam/send", { to: m.from, from: ME, data: {
     type: "camstate", pc: PC_ID, label: t ? t.label : "", controls: await cameraControls(),
-    seat, riot_id: riotId, app: APP } }).catch(() => {});
+    seat, riot_id: riotId, app: APP,
+    why: { browser: t && t.getCapabilities ? Object.keys(t.getCapabilities()).filter(k => !["width", "height", "frameRate", "aspectRatio", "deviceId", "groupId", "resizeMode", "facingMode"].includes(k)) : [],
+           driver: driverError, agent: navigator.userAgent.replace(/^.*?(Edg\/[\d.]+|Chrome\/[\d.]+|Firefox\/[\d.]+).*$/, "$1") } } }).catch(() => {});
 }
 
 // --- talking to the HUD ----------------------------------------------------
@@ -510,7 +545,7 @@ function handleVal(r) {
          : `Connected to the HUD at ${base} as ${r.riot_id}. Your cam shows once you're in the match.`, r.riot_id ? "ok" : "");
   for (const m of r.messages) {
     if (m.type === "offer") answer(m).catch(() => {});
-    else if (m.type === "camctl") cameraControl(m).catch(() => {});
+    else if (m.type === "camctl") queueControl(m);
     else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
     else if (m.type === "replaced") status("Your Riot ID connected from another PC.", "bad");
   }
@@ -526,7 +561,7 @@ function handle(r) {
   status(seat ? `Connected to the HUD at ${base}` : "Connected. Pick your team and role.", "ok");
   for (const m of r.messages) {
     if (m.type === "offer") answer(m).catch(() => {});
-    else if (m.type === "camctl") cameraControl(m).catch(() => {});
+    else if (m.type === "camctl") queueControl(m);
     else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
     else if (m.type === "replaced") status("Another camera took this player's seat on the HUD.", "bad");
   }
