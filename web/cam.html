@@ -231,10 +231,14 @@ async function openCamera(deviceId) {
     return;
   }
   camStatus("Opening the camera…");
-  const video = id => ({ audio: false, video: { deviceId: id ? { exact: id } : undefined,
-                                                 width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } });
+  // (pan / tilt / zoom: asks for the camera's own, where it has them, for
+  // the GFX Engine's Camera Control Room)
+  const video = (id, ptz = true) => ({ audio: false, video: { deviceId: id ? { exact: id } : undefined,
+                                                 width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+                                                 ...(ptz ? { pan: true, tilt: true, zoom: true } : {}) } });
   let next = null, error = null;
-  try { next = await navigator.mediaDevices.getUserMedia(video(deviceId)); }
+  try { next = await navigator.mediaDevices.getUserMedia(video(deviceId)); } catch (e) { /* again without, below */ }
+  if (!next) try { next = await navigator.mediaDevices.getUserMedia(video(deviceId, false)); }
   catch (e) {
     error = e;
     // The camera picked last time may be unplugged: take any camera instead.
@@ -252,18 +256,206 @@ async function openCamera(deviceId) {
     return;
   }
   const track = next.getVideoTracks()[0];
-  for (const pc of Object.values(viewers)) {
-    for (const sender of pc.getSenders()) if (sender.track && sender.track.kind === "video") sender.replaceTrack(track);
-  }
   if (stream) stream.getTracks().forEach(t => t.stop());
   stream = next;
-  $("preview").srcObject = stream;
   store("camDevice", track.getSettings().deviceId || "");
+  await restoreLook();
+  sendTrack();
   await listCameras(track.getSettings().deviceId || "");
   camStatus("");
 }
 $("camera").onchange = e => openCamera(e.target.value);
 $("cam-retry").onclick = () => openCamera($("camera").value || stored("camDevice"));
+
+// --- camera settings: the GFX Engine's Camera Control Room ------------------------
+// The control room sends {type: "camctl", get / set / reset} through the HUD;
+// this page sets the camera and answers with its settings ("camstate"). The
+// browser sets most of them on the camera itself; in the app, the camera's
+// driver does the rest (gain, backlight...: lolhud/camprops.py). A camera
+// with no zoom of its own gets a digital one: the picture sent is cropped.
+// What's set is kept per camera on this PC and set again when it's opened.
+const PC_ID = stored("camPcId") || Math.random().toString(16).slice(2, 14);
+store("camPcId", PC_ID);
+// key: [label, group, browser setting, its mode setting]
+const BROWSER = {
+  wb: ["White balance", "light", "colorTemperature", "whiteBalanceMode"],
+  exposure: ["Exposure", "light", "exposureTime", "exposureMode"],
+  exposureCompensation: ["Exposure compensation", "light", "exposureCompensation"],
+  brightness: ["Brightness", "light", "brightness"],
+  contrast: ["Contrast", "light", "contrast"],
+  saturation: ["Saturation", "light", "saturation"],
+  sharpness: ["Sharpness", "light", "sharpness"],
+  focus: ["Focus", "framing", "focusDistance", "focusMode"],
+  zoom: ["Zoom", "framing", "zoom"],
+  pan: ["Pan", "framing", "pan"],
+  tilt: ["Tilt", "framing", "tilt"],
+};
+// The driver's names (lolhud/camprops.py) -> key, label, group.
+const DRIVER = {
+  gain: ["gain", "Gain (ISO)", "light"], whitebalance: ["wb", "White balance", "light"],
+  exposure: ["exposure", "Exposure", "light"], brightness: ["brightness", "Brightness", "light"],
+  contrast: ["contrast", "Contrast", "light"], saturation: ["saturation", "Saturation", "light"],
+  sharpness: ["sharpness", "Sharpness", "light"], hue: ["hue", "Hue", "light"], gamma: ["gamma", "Gamma", "light"],
+  backlight: ["backlight", "Backlight compensation", "light"], powerline: ["powerline", "Anti-flicker", "light"],
+  focus: ["focus", "Focus", "framing"], zoom: ["zoom", "Zoom", "framing"], pan: ["pan", "Pan", "framing"], tilt: ["tilt", "Tilt", "framing"],
+};
+const ORDER = ["wb", "exposure", "gain", "exposureCompensation", "brightness", "contrast", "saturation", "sharpness",
+               "hue", "gamma", "backlight", "powerline", "zoom", "pan", "tilt", "focus"];
+const CAN_CROP = typeof MediaStreamTrackProcessor === "function" && typeof MediaStreamTrackGenerator === "function"
+  && typeof VideoFrame === "function";
+let view = { zoom: 1, pan: 0, tilt: 0 };   // the digital zoom
+let crop = null;                            // { track, stop } while it's cropping
+let driverKeys = {};                        // key -> the driver's name, for this camera
+
+const rawTrack = () => stream && stream.getVideoTracks()[0];
+const outTrack = () => (crop ? crop.track : rawTrack());
+const deviceKey = () => { const t = rawTrack(); return t ? (t.getSettings().deviceId || t.label) : ""; };
+const loadJson = k => { try { return JSON.parse(stored(k) || "null"); } catch (e) { return null; } };
+
+function sendTrack() {
+  const t = outTrack();
+  if (!t) return;
+  for (const pc of Object.values(viewers))
+    for (const sender of pc.getSenders()) if (sender.track && sender.track.kind === "video" && sender.track !== t) sender.replaceTrack(t);
+  if (!$("preview").srcObject || $("preview").srcObject.getVideoTracks()[0] !== t) $("preview").srcObject = new MediaStream([t]);
+}
+
+// The digital zoom: each frame cut down to the part in view (no redrawing,
+// and it keeps going with the window minimised).
+function startCrop() {
+  const src = rawTrack();
+  if (crop || !src || !CAN_CROP) return;
+  const even = n => Math.max(0, Math.round(n / 2) * 2);
+  const gen = new MediaStreamTrackGenerator({ kind: "video" });
+  const abort = new AbortController();
+  new MediaStreamTrackProcessor({ track: src }).readable.pipeThrough(new TransformStream({
+    transform(frame, out) {
+      const w = frame.displayWidth, h = frame.displayHeight, z = Math.max(1, view.zoom);
+      if (z <= 1.001) return out.enqueue(frame);
+      const cw = even(w / z), ch = even(h / z);
+      const x = even((w - cw) / 2 * (1 + view.pan / 100)), y = even((h - ch) / 2 * (1 - view.tilt / 100));
+      try { out.enqueue(new VideoFrame(frame, { visibleRect: { x, y, width: cw, height: ch }, displayWidth: w, displayHeight: h })); }
+      catch (e) { return out.enqueue(frame); }
+      frame.close();
+    },
+  }), { signal: abort.signal }).pipeTo(gen.writable, { signal: abort.signal }).catch(() => {});
+  crop = { track: gen, src, stop: () => { abort.abort(); gen.stop(); } };
+}
+function setView(v) {
+  view = { ...view, ...v };
+  const want = view.zoom > 1.001;
+  if (crop && (!want || crop.src !== rawTrack())) { crop.stop(); crop = null; }
+  if (want && !crop) startCrop();
+  sendTrack();
+}
+
+async function driver(set) {
+  const t = rawTrack();
+  if (!APP || !t) return {};
+  try {
+    const r = set
+      ? await fetch("/api/camprops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: t.label, set }) })
+      : await fetch("/api/camprops?label=" + encodeURIComponent(t.label));
+    return (await r.json()).props || {};
+  } catch (e) { return {}; }
+}
+
+// Every setting this camera has: [{key, label, group, min, max, step, value,
+// auto (null: no automatic mode), options, digital}]
+async function cameraControls() {
+  const t = rawTrack();
+  if (!t) return [];
+  const caps = t.getCapabilities ? t.getCapabilities() : {}, now = t.getSettings();
+  const out = {};
+  for (const [key, [label, group, name, mode]] of Object.entries(BROWSER)) {
+    const c = caps[name];
+    if (!c || !(c.max > c.min)) continue;
+    const modes = mode ? caps[mode] || [] : [];
+    const canAuto = modes.includes("continuous") && modes.includes("manual");
+    out[key] = { key, label, group, min: c.min, max: c.max, step: c.step || 1, value: now[name],
+                 auto: canAuto ? now[mode] === "continuous" : null };
+  }
+  driverKeys = {};
+  for (const [name, p] of Object.entries(await driver())) {
+    const [key, label, group] = DRIVER[name] || [];
+    if (!key || out[key]) continue;   // (the browser's own comes first)
+    driverKeys[key] = name;
+    out[key] = { key, label, group, min: p.min, max: p.max, step: p.step, value: p.value, auto: p.auto };
+    if (name === "powerline") out[key].options = [[0, "Off"], [1, "50 Hz"], [2, "60 Hz"]].filter(([v]) => v >= p.min && v <= p.max);
+  }
+  if (!out.zoom && CAN_CROP) {
+    out.zoom = { key: "zoom", label: "Zoom", group: "framing", min: 1, max: 4, step: 0.05, value: view.zoom, auto: null, digital: true };
+    if (!out.pan) out.pan = { key: "pan", label: "Pan", group: "framing", min: -100, max: 100, step: 1, value: view.pan, auto: null, digital: true };
+    if (!out.tilt) out.tilt = { key: "tilt", label: "Tilt", group: "framing", min: -100, max: 100, step: 1, value: view.tilt, auto: null, digital: true };
+  }
+  return ORDER.filter(k => out[k]).map(k => out[k]);
+}
+
+// set: {key: {value, auto}}
+async function applySettings(set) {
+  const t = rawTrack();
+  if (!t) return;
+  const caps = t.getCapabilities ? t.getCapabilities() : {};
+  const browser = {}, toDriver = {}, digital = {};
+  for (const [key, want] of Object.entries(set || {})) {
+    if (!want || typeof want !== "object") continue;
+    const b = BROWSER[key];
+    if (b && caps[b[2]]) {
+      if (b[3] && want.auto !== undefined && (caps[b[3]] || []).includes(want.auto ? "continuous" : "manual"))
+        browser[b[3]] = want.auto ? "continuous" : "manual";
+      if (want.value !== undefined && !want.auto) browser[b[2]] = Number(want.value);
+    } else if (driverKeys[key]) toDriver[driverKeys[key]] = want;
+    else if (["zoom", "pan", "tilt"].includes(key) && want.value !== undefined) digital[key] = Number(want.value);
+  }
+  if (Object.keys(browser).length) {
+    // The mode first (a camera on automatic ignores a value).
+    const modes = Object.fromEntries(Object.entries(browser).filter(([k]) => k.endsWith("Mode")));
+    if (Object.keys(modes).length) await t.applyConstraints({ advanced: [modes] }).catch(() => {});
+    await t.applyConstraints({ advanced: [browser] }).catch(() => {});
+  }
+  if (Object.keys(toDriver).length) await driver(toDriver);
+  if (Object.keys(digital).length) setView(digital);
+}
+
+// What's been set on this camera, kept on this PC.
+function remember(set) {
+  const key = deviceKey();
+  if (!key) return;
+  const look = loadJson("camLook-" + key) || {};
+  for (const [k, v] of Object.entries(set || {})) look[k] = { ...(look[k] || {}), ...v };
+  store("camLook-" + key, JSON.stringify(look));
+}
+async function restoreLook() {
+  setView({ zoom: 1, pan: 0, tilt: 0 });
+  const key = deviceKey();
+  if (!key) return;
+  if (!stored("camFactory-" + key)) {
+    // How the camera came, for Reset: what it's at before anything was set here.
+    const factory = {};
+    for (const c of await cameraControls()) if (!c.digital) factory[c.key] = { value: c.value, ...(c.auto !== null ? { auto: c.auto } : {}) };
+    store("camFactory-" + key, JSON.stringify(factory));
+  }
+  const look = loadJson("camLook-" + key);
+  if (look) await applySettings(look);
+}
+
+async function cameraControl(m) {
+  if (m.reset) {
+    const key = deviceKey();
+    const factory = loadJson("camFactory-" + key) || {};
+    // Automatic where the camera has it, otherwise as it came.
+    for (const c of await cameraControls()) if (c.auto !== null && factory[c.key]) factory[c.key].auto = true;
+    await applySettings({ ...factory, zoom: { value: 1 }, pan: { value: 0 }, tilt: { value: 0 } });
+    store("camLook-" + key);
+  } else if (m.set) {
+    await applySettings(m.set);
+    remember(m.set);
+  }
+  const t = rawTrack();
+  await post("/api/cam/send", { to: m.from, from: ME, data: {
+    type: "camstate", pc: PC_ID, label: t ? t.label : "", controls: await cameraControls(),
+    seat, riot_id: riotId, app: APP } }).catch(() => {});
+}
 
 // --- talking to the HUD ----------------------------------------------------
 async function post(path, body) {
@@ -291,14 +483,16 @@ async function answer(m) {
     if (["failed", "closed"].includes(pc.connectionState) && viewers[m.from] === pc) delete viewers[m.from];
     drawSeat();
   };
-  for (const t of stream.getVideoTracks()) pc.addTrack(t, stream);
+  pc.addTrack(outTrack(), stream);
   await pc.setRemoteDescription({ type: "offer", sdp: m.sdp });
   await pc.setLocalDescription(await pc.createAnswer());
   // Plenty for a cam this size on screen, and easy on the network.
   for (const sender of pc.getSenders()) {
     const p = sender.getParameters();
     p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
-    p.encodings[0].maxBitrate = 2500000;
+    // (the GFX Engine's Camera Control Room shows every cam small)
+    p.encodings[0].maxBitrate = m.preview ? 700000 : 2500000;
+    if (m.preview) p.encodings[0].scaleResolutionDownBy = 2;
     sender.setParameters(p).catch(() => {});
   }
   await gathered(pc);
@@ -316,6 +510,7 @@ function handleVal(r) {
          : `Connected to the HUD at ${base} as ${r.riot_id}. Your cam shows once you're in the match.`, r.riot_id ? "ok" : "");
   for (const m of r.messages) {
     if (m.type === "offer") answer(m).catch(() => {});
+    else if (m.type === "camctl") cameraControl(m).catch(() => {});
     else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
     else if (m.type === "replaced") status("Your Riot ID connected from another PC.", "bad");
   }
@@ -331,6 +526,7 @@ function handle(r) {
   status(seat ? `Connected to the HUD at ${base}` : "Connected. Pick your team and role.", "ok");
   for (const m of r.messages) {
     if (m.type === "offer") answer(m).catch(() => {});
+    else if (m.type === "camctl") cameraControl(m).catch(() => {});
     else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
     else if (m.type === "replaced") status("Another camera took this player's seat on the HUD.", "bad");
   }

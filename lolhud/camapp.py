@@ -22,6 +22,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from . import camprops
 from .config import DATA_DIR, web_file
 from .log import log
 from .updater import Updater, clean_up_old_update
@@ -124,6 +125,14 @@ def find_huds_for(game):
     return out
 
 
+def _camprops(fn, *args):
+    try:
+        return fn(*args)
+    except Exception as e:   # (no such camera, or its driver said no)
+        log(f"Camera settings: {e!r}", "warn")
+        return {}
+
+
 def make_handler(updater):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -148,6 +157,10 @@ def make_handler(updater):
                 return self._send(self._state())
             if path == "/api/riot/account":
                 return self._send(json.dumps(riot_account()))
+            if path == "/api/camprops":
+                # The camera's driver settings the browser can't reach (gain...).
+                label = (parse_qs(urlparse(self.path).query).get("label") or [""])[0]
+                return self._send(json.dumps({"props": _camprops(camprops.props, label)}))
             if path == "/api/find":
                 # The PCs on the network running this game's HUD.
                 game = (parse_qs(urlparse(self.path).query).get("game") or ["lol"])[0]
@@ -161,8 +174,12 @@ def make_handler(updater):
 
         def do_POST(self):
             path = urlparse(self.path).path
-            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             try:
+                if path == "/api/camprops":
+                    body = json.loads(raw or b"{}")
+                    return self._send(json.dumps({"props": _camprops(camprops.set_props, str(body.get("label") or ""),
+                                                                     body.get("set") or {})}))
                 if path == "/api/update/check":
                     updater.check()
                 elif path == "/api/update/install":
@@ -225,6 +242,13 @@ def smoke_test(port):
         except Exception as e:
             ok = False
             results.append(f"FAIL {path}: {e}")
+    try:
+        # Lists the cameras through their drivers (none on the build PC).
+        found = camprops.props("")
+        results.append(f"OK   camera settings ({len(found)})")
+    except Exception as e:
+        ok = False
+        results.append(f"FAIL camera settings: {e!r}")
     try:
         import webview  # noqa: F401
         if sys.platform == "win32":

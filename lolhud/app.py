@@ -834,6 +834,19 @@ def make_handler(app):
             if path == "/api/cam/send":
                 app.cams.send(str(body.get("to") or ""), str(body.get("from") or ""), body.get("data"))
                 return {"ok": True}
+            if path == "/api/cam/list":
+                # The cams connected now, for the GFX Engine's Camera Control Room.
+                cfg = app.config.get()
+                with app._lock:
+                    roster = app.state["detail"].get("roster") or {}
+                cams = []
+                for seat, pub in sorted(app.cams.publishers().items()):
+                    side, slot = seat.split("-")
+                    players = roster.get(side) or []
+                    name = players[int(slot) - 1].get("name") if len(players) >= int(slot) else ""
+                    cams.append({"id": pub["id"], "label": pub["label"], "seat": seat, "team": cfg[side]["tricode"] or cfg[side]["name"],
+                                 "name": name or ["Top", "Jungle", "Mid", "Bot", "Support"][int(slot) - 1]})
+                return {"game": "lol", "cams": cams}
             if path == "/api/cams/focus":
                 focus = body.get("focus") or {}
                 app.cams.report({s: focus.get(s) if focus.get(s) in (1, 2, 3, 4, 5) else None
@@ -874,7 +887,7 @@ def make_handler(app):
                     return self._send(json.dumps(app.match_sync.issue(float(body.get("time") or 0), scope)))
                 except (ValueError, TypeError) as e:
                     return self._send(json.dumps({"error": str(e)}), status=400)
-            if path in ("/api/cam/poll", "/api/cam/send", "/api/cams/focus"):
+            if path in ("/api/cam/poll", "/api/cam/send", "/api/cam/list", "/api/cams/focus"):
                 try:
                     body = json.loads(self.rfile.read(length) or b"{}")
                     return self._send(json.dumps(self._cam_post(path, body)))
