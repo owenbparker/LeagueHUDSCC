@@ -77,6 +77,8 @@ class CamHub:
                     self._seat[peer] = seat
                 if label is not None:
                     self._label[peer] = str(label)[:60]
+                elif not seat:
+                    self._label.pop(peer, None)   # (a cam leaving)
             while not self._inbox.get(peer) and time.time() < deadline:
                 self._cond.wait(deadline - time.time())
                 self._touch(peer)
@@ -112,6 +114,14 @@ class CamHub:
                     side, slot = seat.split("-")
                     self._seat[p] = f"{_other(side)}-{slot}"
             self.shown = {"left": self.shown["right"], "right": self.shown["left"]}
+
+    def all_cams(self):
+        """Every cam connected, with or without a seat yet (the GFX Engine's
+        Camera Control Room): [{"id", "seat", "label"}]."""
+        with self._cond:
+            now = time.time()
+            return [{"id": p, "seat": self._seat.get(p) or "", "label": label} for p, label in self._label.items()
+                    if now - self._seen.get(p, 0) < GONE_AFTER]
 
     def publishers(self):
         """{"left-1": {"id": ..., "label": ...}} for the cams connected now."""

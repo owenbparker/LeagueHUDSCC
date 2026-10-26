@@ -840,7 +840,11 @@ def make_handler(app):
                 with app._lock:
                     roster = app.state["detail"].get("roster") or {}
                 cams = []
-                for seat, pub in sorted(app.cams.publishers().items()):
+                for pub in sorted(app.cams.all_cams(), key=lambda c: c["seat"] or "z"):
+                    seat = pub["seat"]
+                    if not seat:
+                        cams.append({"id": pub["id"], "label": pub["label"], "seat": "", "team": "", "name": "No player picked yet"})
+                        continue
                     side, slot = seat.split("-")
                     players = roster.get(side) or []
                     name = players[int(slot) - 1].get("name") if len(players) >= int(slot) else ""
