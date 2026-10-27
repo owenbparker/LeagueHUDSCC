@@ -155,6 +155,16 @@
     };
   }
 
+  // WebRTC hides each PC's address behind a random "<id>.local" name, which only
+  // resolves on that PC's own network: a cam on another network (VLAN) never
+  // connects. The HUD passes on where each message came from (m.ip), and that
+  // address goes in place of the hidden one.
+  function unhide(sdp, ip, hubHost) {
+    if (ip && /^(127\.|::1$|::ffff:127\.)/.test(ip)) ip = /^localhost$/i.test(hubHost) ? "127.0.0.1" : hubHost;
+    if (!sdp || !ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return sdp;
+    return sdp.replace(/^(a=candidate:\S+ \d+ \S+ \d+ )\S+\.local( \d+ typ host)/gm, `$1${ip}$2`);
+  }
+
   async function connect(id, video, delay) {
     const pc = new RTCPeerConnection({ iceServers: [] });
     const p = peers[id] = { pc, video, started: Date.now(), stop: null };
@@ -184,7 +194,7 @@
           const p = peers[m.from];
           if (!p) continue;
           if (m.type === "answer" && p.pc.signalingState === "have-local-offer") {
-            await p.pc.setRemoteDescription({ type: "answer", sdp: m.sdp }).catch(() => drop(m.from));
+            await p.pc.setRemoteDescription({ type: "answer", sdp: unhide(m.sdp, m.ip, location.hostname) }).catch(() => drop(m.from));
           } else if (m.type === "bye") drop(m.from);
         }
       } catch (e) { await sleep(2000); }

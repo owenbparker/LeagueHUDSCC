@@ -508,6 +508,16 @@ function gathered(pc) {
   });
 }
 
+// WebRTC hides each PC's address behind a random "<id>.local" name, which only
+// resolves on that PC's own network: a cam on another network (VLAN) never
+// connects. The HUD passes on where each message came from (m.ip), and that
+// address goes in place of the hidden one.
+function unhide(sdp, ip, hubHost) {
+  if (ip && /^(127\.|::1$|::ffff:127\.)/.test(ip)) ip = /^localhost$/i.test(hubHost) ? "127.0.0.1" : hubHost;
+  if (!sdp || !ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return sdp;
+  return sdp.replace(/^(a=candidate:\S+ \d+ \S+ \d+ )\S+\.local( \d+ typ host)/gm, `$1${ip}$2`);
+}
+
 async function answer(m) {
   for (let i = 0; !stream && i < 50; i++) await sleep(200);
   if (!stream) return;
@@ -519,7 +529,7 @@ async function answer(m) {
     drawSeat();
   };
   pc.addTrack(outTrack(), stream);
-  await pc.setRemoteDescription({ type: "offer", sdp: m.sdp });
+  await pc.setRemoteDescription({ type: "offer", sdp: unhide(m.sdp, m.ip, new URL(base).hostname) });
   await pc.setLocalDescription(await pc.createAnswer());
   // Plenty for a cam this size on screen, and easy on the network.
   for (const sender of pc.getSenders()) {

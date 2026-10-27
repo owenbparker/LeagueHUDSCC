@@ -85,14 +85,17 @@ class CamHub:
             messages = self._inbox.pop(peer, [])
             return {"seat": self._seat.get(peer), "messages": messages}
 
-    def send(self, to, sender, data):
+    def send(self, to, sender, data, ip=None):
+        """A message for a peer. ip: where the sender is, as this app sees it
+        (WebRTC hides a PC's own address behind a ".local" name that doesn't
+        reach across networks: the other end puts this address in its place)."""
         if not isinstance(data, dict) or len(json.dumps(data)) > 64 * 1024:
             raise ValueError("Bad message")
         with self._cond:
             if to not in self._seen:
                 raise ValueError("That cam or overlay isn't connected")
             box = self._inbox.setdefault(to, [])
-            box.append({**data, "from": sender})
+            box.append({**data, "from": sender, **({"ip": ip} if ip else {})})
             del box[:-50]
             self._cond.notify_all()
 

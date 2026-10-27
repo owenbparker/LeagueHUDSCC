@@ -832,7 +832,8 @@ def make_handler(app):
                                        "players": [p["name"] for p in (roster or {}).get(s, [])]} for s in ("left", "right")}
                 return result
             if path == "/api/cam/send":
-                app.cams.send(str(body.get("to") or ""), str(body.get("from") or ""), body.get("data"))
+                app.cams.send(str(body.get("to") or ""), str(body.get("from") or ""), body.get("data"),
+                              self.client_address[0])
                 return {"ok": True}
             if path == "/api/cam/list":
                 # The cams connected now, for the GFX Engine's Camera Control Room.
