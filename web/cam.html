@@ -76,7 +76,7 @@
   #switch-game img { height: 20px; }
   #switch-game:hover { border-color: var(--accent); }
   body.picking #switch-game { display: none; }
-  body:not(.game-lol) .lol-only, body:not(.game-val) .val-only { display: none !important; }
+  body:not(.game-lol) .lol-only, body:not(.game-val) .val-only, body:not(.game-cod) .cod-only { display: none !important; }
   .riot-row { display: flex; gap: 8px; margin-top: 8px; }
   .riot-row button { flex: 0 0 auto; padding: 8px 12px; border-radius: 6px; font: 600 13px "Inter", system-ui, sans-serif; cursor: pointer;
                      background: #d13639; color: #fff; border: 0; }
@@ -96,6 +96,7 @@
   .found button { text-align: left; }
   .found button small { color: var(--muted); margin-left: 8px; }
   body.game-val .preview { aspect-ratio: 16 / 9; }
+  body.game-cod .preview { aspect-ratio: 175 / 130; }
 </style>
 </head>
 <body>
@@ -111,6 +112,7 @@
   <div class="games">
     <button data-game="lol" title="League of Legends"><img src="assets/games/lol.svg" alt="League of Legends"></button>
     <button data-game="val" title="VALORANT"><img src="assets/games/valorant.svg" alt="VALORANT"></button>
+    <button data-game="cod" title="Call of Duty"><img src="assets/games/cod.svg" alt="Call of Duty"></button>
   </div>
 </div>
 <main>
@@ -126,6 +128,8 @@
       <div class="seg roles lol-only" id="role"></div>
       <label for="riot-id" class="val-only">Riot ID</label>
       <input id="riot-id" class="val-only" spellcheck="false" autocomplete="off" placeholder="Name#TAG">
+      <label for="cod-name" class="cod-only">In-game name</label>
+      <input id="cod-name" class="cod-only" spellcheck="false" autocomplete="off" placeholder="Your name in Call of Duty">
       <div class="riot-row val-only app-only"><button id="riot-sign-in" type="button">Sign in with Riot</button>
         <div class="status" id="riot-status" style="margin:0;align-self:center"></div></div>
       <label for="camera">Camera</label>
@@ -135,7 +139,7 @@
       <div class="status" id="status"></div>
       <p class="note"><span class="app-only">Ask the GFX operator to tick "Let other PCs on the network read the HUD".</span>
         Keep this <span id="window-word">window</span> open while you play (it can be minimised). Your cam shows on the
-        HUD when <span class="lol-only">the action is on you</span><span class="val-only">the observer is spectating you</span>.</p>
+        HUD when <span class="lol-only">the action is on you</span><span class="val-only">the observer is spectating you</span><span class="cod-only">the observer is spectating you</span>.</p>
     </section>
     <section>
       <div class="preview"><video id="preview" autoplay muted playsinline></video><span class="live" id="live">OFF AIR</span></div>
@@ -160,9 +164,13 @@ const ME = Math.random().toString(16).slice(2, 18);
 let base = "", seat = stored("camSeat") || "", claim = !!seat, stream = null, teams = null, online = false;
 // The game: the app asks on launch; in a browser the page comes from the
 // League HUD itself. Each game's HUD app has its own address and port.
-const GAMES = { lol: { port: 8777, logo: "assets/games/lol.svg" }, val: { port: 8778, logo: "assets/games/valorant.svg" } };
+const GAMES = { lol: { port: 8777, logo: "assets/games/lol.svg" }, val: { port: 8778, logo: "assets/games/valorant.svg" },
+                cod: { port: 8780, logo: "assets/games/cod.svg" } };
+// VALORANT and Call of Duty cams connect by the player's name in the game
+// (their Riot ID; their in-game name), not by a seat.
+const byName = () => GAME === "val" || GAME === "cod";
 let GAME = APP ? "" : "lol";
-let riotId = stored("camRiotId") || "", matched = null;
+let riotId = stored("camRiotId") || "", matched = null;   // (in Call of Duty: their in-game name)
 const viewers = {};  // overlay id -> RTCPeerConnection
 
 // "192.168.2.40", "http://192.168.2.40:8777/overlay" -> "http://192.168.2.40:8777"
@@ -550,20 +558,20 @@ function wake() { if (wakeUp) wakeUp(); }
 function handleVal(r) {
   online = true;
   matched = r.player || null;
-  status(!r.riot_id ? "Enter your Riot ID (Name#TAG) to connect."
+  status(!r.riot_id ? (GAME === "cod" ? "Enter your in-game name to connect." : "Enter your Riot ID (Name#TAG) to connect.")
          : matched ? `On the HUD at ${base} as ${matched.name} (${matched.team_name || matched.team})`
          : `Connected to the HUD at ${base} as ${r.riot_id}. Your cam shows once you're in the match.`, r.riot_id ? "ok" : "");
   for (const m of r.messages) {
     if (m.type === "offer") answer(m).catch(() => {});
     else if (m.type === "camctl") queueControl(m);
     else if (m.type === "bye" && viewers[m.from]) { viewers[m.from].close(); delete viewers[m.from]; }
-    else if (m.type === "replaced") status("Your Riot ID connected from another PC.", "bad");
+    else if (m.type === "replaced") status(GAME === "cod" ? "Your name connected from another PC." : "Your Riot ID connected from another PC.", "bad");
   }
   drawSeat();
 }
 
 function handle(r) {
-  if (GAME === "val") return handleVal(r);
+  if (byName()) return handleVal(r);
   claim = false;
   online = true;
   teams = r.teams;
@@ -588,7 +596,7 @@ async function loop() {
     }
     try {
       // A poll cut short by a change of seat or address still gets handled.
-      const body = GAME === "val"
+      const body = byName()
         ? { id: ME, riot_id: riotId, label: cameraLabel(), wait: online ? 20 : 0 }
         : { id: ME, seat, claim, label: cameraLabel(), wait: online && !claim ? 20 : 0 };
       const pending = post("/api/cam/poll", body).then(handle);
@@ -613,7 +621,7 @@ function cameraLabel() {
 addEventListener("pagehide", () => {
   if (base && navigator.sendBeacon)
     navigator.sendBeacon(base + "/api/cam/poll", new Blob([JSON.stringify(
-      GAME === "val" ? { id: ME, riot_id: "", wait: 0 } : { id: ME, seat: "", claim: true, wait: 0 })], { type: "text/plain" }));
+      byName() ? { id: ME, riot_id: "", wait: 0 } : { id: ME, seat: "", claim: true, wait: 0 })], { type: "text/plain" }));
 });
 
 async function start() {
@@ -696,13 +704,15 @@ async function findHud() {
 function pickGame(game) {
   const changed = GAME && GAME !== game;
   GAME = game;
-  document.body.classList.remove("picking", "game-lol", "game-val");
+  document.body.classList.remove("picking", "game-lol", "game-val", "game-cod");
   document.body.classList.add(`game-${game}`);
   $("game-logo").src = GAMES[game].logo;
   // (The address used to be stored for League only.)
   $("gfx").value = new URLSearchParams(location.search).get("gfx") || stored(`camGfx-${game}`)
     || (game === "lol" ? stored("camGfx") || "" : "");
   $("gfx").placeholder = `192.168.2.40${GAMES[game].port === 8777 ? "" : ":" + GAMES[game].port}`;
+  // (each game's own name: a Riot ID, or a Call of Duty name)
+  riotId = stored(game === "cod" ? "camCodName" : "camRiotId") || "";
   if (APP && !$("gfx").value.trim()) findHud();
   if (changed) {
     // Leave the other game's HUD and start again on this one's.
@@ -733,6 +743,17 @@ $("riot-id").addEventListener("change", e => setRiotId(e.target.value));
 function riotStatus(text, kind) { $("riot-status").textContent = text || ""; $("riot-status").className = "status " + (kind || ""); }
 // "Sign in with Riot": the Riot ID of the account signed in to the Riot
 // Client on this PC (opening the Riot Client to sign in when needed).
+// --- Call of Duty: the player's in-game name -----------------------------------
+$("cod-name").value = stored("camCodName") || "";
+$("cod-name").addEventListener("change", e => {
+  const clean = e.target.value.trim().replace(/\s*#.*$/, "").slice(0, 32);
+  e.target.value = clean;
+  riotId = clean;
+  store("camCodName", clean || undefined);
+  online = false;
+  wake();
+});
+
 $("riot-sign-in").onclick = async () => {
   const account = async () => (await fetch("/api/riot/account")).json();
   riotStatus("Checking the Riot Client…");

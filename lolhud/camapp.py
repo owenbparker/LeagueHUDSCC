@@ -34,7 +34,8 @@ _handlers = []  # .NET event handlers, kept alive
 # Only these files are served (and bundled into the app).
 FILES = {"/cam": "cam.html", "/update.js": "update.js", "/fonts/Inter.ttf": "fonts/Inter.ttf",
          "/assets/playercam_icon.png": "assets/playercam_icon.png",
-         "/assets/games/lol.svg": "assets/games/lol.svg", "/assets/games/valorant.svg": "assets/games/valorant.svg"}
+         "/assets/games/lol.svg": "assets/games/lol.svg", "/assets/games/valorant.svg": "assets/games/valorant.svg",
+         "/assets/games/cod.svg": "assets/games/cod.svg"}
 
 
 # --- the player's Riot account (VALORANT) -----------------------------------
@@ -106,20 +107,21 @@ def open_riot_client():
     subprocess.Popen([exe], close_fds=True)
 
 
-HUD_PORTS = {"lol": 8777, "val": 8778}
+HUD_PORTS = {"lol": 8777, "val": 8778, "cod": 8780}
 
 
 def find_huds_for(game):
     """[{"ip", "url", "teams"}] of the GFX PCs running the game's HUD (not
     observer PCs) on this PC's networks."""
     from .discover import find_huds
-    key = "game" if game == "val" else "detail"   # (what each HUD's state carries)
+    key = {"val": "game", "cod": "scanner"}.get(game, "detail")   # (what each HUD's state carries)
 
     def is_gfx(state):
         return key in state and (state.get("app") or {}).get("role") != "observer"
     out = []
     for hit in find_huds(HUD_PORTS.get(game, 8777), is_gfx):
         cfg = hit["state"].get("config") or {}
+        cfg = cfg.get("match") or cfg   # (the CoD HUD keeps its teams in its match)
         names = [(cfg.get(side) or {}).get("name") for side in ("left", "right")]
         out.append({"ip": hit["ip"], "url": hit["url"], "teams": " vs ".join(n for n in names if n)})
     return out

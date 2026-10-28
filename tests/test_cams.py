@@ -198,7 +198,7 @@ class PlayerCamAppTests(unittest.TestCase):
         httpd = camapp.serve(Updater(asset="PlayerCam-windows.zip", exe="PlayerCam.exe", name="SCC Player Cam"))
         try:
             port = httpd.server_address[1]
-            for path in ("/cam", "/assets/games/lol.svg", "/assets/games/valorant.svg"):
+            for path in ("/cam", "/assets/games/lol.svg", "/assets/games/valorant.svg", "/assets/games/cod.svg"):
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
                     self.assertTrue(r.read())
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/riot/account", timeout=10) as r:
