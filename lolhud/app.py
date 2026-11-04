@@ -420,6 +420,8 @@ class HudApp:
                     team["logo"] = f"assets/logos/{name}"
                 except Exception as e:
                     log(f"Couldn't fetch the {side} logo from the GFX Engine: {e}", "warn")
+            if str(t.get("score", "")).isdigit():   # (the series score: Global's is the one shown)
+                team["wins"] = int(t["score"])
             if team:
                 changes[side] = team
                 done.append(f"{side}: {team.get('name') or team.get('tricode') or 'logo'}")
