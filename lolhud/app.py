@@ -93,7 +93,8 @@ class HudApp:
         # The SCC GFX Engine: the game and series go to it; its teams can come here.
         self.engine = EngineLink("League HUD", "lol", self._engine_snapshot, self._engine_apply_global,
                                  load=lambda: self.config.get().get("gfx_engine"),
-                                 save=lambda d: self.config.update({"gfx_engine": d}), log=log)
+                                 save=lambda d: self.config.update({"gfx_engine": d}), log=log,
+                                 swap=lambda: self.swap_teams(engine=False))
         self._was_connected = None
         self._last_error = None
         self._seen_unknown = set()
@@ -468,13 +469,15 @@ class HudApp:
             out["seconds"] = min(60.0, sum(secs) / len(secs))   # the box has one time for all
         return out
 
-    def swap_teams(self):
+    def swap_teams(self, engine=True):
         cfg = self.config.get()
         pin = cfg["cams"].get("pin") or {}
         self.config.update({"left": cfg["right"], "right": cfg["left"],
                             "cams": {"pin": {"left": pin.get("right", 0), "right": pin.get("left", 0)}}})
         self.cams.swap_sides()
         log("Swapped teams left/right")
+        if engine:   # (connected: the GFX Engine's Global teams swap too, as the HUD follows them)
+            self.engine.swap_global()
 
     def set_role(self, role):
         if role not in ("gfx", "observer", None):
