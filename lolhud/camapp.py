@@ -35,7 +35,7 @@ _handlers = []  # .NET event handlers, kept alive
 FILES = {"/cam": "cam.html", "/update.js": "update.js", "/fonts/Inter.ttf": "fonts/Inter.ttf",
          "/assets/playercam_icon.png": "assets/playercam_icon.png",
          "/assets/games/lol.svg": "assets/games/lol.svg", "/assets/games/valorant.svg": "assets/games/valorant.svg",
-         "/assets/games/cod.svg": "assets/games/cod.svg"}
+         "/assets/games/cod.svg": "assets/games/cod.svg", "/assets/games/rl.svg": "assets/games/rl.svg"}
 
 
 # --- the player's Riot account (VALORANT) -----------------------------------
@@ -107,14 +107,14 @@ def open_riot_client():
     subprocess.Popen([exe], close_fds=True)
 
 
-HUD_PORTS = {"lol": 8777, "val": 8778, "cod": 8780}
+HUD_PORTS = {"lol": 8777, "val": 8778, "cod": 8780, "rl": 8781}
 
 
 def find_huds_for(game):
     """[{"ip", "url", "teams"}] of the GFX PCs running the game's HUD (not
     observer PCs) on this PC's networks."""
     from .discover import find_huds
-    key = {"val": "game", "cod": "scanner"}.get(game, "detail")   # (what each HUD's state carries)
+    key = {"val": "game", "cod": "scanner", "rl": "game"}.get(game, "detail")   # (what each HUD's state carries)
 
     def is_gfx(state):
         return key in state and (state.get("app") or {}).get("role") != "observer"
