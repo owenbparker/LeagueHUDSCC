@@ -173,6 +173,15 @@ let GAME = APP ? "" : "lol";
 let riotId = stored("camRiotId") || "", matched = null;   // (in Call of Duty: their in-game name)
 const viewers = {};  // overlay id -> RTCPeerConnection
 
+// --- staying light on the player's PC ------------------------------------------
+// The cam is shown small on the HUD (League 174x259, VALORANT 300x171), so
+// the camera is opened at 640x360 (no bigger picture to copy or squeeze each
+// frame), sent at no more than 30 fps, and H.264 is asked for first, which
+// the graphics card encodes (VP8, the default, takes the processor). A
+// bigger picture is only asked of the camera while the control room zooms in.
+const SEND = { width: 640, fps: 30, bitrate: 1000000, previewBitrate: 300000 };
+const camSize = zoom => (zoom > 1.001 ? { width: 1280, height: 720 } : { width: 640, height: 360 });
+
 // "192.168.2.40", "http://192.168.2.40:8777/overlay" -> "http://192.168.2.40:8777"
 function gfxBase(text) {
   text = (text || "").trim();
@@ -241,8 +250,10 @@ async function openCamera(deviceId) {
   camStatus("Opening the camera…");
   // (pan / tilt / zoom: asks for the camera's own, where it has them, for
   // the GFX Engine's Camera Control Room)
+  const size = camSize(((loadJson("camLook-" + (deviceId || "")) || {}).zoom || {}).value || 1);
   const video = (id, ptz = true) => ({ audio: false, video: { deviceId: id ? { exact: id } : undefined,
-                                                 width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+                                                 width: { ideal: size.width }, height: { ideal: size.height },
+                                                 frameRate: { ideal: SEND.fps, max: SEND.fps },
                                                  ...(ptz ? { pan: true, tilt: true, zoom: true } : {}) } });
   let next = null, error = null;
   try { next = await navigator.mediaDevices.getUserMedia(video(deviceId)); } catch (e) { /* again without, below */ }
@@ -326,7 +337,43 @@ function sendTrack() {
   if (!t) return;
   for (const pc of Object.values(viewers))
     for (const sender of pc.getSenders()) if (sender.track && sender.track.kind === "video" && sender.track !== t) sender.replaceTrack(t);
-  if (!$("preview").srcObject || $("preview").srcObject.getVideoTracks()[0] !== t) $("preview").srcObject = new MediaStream([t]);
+  showPreview();
+}
+
+// The preview only draws while this window can be seen: minimised, or behind
+// the game, it stops (the cam still goes to the HUD).
+function showPreview() {
+  const t = outTrack(), v = $("preview");
+  if (document.hidden || !t) { if (v.srcObject) v.srcObject = null; return; }
+  if (!v.srcObject || v.srcObject.getVideoTracks()[0] !== t) v.srcObject = new MediaStream([t]);
+}
+document.addEventListener("visibilitychange", showPreview);
+
+// What each viewer is sent: shrunk to SEND.width wide at most (the Camera
+// Control Room's previews: half that), SEND.fps, and a modest bitrate.
+function tuneSender(sender, preview) {
+  const s = rawTrack() ? rawTrack().getSettings() : {};
+  const p = sender.getParameters();
+  p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
+  const e = p.encodings[0];
+  e.maxBitrate = preview ? SEND.previewBitrate : SEND.bitrate;
+  e.maxFramerate = SEND.fps;
+  e.scaleResolutionDownBy = Math.max(1, (s.width || SEND.width) / SEND.width) * (preview ? 2 : 1);
+  return sender.setParameters(p).catch(() => {});
+}
+function retune() {
+  for (const pc of Object.values(viewers)) for (const sender of pc.getSenders()) if (sender.track) tuneSender(sender, pc.preview);
+}
+
+// H.264 first (the graphics card's encoder, where the viewer can take it),
+// then whatever else both ends have.
+function preferH264(pc) {
+  const caps = window.RTCRtpSender && RTCRtpSender.getCapabilities && RTCRtpSender.getCapabilities("video");
+  if (!caps) return;
+  const rank = c => (/h264/i.test(c.mimeType) ? (/packetization-mode=1/.test(c.sdpFmtpLine || "") ? 0 : 1) : 2);
+  const codecs = caps.codecs.slice().sort((a, b) => rank(a) - rank(b));
+  for (const t of pc.getTransceivers())
+    if (t.sender.track && t.setCodecPreferences) try { t.setCodecPreferences(codecs); } catch (e) { /* as offered */ }
 }
 
 // The digital zoom: each frame cut down to the part in view (no redrawing,
@@ -351,8 +398,14 @@ function startCrop() {
   crop = { track: gen, src, stop: () => { abort.abort(); gen.stop(); } };
 }
 function setView(v) {
+  const was = camSize(view.zoom).width;
   view = { ...view, ...v };
   const want = view.zoom > 1.001;
+  // (zoomed in: a bigger picture from the camera, so the cut-down part stays sharp)
+  const size = camSize(view.zoom), t = rawTrack();
+  if (t && size.width !== was)
+    t.applyConstraints({ width: { ideal: size.width }, height: { ideal: size.height }, frameRate: { ideal: SEND.fps, max: SEND.fps } })
+      .then(retune).catch(() => {});
   if (crop && (!want || crop.src !== rawTrack())) { crop.stop(); crop = null; }
   if (want && !crop) startCrop();
   sendTrack();
@@ -531,23 +584,23 @@ async function answer(m) {
   if (!stream) return;
   if (viewers[m.from]) viewers[m.from].close();
   const pc = new RTCPeerConnection({ iceServers: [] });
+  pc.preview = !!m.preview;   // (the GFX Engine's Camera Control Room shows every cam small)
   viewers[m.from] = pc;
+  let lost = null;
+  const drop = () => { if (viewers[m.from] === pc) delete viewers[m.from]; pc.close(); drawSeat(); };
   pc.onconnectionstatechange = () => {
-    if (["failed", "closed"].includes(pc.connectionState) && viewers[m.from] === pc) delete viewers[m.from];
+    clearTimeout(lost);
+    if (["failed", "closed"].includes(pc.connectionState)) drop();
+    // A viewer that's gone (a HUD page reloaded or closed without saying so)
+    // stops costing an encoder here after a few seconds.
+    else if (pc.connectionState === "disconnected") lost = setTimeout(drop, 8000);
     drawSeat();
   };
   pc.addTrack(outTrack(), stream);
   await pc.setRemoteDescription({ type: "offer", sdp: unhide(m.sdp, m.ip, new URL(base).hostname) });
+  preferH264(pc);
   await pc.setLocalDescription(await pc.createAnswer());
-  // Plenty for a cam this size on screen, and easy on the network.
-  for (const sender of pc.getSenders()) {
-    const p = sender.getParameters();
-    p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
-    // (the GFX Engine's Camera Control Room shows every cam small)
-    p.encodings[0].maxBitrate = m.preview ? 700000 : 2500000;
-    if (m.preview) p.encodings[0].scaleResolutionDownBy = 2;
-    sender.setParameters(p).catch(() => {});
-  }
+  for (const sender of pc.getSenders()) await tuneSender(sender, pc.preview);
   await gathered(pc);
   await post("/api/cam/send", { to: m.from, from: ME, data: { type: "answer", sdp: pc.localDescription.sdp } });
 }
@@ -656,8 +709,13 @@ async function start() {
   openCamera(stored("camDevice"));
   loop();
   if (APP) (async function updates() {
-    try { showUpdate((await (await fetch("/api/state")).json()).app.update); } catch (e) {}
-    setTimeout(updates, 5000);
+    let busy = false;
+    try {
+      const u = (await (await fetch("/api/state")).json()).app.update;
+      showUpdate(u);
+      busy = ["checking", "downloading", "installing"].includes(u.status);
+    } catch (e) {}
+    setTimeout(updates, busy ? 1000 : 30000);   // (often only while an update's under way)
   })();
 }
 // --- finding the HUD -------------------------------------------------------------

@@ -205,3 +205,11 @@ class PlayerCamAppTests(unittest.TestCase):
                 self.assertIn("error", json.loads(r.read()))
         finally:
             httpd.shutdown()
+
+
+class PlayerCamPriorityTest(unittest.TestCase):
+    def test_descendants_any_depth(self):
+        from lolhud.camapp import descendants
+        procs = [(1, 0), (10, 1), (11, 10), (12, 11), (13, 10), (20, 2), (0, 0)]
+        self.assertEqual(sorted(descendants(procs, 10)), [11, 12, 13])
+        self.assertEqual(descendants(procs, 99), [])

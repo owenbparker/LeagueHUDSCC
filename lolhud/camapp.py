@@ -236,6 +236,127 @@ def allow_camera(window):
         STATUS["camera_ready"] = True
 
 
+# --- staying out of the game's way -----------------------------------------------
+#
+# Player Cam runs on the PC the player is gaming on, so it (and the Edge
+# WebView2 processes its window starts: the page, the graphics process that
+# encodes the cam...) runs below the game: lower processor priority, the
+# graphics card's lower scheduling priority, and Windows' efficiency mode
+# (on CPUs with efficiency cores it runs there, off the cores the game uses).
+# Windows hands a below-normal priority on to new child processes; the
+# watcher catches any that set their own.
+
+BELOW_NORMAL_PRIORITY_CLASS = 0x4000
+_RAISED = {0x20: "normal", 0x8000: "above normal", 0x80: "high"}   # (lowered; idle is left alone)
+
+
+def descendants(procs, root):
+    """The pids under root (any depth), from [(pid, parent pid)]."""
+    children = {}
+    for pid, ppid in procs:
+        if pid != ppid:
+            children.setdefault(ppid, []).append(pid)
+    out, todo = [], list(children.get(root, []))
+    while todo:
+        pid = todo.pop()
+        if pid in out or pid == root:
+            continue
+        out.append(pid)
+        todo.extend(children.get(pid, []))
+    return out
+
+
+def _processes():
+    """[(pid, parent pid)] of every process (Windows)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class ENTRY(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_void_p), ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snap = k32.CreateToolhelp32Snapshot(0x2, 0)   # TH32CS_SNAPPROCESS
+    if not snap or snap == wintypes.HANDLE(-1).value:
+        return []
+    out, e = [], ENTRY()
+    e.dwSize = ctypes.sizeof(ENTRY)
+    try:
+        ok = k32.Process32FirstW(wintypes.HANDLE(snap), ctypes.byref(e))
+        while ok:
+            out.append((e.th32ProcessID, e.th32ParentProcessID))
+            ok = k32.Process32NextW(wintypes.HANDLE(snap), ctypes.byref(e))
+    finally:
+        k32.CloseHandle(wintypes.HANDLE(snap))
+    return out
+
+
+def _calm(pid, first):
+    """Below the game: processor priority (each time, in case it was raised),
+    and the first time, efficiency mode and the graphics card's priority."""
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.restype = wintypes.HANDLE
+    # PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION
+    h = k32.GetCurrentProcess() if pid == os.getpid() else k32.OpenProcess(0x0200 | 0x1000, False, pid)
+    if not h:
+        return
+    h = wintypes.HANDLE(h)
+    try:
+        if k32.GetPriorityClass(h) in _RAISED:
+            k32.SetPriorityClass(h, BELOW_NORMAL_PRIORITY_CLASS)
+        if first:
+            class THROTTLE(ctypes.Structure):   # PROCESS_POWER_THROTTLING_STATE
+                _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG)]
+            eco = THROTTLE(1, 0x1, 0x1)   # execution speed: throttled (EcoQoS)
+            try:
+                k32.SetProcessInformation(h, 4, ctypes.byref(eco), ctypes.sizeof(eco))   # ProcessPowerThrottling
+            except AttributeError:
+                pass   # (before Windows 8)
+            try:
+                ctypes.WinDLL("gdi32").D3DKMTSetProcessSchedulingPriorityClass(h, 1)   # BELOW_NORMAL
+            except (AttributeError, OSError):
+                pass
+    finally:
+        if pid != os.getpid():
+            k32.CloseHandle(h)
+
+
+def stay_out_of_the_way(every=10):
+    """Lower this app and every process it starts below the game (Windows)."""
+    if sys.platform != "win32" or os.environ.get("PLAYERCAM_NORMAL_PRIORITY"):
+        return
+    seen = set()
+
+    def once():
+        me = os.getpid()
+        for pid in [me] + descendants(_processes(), me):
+            try:
+                _calm(pid, pid not in seen)
+            except Exception:
+                pass
+            seen.add(pid)
+
+    try:
+        once()
+    except Exception as e:
+        log(f"Couldn't lower Player Cam's priority ({e!r})", "warn")
+        return
+
+    def watch():
+        import time
+        while True:
+            time.sleep(every)
+            try:
+                once()
+            except Exception:
+                pass
+    threading.Thread(target=watch, daemon=True, name="stay-out-of-the-way").start()
+
+
 def smoke_test(port):
     """Used by the build: the packaged app serves its page and has its window
     library. Writes smoke-test.txt next to the app."""
@@ -254,6 +375,15 @@ def smoke_test(port):
     except Exception as e:
         ok = False
         results.append(f"FAIL camera settings: {e!r}")
+    if sys.platform == "win32":
+        try:
+            found = _processes()
+            assert any(pid == os.getpid() for pid, _ in found)
+            _calm(os.getpid(), True)
+            results.append(f"OK   below the game ({len(found)} processes)")
+        except Exception as e:
+            ok = False
+            results.append(f"FAIL below the game: {e!r}")
     try:
         import webview  # noqa: F401
         if sys.platform == "win32":
@@ -285,6 +415,8 @@ def main():
         httpd.shutdown()
         return 0 if ok else 1
     clean_up_old_update()
+    # Before the window, so its processes start below the game too.
+    stay_out_of_the_way()
     updater.check_in_background()
     url = f"http://127.0.0.1:{port}/cam?app=1"
     # Belt and braces with allow_camera(): WebView2 answers camera prompts
