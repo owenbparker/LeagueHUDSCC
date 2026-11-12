@@ -16,7 +16,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import outputs
+from . import appearance, outputs
 from .cams import CamHub, Director, get_json, post_json
 from .config import DATA_DIR, LOGO_DIR, MEDIA_DIR, SPONSOR_DIR, WEB_DIR, web_file
 from .gold import DataDragon
@@ -762,6 +762,8 @@ def make_handler(app):
         def do_GET(self):
             url = urlparse(self.path)
             path = url.path
+            if appearance.handle(self, "GET", path, DATA_DIR):
+                return
             fields = app.snapshot()["fields"]
             if path == "/":
                 self.send_response(302)
@@ -867,6 +869,8 @@ def make_handler(app):
         def do_POST(self):
             url = urlparse(self.path)
             path = url.path
+            if appearance.handle(self, "POST", path, DATA_DIR):
+                return
             length = int(self.headers.get("Content-Length") or 0)
             if path == "/api/companion":
                 # Bitfocus Companion: from this PC, or from another PC when allowed.
