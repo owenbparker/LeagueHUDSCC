@@ -3,7 +3,8 @@
 # The app checks the latest release on launch and offers to update itself.
 # Each release also gets SCC-LoL-Companion-module.tgz (the Bitfocus Companion
 # module, imported in Companion's Modules page) and SCC-LoL-HUD-Setup.exe, an installer that downloads
-# the latest release from GitHub when it runs.
+# the latest release from GitHub when it runs. SCC Player Cam is built in
+# owenbparker/playercam_SCC; a copy of its latest release is attached here too.
 #
 # A commit with [no release] in its message builds and tests without publishing.
 #
@@ -136,18 +137,6 @@ jobs:
           name: LeagueHUD-windows
           path: dist/LeagueHUD
 
-      - name: Build PlayerCam.exe (the players' webcam app)
-        run: pyinstaller --noconfirm PlayerCam.spec
-
-      - name: Smoke test the Player Cam app
-        shell: pwsh
-        run: |
-          $app = "dist\PlayerCam"
-          $p = Start-Process "$app\PlayerCam.exe" -ArgumentList '--smoke-test' -PassThru -Wait
-          Get-Content "$app\smoke-test.txt"
-          if ($p.ExitCode -ne 0) { throw "Player Cam smoke test failed (exit code $($p.ExitCode))" }
-          Remove-Item "$app\smoke-test.txt" -ErrorAction SilentlyContinue
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -173,8 +162,6 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y | Out-Null }
           & $iscc "/DAppVersion=$($env:VERSION.TrimStart('v'))" installer\SCC-LoL-HUD.iss
           if ($LASTEXITCODE) { exit 1 }
-          & $iscc "/DAppVersion=$($env:VERSION.TrimStart('v'))" installer\SCC-Player-Cam.iss
-          if ($LASTEXITCODE) { exit 1 }
 
       - name: Publish release
         if: "!contains(github.event.head_commit.message, '[no release]')"
@@ -184,13 +171,21 @@ jobs:
         run: |
           # Never ship a test run's settings or https certificate (it has a private key).
           foreach ($f in "config.json", "certs", "webview") {
-            if ((Test-Path "dist\LeagueHUD\$f") -or (Test-Path "dist\PlayerCam\$f")) { throw "Test leftover in the app: $f" }
+            if (Test-Path "dist\LeagueHUD\$f") { throw "Test leftover in the app: $f" }
           }
           Compress-Archive -Path dist\LeagueHUD\* -DestinationPath LeagueHUD-windows.zip
-          Compress-Archive -Path dist\PlayerCam\* -DestinationPath PlayerCam-windows.zip
           $notes = git log -1 --format=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' }
           $notes = ($notes -join "`n").Trim()
-          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe PlayerCam-windows.zip dist\SCC-Player-Cam-Setup.exe SCC-LoL-Companion-module.tgz --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
+          # SCC Player Cam is built in owenbparker/playercam_SCC now. Player Cam
+          # installs from before the move (up to v1.0.89) still look for
+          # PlayerCam-windows.zip on this repo's latest release, so a copy of
+          # Player Cam's latest release rides along; it moves them to the new repo.
+          $cam = @()
+          gh release download -R owenbparker/playercam_SCC --pattern PlayerCam-windows.zip --pattern SCC-Player-Cam-Setup.exe --dir playercam-latest
+          if ($LASTEXITCODE -eq 0 -and (Test-Path playercam-latest\PlayerCam-windows.zip)) { $cam = Get-ChildItem playercam-latest\* | ForEach-Object { $_.FullName } }
+          else { Write-Host "::warning::Couldn't copy Player Cam's latest release; publishing without it" }
+          $global:LASTEXITCODE = 0
+          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe SCC-LoL-Companion-module.tgz @cam --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -198,7 +193,7 @@ jobs:
         if: "!contains(github.event.head_commit.message, '[no release]')"
         shell: pwsh
         run: |
-          foreach ($t in @(@{ setup = "SCC-LoL-HUD-Setup.exe"; exe = "LeagueHUD.exe" }, @{ setup = "SCC-Player-Cam-Setup.exe"; exe = "PlayerCam.exe" })) {
+          foreach ($t in @(@{ setup = "SCC-LoL-HUD-Setup.exe"; exe = "LeagueHUD.exe" })) {
             $dir = "$env:RUNNER_TEMP\$($t.exe) test"
             $installArgs = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"", '/MERGETASKS="!desktopicon"', '/LOG=install.log'
             $p = Start-Process "dist\$($t.setup)" -ArgumentList $installArgs -PassThru -Wait

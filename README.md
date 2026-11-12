@@ -159,7 +159,7 @@ Each team gets a player cam along the bottom of the HUD, spaced like the LEC's: 
 
 **Getting the cams in** (control panel -> **Webcams**, a row per player):
 - **Player cam link, in a browser (least delay):** send players the **Player cam link** shown in the Webcams section (`https://<GFX PC>:8779/cam`; the plain `http://<GFX PC>:8777/cam` forwards there). They open it in Chrome or Edge, allow the camera, and pick their team and role. It's https because browsers only allow the camera on secure pages. The HUD makes its own certificate, so the first visit shows "Your connection isn't private": **Advanced -> Continue**.
-- **SCC Player Cam app:** the same thing as a small app of its own, for players who'd rather not use a browser. Install it with **[SCC-Player-Cam-Setup.exe](https://github.com/owenbparker/LeagueHUDSCC/releases/latest/download/SCC-Player-Cam-Setup.exe)** (to `C:\SCC Player Cam`, with a desktop shortcut). Players enter the GFX PC's address (e.g. `192.168.2.40`). There's no certificate warning, it remembers their address, team, role and camera, and it updates itself like the HUD.
+- **SCC Player Cam app:** the same thing as a small app of its own, for players who'd rather not use a browser. Install it with **[SCC-Player-Cam-Setup.exe](https://github.com/owenbparker/playercam_SCC/releases/latest/download/SCC-Player-Cam-Setup.exe)** (to `C:\SCC Player Cam`, with a desktop shortcut). Players enter the GFX PC's address (e.g. `192.168.2.40`). There's no certificate warning, it remembers their address, team, role and camera, and it updates itself like the HUD.
 
   Either way, the video goes straight from the player's PC to each overlay showing it, peer to peer over the local network (WebRTC), so there's no relay delay. The GFX PC must tick **Let other PCs on the network read the HUD**. Same network only. The tab or window can be minimised while they play. **Swap teams left/right** moves the cams with their teams.
 - **Link:** paste a VDO.Ninja view link (or any page that shows just the cam) in the player's box. It works from anywhere, with VDO.Ninja's delay. For VDO.Ninja links the HUD adds `&cover&cleanoutput&noaudio`, so the cam fills its space without controls or sound. A link takes over from a player cam in the same seat.
@@ -214,7 +214,7 @@ lolhud/          the app (Python standard library; the desktop window also uses 
   ocr.py           reads team gold off the spectator top bar (Windows text recognition)
   cams.py          webcams: connects player cams to overlays, picks who's on camera, reads name tags
   tls.py           the https certificate for the player cam link
-  camapp.py        the SCC Player Cam app (PlayerCam.py / PlayerCam.spec, installer/SCC-Player-Cam.iss)
+  (the SCC Player Cam app lives in its own repo: owenbparker/playercam_SCC)
   updater.py       checks GitHub releases and installs updates; version.py holds the build's version
   profiles.py      HUD profiles (built-in in web/profiles/, imported in profiles/)
   psd_import.py    turns a PSD into a HUD profile

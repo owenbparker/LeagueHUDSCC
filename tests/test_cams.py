@@ -179,38 +179,3 @@ class HttpsTests(unittest.TestCase):
                 self.assertIsNone(secure_base("http://127.0.0.1:8899"))
             finally:
                 app.stop()
-
-
-class PlayerCamAppTests(unittest.TestCase):
-    def test_riot_account_without_the_riot_client(self):
-        import tempfile
-        from lolhud import camapp
-        self.assertIn("isn't running", camapp.riot_account("/nonexistent/lockfile")["error"])
-        with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "lockfile")
-            with open(path, "w") as f:
-                f.write("Riot Client:1:1:pw:https")      # nothing listening on port 1
-            self.assertIn("Sign in", camapp.riot_account(path)["error"])
-
-    def test_page_and_logos_served(self):
-        from lolhud import camapp
-        from lolhud.updater import Updater
-        httpd = camapp.serve(Updater(asset="PlayerCam-windows.zip", exe="PlayerCam.exe", name="SCC Player Cam"))
-        try:
-            port = httpd.server_address[1]
-            for path in ("/cam", "/assets/games/lol.svg", "/assets/games/valorant.svg", "/assets/games/cod.svg",
-                         "/assets/games/rl.svg"):
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
-                    self.assertTrue(r.read())
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/riot/account", timeout=10) as r:
-                self.assertIn("error", json.loads(r.read()))
-        finally:
-            httpd.shutdown()
-
-
-class PlayerCamPriorityTest(unittest.TestCase):
-    def test_descendants_any_depth(self):
-        from lolhud.camapp import descendants
-        procs = [(1, 0), (10, 1), (11, 10), (12, 11), (13, 10), (20, 2), (0, 0)]
-        self.assertEqual(sorted(descendants(procs, 10)), [11, 12, 13])
-        self.assertEqual(descendants(procs, 99), [])

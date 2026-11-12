@@ -295,7 +295,7 @@ $("cam-retry").onclick = () => openCamera($("camera").value || stored("camDevice
 // The control room sends {type: "camctl", get / set / reset} through the HUD;
 // this page sets the camera and answers with its settings ("camstate"). The
 // browser sets most of them on the camera itself; in the app, the camera's
-// driver does the rest (gain, backlight...: lolhud/camprops.py). A camera
+// driver does the rest (gain, backlight...: playercam/camprops.py in playercam_SCC). A camera
 // with no zoom of its own gets a digital one: the picture sent is cropped.
 // What's set is kept per camera on this PC and set again when it's opened.
 const PC_ID = stored("camPcId") || Math.random().toString(16).slice(2, 14);
@@ -314,7 +314,7 @@ const BROWSER = {
   pan: ["Pan", "framing", "pan"],
   tilt: ["Tilt", "framing", "tilt"],
 };
-// The driver's names (lolhud/camprops.py) -> key, label, group.
+// The driver's names (playercam/camprops.py in playercam_SCC) -> key, label, group.
 const DRIVER = {
   gain: ["gain", "Gain (ISO)", "light"], whitebalance: ["wb", "White balance", "light"],
   exposure: ["exposure", "Exposure", "light"], brightness: ["brightness", "Brightness", "light"],
