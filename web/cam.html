@@ -15,140 +15,198 @@
        - in the SCC Player Cam app (/cam?app=1, served by the app on this PC),
          which asks for the GFX PC's address. -->
 <style>
+  /* The SCC Broadcast Engine look (calm neutral panels, white pill for the
+     picked item, red tally while on the HUD), kept cheap for a gaming PC:
+     flat fills (no backdrop blur), a solid background, no animations or
+     transitions, so nothing redraws while the game runs. */
   @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
-  :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b; --accent: #31c392; }
+  :root { --bg: #0c0c0e; --panel: #1a1a1c; --well: rgba(0,0,0,.35); --line: rgba(255,255,255,.09); --text: #f2f2f7;
+          --muted: #8e8e93; --muted2: #aeaeb2; --pill: rgba(255,255,255,.92); --green: #30d158; --red: #ff375f; --yellow: #f5c518; }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif; }
-  header { display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  header h1 { margin: 0; font-size: 16px; font-weight: 700; }
-  header span { color: var(--muted); }
-  header .right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-  header a { color: var(--muted); text-decoration: none; font-size: 13px; }
-  header a:hover { color: var(--text); }
-  main { min-height: calc(100% - 54px); display: grid; place-items: center; padding: 16px; }
-  .wrap { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 420px); gap: 16px; width: min(880px, 100%); }
-  @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
-  label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 12px; }
-  label:first-child { margin-top: 0; }
-  input, select { width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
-  input:focus, select:focus { outline: none; border-color: var(--accent); }
-  .row { display: flex; gap: 10px; }
-  .row > * { flex: 1; }
-  .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .seg button { flex: 1; border: 0; padding: 10px 8px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
-  .seg button + button { border-left: 1px solid var(--line); }
-  .seg button.on { background: var(--accent); color: #06231a; font-weight: 600; }
-  .roles button { font-size: 12px; padding: 8px 4px; line-height: 1.25; }
-  .roles small { display: block; font-size: 11px; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .status { min-height: 20px; margin-top: 12px; font-size: 12px; color: var(--muted); }
-  .status.ok { color: var(--accent); }
-  .status.bad { color: #ffcf66; }
-  .preview { position: relative; aspect-ratio: 174 / 259; max-height: 60vh; margin: 0 auto; background: #000; border-radius: 8px; overflow: hidden; }
-  .preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-  .preview .live { position: absolute; top: 10px; left: 10px; padding: 3px 8px; border-radius: 4px; font: 700 11px "Inter", sans-serif;
-                   letter-spacing: .06em; background: rgba(0,0,0,.6); color: var(--muted); }
-  .preview .live.on { background: #d6243a; color: #fff; }
-  .note { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
-  .cam-line { align-items: center; }
-  .cam-line .status:empty { display: none; }
-  .retry { flex: 0 0 auto !important; margin-top: 12px; padding: 6px 12px; background: #252a2f; color: var(--text);
-           border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; }
-  body:not(.app) .app-only { display: none !important; }
-  .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
-  .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
-  .update.error { background: #6b2a2a; color: #fff; }
-  .version { font-size: 12px; color: var(--muted); }
-  .update.check { background: #252a2f; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+         display: grid; justify-items: center; padding: 10px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .card { width: min(460px, 100%); min-height: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 22px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.08); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .top .lg { width: 22px; height: 22px; border-radius: 6px; }
+  .top h1 { margin: 0; font-size: 14.5px; font-weight: 700; }
+  .top .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 11px; border-radius: 999px; border: 0;
+          background: rgba(255,255,255,.08); font-size: 12px; }
+  .pill:hover { background: rgba(255,255,255,.14); }
+  .pill img { height: 20px; max-width: 96px; object-fit: contain; }
+  .pill .dd { font-size: 8px; opacity: .6; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 0;
+         background: rgba(255,255,255,.09); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.15); }
+  .btn.sm { padding: 5px 11px; font-size: 12px; }
+  .btn[disabled] { opacity: .6; cursor: progress; }
+  svg.i { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
-  /* The game picker (the app opens on it). */
-  #picker { min-height: calc(100% - 54px); display: grid; place-items: center; padding: 24px; }
-  #picker .games { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
-  #picker button { width: 300px; height: 190px; display: grid; place-items: center; padding: 34px; cursor: pointer;
-                   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-                   transition: border-color .15s, transform .15s, background .15s; }
-  #picker button:hover, #picker button:focus-visible { border-color: var(--accent); background: #1c2024; transform: translateY(-2px); outline: none; }
-  #picker button img { width: 232px; height: 122px; object-fit: contain; display: block; }
-  body.picking main, body:not(.picking) #picker { display: none; }
-  #switch-game { display: flex; align-items: center; height: 30px; padding: 4px 10px; background: transparent;
-                 border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
-  #switch-game img { height: 20px; }
-  #switch-game:hover { border-color: var(--accent); }
-  body.picking #switch-game { display: none; }
-  body:not(.game-lol) .lol-only, body:not(.game-val) .val-only, body:not(.game-cod) .cod-only, body:not(.game-rl) .rl-only { display: none !important; }
-  .riot-row { display: flex; gap: 8px; margin-top: 8px; }
-  .riot-row button { flex: 0 0 auto; padding: 8px 12px; border-radius: 6px; font: 600 13px "Inter", system-ui, sans-serif; cursor: pointer;
-                     background: #d13639; color: #fff; border: 0; }
-  .riot-row button:hover { background: #e2474a; }
-  .connected { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 14px; border-radius: 6px;
-               background: rgba(49,195,146,.14); color: var(--accent); font-weight: 700; font-size: 15px; }
-  .connected::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-  .connected[hidden] { display: none; }
-  .find-row { display: flex; gap: 8px; align-items: stretch; }
+  /* What's happening, at the top: grey (not yet), green (ready), red (on the HUD). */
+  .state { display: flex; align-items: center; gap: 11px; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,.05); }
+  .state .dot { width: 9px; height: 9px; border-radius: 50%; background: #636366; flex: none; }
+  .state .big { font-size: 16px; font-weight: 700; }
+  .state .status { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .state .status.bad { color: #ffcf66; }
+  .state.ready .dot { background: var(--green); }
+  .state.live { background: rgba(255,55,95,.13); }
+  .state.live .dot { background: var(--red); }
+  .state.live .big { color: #ff6b88; letter-spacing: .02em; }
+
+  /* The preview: the shape the HUD shows. Off once everything's set up. */
+  .hero { position: relative; height: 200px; border-radius: 16px; overflow: hidden; background: #141416; display: grid; place-items: center; flex: none; }
+  .hero.live { box-shadow: inset 0 0 0 2px var(--red); }
+  .hero .frame { height: 100%; aspect-ratio: 174 / 259; background: #000; overflow: hidden; }
+  body.game-val .hero .frame { aspect-ratio: 16 / 9; height: auto; width: 100%; max-height: 100%; }
+  body.game-rl .hero .frame { aspect-ratio: 16 / 9; height: auto; width: 100%; max-height: 100%; }
+  body.game-cod .hero .frame { aspect-ratio: 175 / 130; }
+  .hero video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+  .hero .off { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 12.5px; padding: 0 24px; background: #141416; }
+  .hero .off b { display: block; color: #fff; font-size: 15px; margin: 6px 0 2px; }
+  .hero .off svg.i { width: 26px; height: 26px; }
+  .hero .off .btn { margin-top: 12px; }
+  .hero .hide { position: absolute; right: 10px; bottom: 10px; background: rgba(0,0,0,.6); }
+  .hero:not(.preview-off) .off, .hero.preview-off .frame, .hero:not(.peeking) .hide { display: none; }
+
+  /* Setup: three steps, each folds to one line once it's done. */
+  main { display: flex; flex-direction: column; gap: 10px; counter-reset: step; flex: 1; }
+  .step { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 16px; padding: 11px 14px; counter-increment: step; }
+  .step .h { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600; min-height: 26px; }
+  .step .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px; font-weight: 700;
+             background: rgba(255,255,255,.1); flex: none; }
+  .step .n::before { content: counter(step); }
+  .step.done .n { background: var(--green); }
+  .step.done .n::before { content: ""; width: 9px; height: 5px; border-left: 2.5px solid #04210d; border-bottom: 2.5px solid #04210d;
+                          transform: translate(0, -1px) rotate(-45deg); }
+  .step .v { margin-left: auto; min-width: 0; display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 400; font-size: 12.5px; }
+  .step .v .sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .step .change { border: 0; background: rgba(255,255,255,.08); padding: 3px 10px; border-radius: 999px; font-size: 12px; color: #fff; flex: none; }
+  .step .change:hover { background: rgba(255,255,255,.15); }
+  .step:not(.done) .change, .step:not(.done) .sum { display: none; }
+  .step.done:not(.open) .bd { display: none; }
+  .step .bd { margin-top: 10px; }
+  label { display: block; margin: 12px 0 6px; color: var(--muted); font-size: 12px; font-weight: 500; }
+  label:first-child { margin-top: 0; }
+  input, select { width: 100%; padding: 9px 12px; background: var(--well); color: var(--text); border: 1px solid var(--line); border-radius: 12px; font: inherit; font-size: 13.5px; }
+  select option { background: #1c1c1e; }
+  input:focus, select:focus { outline: none; border-color: rgba(255,255,255,.45); }
+  input::placeholder { color: #636366; }
+  .segc { display: flex; gap: 4px; background: var(--well); padding: 3px; border-radius: 999px; }
+  .segc + .segc { margin-top: 6px; }
+  .segc button { flex: 1; min-width: 0; border: 0; background: transparent; padding: 6px 4px; border-radius: 999px; font-size: 13px; color: #d1d1d6; line-height: 1.2; }
+  .segc button:hover { background: rgba(255,255,255,.06); }
+  .segc button small { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .segc button.on { background: var(--pill); color: #000; font-weight: 600; }
+  .segc button.on small { color: #3a3a3c; }
+  .find-row { display: flex; gap: 8px; }
   .find-row input { flex: 1; min-width: 0; }
-  .find-row button, .found button { flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; border-radius: 6px; cursor: pointer;
-                                   font: 600 13px "Inter", system-ui, sans-serif; background: #252a2f; color: var(--text); border: 1px solid var(--line); }
-  .find-row button:hover, .found button:hover { border-color: var(--muted); }
-  .find-row button[disabled] { opacity: .6; cursor: progress; }
   .found { display: grid; gap: 6px; margin-top: 8px; }
   .found[hidden] { display: none; }
-  .found button { text-align: left; }
+  .found button { text-align: left; border: 1px solid var(--line); background: var(--well); border-radius: 12px; padding: 8px 12px; }
+  .found button:hover { border-color: rgba(255,255,255,.3); }
   .found button small { color: var(--muted); margin-left: 8px; }
-  body.game-val .preview { aspect-ratio: 16 / 9; }
-  body.game-cod .preview { aspect-ratio: 175 / 130; }
+  .riot-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .riot-row button { background: #d13639; color: #fff; font-weight: 600; }
+  .riot-row button:hover { background: #e2474a; }
+  .status { font-size: 12px; color: var(--muted); }
+  .status.ok { color: var(--green); }
+  .status.bad { color: #ffcf66; }
+  .cam-line { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .cam-line .status:empty { display: none; }
+  .cam-line:has(.status:empty) { display: none; }
+  .tip { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+  .note { color: var(--muted); font-size: 12px; margin: 0 2px; }
+  .foot { margin-top: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; padding: 2px 2px 0; }
+  .foot .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .update { border: 0; padding: 4px 11px; border-radius: 999px; background: var(--yellow); color: #1d1600; font-weight: 700; font-size: 12px; }
+  .update[disabled] { background: rgba(255,255,255,.09); color: var(--text); cursor: default; font-weight: 500; }
+  .update.error { background: #6b2a2a; color: #fff; }
+  .update.check { background: rgba(255,255,255,.08); color: var(--text); font-weight: 500; }
+  .version { font-size: 11.5px; color: var(--muted); }
+  body:not(.app) .app-only { display: none !important; }
+
+  /* The game picker (the app opens on it). */
+  #picker { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  #picker h2 { margin: 8px 2px 0; font-size: 22px; font-weight: 700; }
+  #picker .sub { margin: 0 2px 6px; color: var(--muted2); font-size: 13px; }
+  #picker button { display: flex; align-items: center; gap: 16px; text-align: left; padding: 14px 16px; border-radius: 16px;
+                   background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+  #picker button:hover, #picker button:focus-visible { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.5); outline: none; }
+  #picker button img { width: 112px; height: 46px; object-fit: contain; flex: none; }
+  #picker button b { display: block; font-size: 15px; }
+  #picker button small { color: var(--muted); font-size: 12px; }
+  body.picking main, body:not(.picking) #picker, body.picking #switch-game { display: none; }
+  body:not(.game-lol) .lol-only, body:not(.game-val) .val-only, body:not(.game-cod) .cod-only, body:not(.game-rl) .rl-only { display: none !important; }
 </style>
 </head>
 <body>
-<header>
-  <h1>SCC Player Cam</h1><span id="hud-name"></span>
-  <button id="switch-game" class="app-only" title="Change game"><img id="game-logo" alt=""></button>
-  <div class="right app-only">
-    <button id="update" class="update" hidden></button>
-    <span class="version" id="version"></span>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3 3.9M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 4 13c0-6 6-9 16-9 0 10-3 16-9 16z"/><path d="M4 20c4-4 7-6 10-7"/></symbol>
+</defs></svg>
+<div class="card">
+<header class="top">
+  <img class="lg" src="assets/playercam_icon.png" alt=""><h1>SCC Player Cam</h1>
+  <div class="right">
+    <button id="switch-game" class="pill app-only" title="Change game"><img id="game-logo" alt=""><span class="dd">▼</span></button>
   </div>
 </header>
 <div id="picker">
-  <div class="games">
-    <button data-game="lol" title="League of Legends"><img src="assets/games/lol.svg" alt="League of Legends"></button>
-    <button data-game="val" title="VALORANT"><img src="assets/games/valorant.svg" alt="VALORANT"></button>
-    <button data-game="cod" title="Call of Duty"><img src="assets/games/cod.svg" alt="Call of Duty"></button>
-    <button data-game="rl" title="Rocket League"><img src="assets/games/rl.svg" alt="Rocket League"></button>
-  </div>
+  <h2>Which game are you playing?</h2>
+  <p class="sub">Your cam goes straight to that game's HUD on the GFX PC.</p>
+  <button data-game="lol" title="League of Legends"><img src="assets/games/lol.svg" alt=""><span><b>League of Legends</b><small>Pick your team and role</small></span></button>
+  <button data-game="val" title="VALORANT"><img src="assets/games/valorant.svg" alt=""><span><b>VALORANT</b><small>Connects by your Riot ID</small></span></button>
+  <button data-game="cod" title="Call of Duty"><img src="assets/games/cod.svg" alt=""><span><b>Call of Duty</b><small>Connects by your in-game name</small></span></button>
+  <button data-game="rl" title="Rocket League"><img src="assets/games/rl.svg" alt=""><span><b>Rocket League</b><small>Connects by your in-game name</small></span></button>
 </div>
 <main>
-  <div class="wrap">
-    <section>
-      <label for="gfx" class="app-only">GFX PC address</label>
-      <div class="row find-row app-only"><input id="gfx" spellcheck="false" placeholder="192.168.2.40">
-        <button id="find" type="button">Connect to HUD</button></div>
-      <div class="found app-only" id="found" hidden></div>
-      <label class="lol-only">Team</label>
-      <div class="seg lol-only" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
-      <label class="lol-only">Player</label>
-      <div class="seg roles lol-only" id="role"></div>
-      <label for="riot-id" class="val-only">Riot ID</label>
-      <input id="riot-id" class="val-only" spellcheck="false" autocomplete="off" placeholder="Name#TAG">
-      <label for="cod-name" class="cod-only">In-game name</label>
-      <input id="cod-name" class="cod-only" spellcheck="false" autocomplete="off" placeholder="Your name in Call of Duty">
-      <label for="rl-name" class="rl-only">In-game name</label>
-      <input id="rl-name" class="rl-only" spellcheck="false" autocomplete="off" placeholder="Your name in Rocket League (Epic / Steam)">
-      <div class="riot-row val-only app-only"><button id="riot-sign-in" type="button">Sign in with Riot</button>
-        <div class="status" id="riot-status" style="margin:0;align-self:center"></div></div>
-      <label for="camera">Camera</label>
-      <select id="camera"></select>
-      <div class="row cam-line"><div class="status" id="cam-status"></div><button id="cam-retry" class="retry" hidden>Try again</button></div>
-      <div class="connected" id="connected" hidden>Connected</div>
-      <div class="status" id="status"></div>
-      <p class="note"><span class="app-only">Ask the GFX operator to tick "Let other PCs on the network read the HUD".</span>
-        Keep this <span id="window-word">window</span> open while you play (it can be minimised). Your cam shows on the
-        HUD when <span class="lol-only">the action is on you</span><span class="val-only">the observer is spectating you</span><span class="cod-only">the observer is spectating you</span><span class="rl-only">the observer is spectating you</span>.</p>
-    </section>
-    <section>
-      <div class="preview"><video id="preview" autoplay muted playsinline></video><span class="live" id="live">OFF AIR</span></div>
-    </section>
+  <div class="state" id="state"><span class="dot"></span><div><div class="big" id="live">Not on the HUD yet</div><span class="status" id="status"></span></div></div>
+  <div class="hero" id="hero">
+    <div class="frame"><video id="preview" autoplay muted playsinline></video></div>
+    <div class="off"><div><svg class="i"><use href="#i-eyeoff"/></svg><b>Preview off</b>Saves your PC's power. The HUD still gets your cam.
+      <div><button id="peek" class="btn sm" type="button"><svg class="i"><use href="#i-eye"/></svg>Show preview</button></div></div></div>
+    <button id="unpeek" class="btn sm hide" type="button"><svg class="i"><use href="#i-eyeoff"/></svg>Hide preview</button>
   </div>
+  <section class="step app-only" id="step-gfx">
+    <div class="h"><span class="n"></span>GFX PC<span class="v"><span class="sum" id="gfx-sum"></span><button class="change" type="button">Change</button></span></div>
+    <div class="bd">
+      <div class="find-row"><input id="gfx" spellcheck="false" placeholder="192.168.2.40" aria-label="GFX PC address">
+        <button id="find" class="btn" type="button">Connect to HUD</button></div>
+      <div class="found" id="found" hidden></div>
+      <p class="tip">Ask the GFX operator to tick "Let other PCs on the network read the HUD".</p>
+    </div>
+  </section>
+  <section class="step" id="step-seat">
+    <div class="h"><span class="n"></span><span class="lol-only">Your seat</span><span class="val-only">Riot ID</span><span class="cod-only">In-game name</span><span class="rl-only">In-game name</span>
+      <span class="v"><span class="sum" id="seat-sum"></span><button class="change" type="button">Change</button></span></div>
+    <div class="bd">
+      <div class="segc lol-only" id="team"><button data-side="left">Left team</button><button data-side="right">Right team</button></div>
+      <div class="segc lol-only" id="role"></div>
+      <input id="riot-id" class="val-only" spellcheck="false" autocomplete="off" placeholder="Name#TAG" aria-label="Riot ID">
+      <div class="riot-row val-only app-only"><button id="riot-sign-in" class="btn sm" type="button">Sign in with Riot</button>
+        <span class="status" id="riot-status"></span></div>
+      <input id="cod-name" class="cod-only" spellcheck="false" autocomplete="off" placeholder="Your name in Call of Duty" aria-label="In-game name">
+      <input id="rl-name" class="rl-only" spellcheck="false" autocomplete="off" placeholder="Your name in Rocket League (Epic / Steam)" aria-label="In-game name">
+    </div>
+  </section>
+  <section class="step" id="step-cam">
+    <div class="h"><span class="n"></span>Camera<span class="v"><span class="sum" id="cam-sum"></span><button class="change" type="button">Change</button></span></div>
+    <div class="bd">
+      <select id="camera" aria-label="Camera"></select>
+      <div class="cam-line"><span class="status" id="cam-status"></span><button id="cam-retry" class="btn sm" type="button" hidden>Try again</button></div>
+    </div>
+  </section>
+  <p class="note">Keep this <span id="window-word">window</span> open while you play (it can be minimised).</p>
+  <footer class="foot app-only">
+    <svg class="i"><use href="#i-leaf"/></svg><span class="app-only">Runs below your game's priority</span>
+    <div class="right app-only"><button id="update" class="update" hidden></button><span class="version" id="version"></span></div>
+  </footer>
 </main>
+</div>
 <script src="update.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -198,26 +256,79 @@ function gfxBase(text) {
   } catch (e) { return ""; }
 }
 
+let statusText = "", statusKind = "";
 function status(text, kind) {
-  $("status").textContent = text;
-  $("status").className = "status " + (kind || "");
-  $("connected").hidden = kind !== "ok";
+  statusText = text || "";
+  statusKind = kind || "";
+  drawState();
 }
+
+const esc = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 function drawSeat() {
   const [side, slot] = seat ? seat.split("-") : ["", ""];
   for (const b of $("team").children) {
     b.classList.toggle("on", b.dataset.side === side);
     const t = teams && teams[b.dataset.side];
-    b.textContent = t ? `${t.name} (${t.tricode})` : (b.dataset.side === "left" ? "Left team" : "Right team");
+    b.innerHTML = `${t ? esc(t.name) : (b.dataset.side === "left" ? "Left team" : "Right team")}<small>${b.dataset.side}</small>`;
   }
   const names = (teams && side && teams[side].players) || [];
   $("role").innerHTML = ROLES.map((r, i) =>
-    `<button data-slot="${i + 1}" class="${String(i + 1) === slot ? "on" : ""}">${r}<small>${names[i] || "&nbsp;"}</small></button>`).join("");
+    `<button data-slot="${i + 1}" class="${String(i + 1) === slot ? "on" : ""}">${r}<small>${esc(names[i]) || "&nbsp;"}</small></button>`).join("");
   for (const b of $("role").children) b.onclick = () => pickSeat(side || "left", b.dataset.slot);
-  const viewing = Object.values(viewers).filter(pc => pc.connectionState === "connected").length;
-  $("live").classList.toggle("on", viewing > 0);
-  $("live").textContent = viewing ? "ON THE HUD" : "OFF AIR";
+  drawState();
+}
+
+// --- what the window shows: the state at the top, the steps folded once done,
+// and the preview (off once everything's set up, unless asked for) ----------
+const viewing = () => Object.values(viewers).filter(pc => pc.connectionState === "connected").length;
+const opened = {};   // step id -> opened with Change
+let peek = false;    // the preview, asked for while everything's set up
+
+function seatSummary() {
+  if (byName()) return riotId;
+  if (!seat) return "";
+  const [side, slot] = seat.split("-");
+  const t = teams && teams[side];
+  const player = t && t.players && t.players[slot - 1];
+  return [t ? t.name : (side === "left" ? "Left team" : "Right team"), ROLES[slot - 1], player].filter(Boolean).join(" · ");
+}
+
+function drawSteps() {
+  const t = rawTrack();
+  const steps = {
+    "step-gfx": [online, base ? base.replace(/^https?:\/\//, "") : ""],
+    "step-seat": [!!seatSummary(), seatSummary()],
+    "step-cam": [!!t && $("cam-retry").hidden, t ? t.label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)$/i, "") : ""],
+  };
+  let left = 0;
+  for (const [id, [done, sum]] of Object.entries(steps)) {
+    const el = $(id);
+    el.classList.toggle("done", done);
+    el.classList.toggle("open", !!opened[id]);
+    el.querySelector(".sum").textContent = sum;
+    el.querySelector(".change").textContent = opened[id] ? "Done" : "Change";
+    if (!done && (APP || id !== "step-gfx")) left++;
+  }
+  return left;
+}
+for (const id of ["step-gfx", "step-seat", "step-cam"])
+  $(id).querySelector(".change").onclick = () => { opened[id] = !opened[id]; drawState(); };
+
+function drawState() {
+  const left = drawSteps(), live = viewing() > 0, ready = online && !left;
+  const on = { lol: "The action is on you", val: "The observer is spectating you", cod: "The observer is spectating you", rl: "The observer is spectating you" };
+  const show = { lol: "the action is on you", val: "the observer spectates you", cod: "the observer spectates you", rl: "the observer spectates you" };
+  $("state").className = "state" + (live ? " live" : ready ? " ready" : "");
+  $("live").textContent = live ? "ON THE HUD" : ready ? "Ready" : "Not on the HUD yet";
+  const st = $("status");
+  if (live) { st.textContent = [on[GAME], seatSummary()].filter(Boolean).join(" · "); st.className = "status"; }
+  else if (statusKind === "bad" || !ready) {
+    st.textContent = statusText || (left ? `${left} step${left > 1 ? "s" : ""} left` : "");
+    st.className = "status " + statusKind;
+  } else { st.textContent = `Connected. Your cam shows on the HUD when ${show[GAME] || show.lol}.`; st.className = "status"; }
+  $("hero").classList.toggle("live", live);
+  showPreview();
 }
 
 function pickSeat(side, slot) {
@@ -234,6 +345,8 @@ function camStatus(text, kind) {
   $("cam-status").textContent = text || "";
   $("cam-status").className = "status " + (kind || "");
   $("cam-retry").hidden = kind !== "bad";
+  if (kind === "bad") opened["step-cam"] = false;
+  drawState();
 }
 
 async function listCameras(current) {
@@ -347,12 +460,19 @@ function sendTrack() {
 
 // The preview only draws while this window can be seen: minimised, or behind
 // the game, it stops (the cam still goes to the HUD).
+// Once everything's set up (connected, seat or name, camera) it's off too,
+// unless asked for with Show preview: the HUD's copy is all that's needed.
 function showPreview() {
   const t = outTrack(), v = $("preview");
-  if (document.hidden || !t) { if (v.srcObject) v.srcObject = null; return; }
+  const setUp = $("state").classList.contains("ready") || $("state").classList.contains("live");
+  $("hero").classList.toggle("preview-off", setUp && !peek);
+  $("hero").classList.toggle("peeking", setUp && peek);
+  if (document.hidden || !t || (setUp && !peek)) { if (v.srcObject) v.srcObject = null; return; }
   if (!v.srcObject || v.srcObject.getVideoTracks()[0] !== t) v.srcObject = new MediaStream([t]);
 }
 document.addEventListener("visibilitychange", showPreview);
+$("peek").onclick = () => { peek = true; showPreview(); };
+$("unpeek").onclick = () => { peek = false; showPreview(); };
 
 // What each viewer is sent: shrunk to SEND.width wide at most (the Camera
 // Control Room's previews: half that), SEND.fps, and a modest bitrate.
@@ -780,6 +900,8 @@ function pickGame(game) {
   if (changed) {
     // Leave the other game's HUD and start again on this one's.
     for (const id of Object.keys(viewers)) { viewers[id].close(); delete viewers[id]; }
+    for (const id of Object.keys(opened)) delete opened[id];
+    peek = false;
     online = false;
     claim = !!seat;
     status("");
