@@ -13,3 +13,5 @@ winrt-Windows.Storage.Streams
 psd-tools
 # The https certificate for players' browser cams.
 cryptography
+# Custom design (HUD Builder): Figma files
+zstandard

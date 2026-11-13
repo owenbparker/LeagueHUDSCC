@@ -14,3 +14,5 @@ dist/
 /certs/
 sponsors/
 appearance.json
+# Custom design's HUDs and settings (hudbuilder/embed.py)
+hud-builder/
