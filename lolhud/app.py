@@ -511,7 +511,7 @@ class HudApp:
         snap = self._engine_snapshot()
         cfg = self.config.get()
         for side in ("left", "right"):
-            snap["series"][side]["logo"] = cfg[side].get("logo") or ""
+            snap["series"][side].setdefault("logo", cfg[side].get("logo") or "")
         return snap
 
     def stop(self):
