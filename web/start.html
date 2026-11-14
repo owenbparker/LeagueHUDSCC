@@ -6,33 +6,74 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>League HUD</title>
 <!-- First screen of the desktop app: pick the GFX controller (runs the HUD)
-     or the observer client (shows a GFX PC's HUD over the game). -->
+     or the observer client (shows a GFX PC's HUD over the game).
+     Same page in every SCC HUD with both clients; only the title differs. -->
 <style>
   @font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
-  :root { --bg: #0e1012; --panel: #171a1d; --line: #2a2f34; --text: #e8eaed; --muted: #8b939b; --accent: #31c392; }
+  @font-face { font-family: "Barlow Condensed"; src: url("fonts/BarlowCondensed-700.woff2") format("woff2"); font-weight: 700; }
+  :root { --bg: #111113; --surface: #1c1c1e; --fill: #2c2c2e; --text: #fff; --muted: #8e8e93;
+          --gfx: #f5c518; --on-gfx: #1d1600; --obs: #30d158; --on-obs: #04210d; --blue: #0a84ff; }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Inter", system-ui, sans-serif;
-         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; }
-  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: .01em; text-align: center; }
-  .choices { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; }
-  .choice { width: 260px; height: 190px; display: grid; place-items: center; background: var(--panel);
-            border: 2px solid var(--line); border-radius: 12px; color: var(--text); font: 700 22px "Inter", system-ui, sans-serif;
-            cursor: pointer; transition: transform .22s cubic-bezier(.2,.9,.3,1.2), box-shadow .22s ease, border-color .22s ease; }
-  .choice:hover, .choice:focus-visible { transform: scale(1.06); border-color: var(--accent); outline: none;
-            box-shadow: inset 0 0 28px rgba(49,195,146,.45), inset 0 0 4px rgba(49,195,146,.8); }
-  .choice:active { transform: scale(1.03); }
-  .update { padding: 6px 12px; background: var(--accent); color: #06231a; border: 0; border-radius: 6px; font: 700 13px "Inter", system-ui, sans-serif; cursor: pointer; }
-  .update:hover { filter: brightness(1.1); }
-  .update[disabled] { background: #2c3a35; color: var(--text); cursor: default; }
-  .update.error { background: #6b2a2a; color: #fff; }
-  .version { font-size: 12px; color: var(--muted); }
-  .update.check { background: #252a2f; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
-  .update.check:hover { filter: none; border-color: var(--muted); }
-  /* Lower third: the update button, smaller than the client choices. */
-  .updates { position: fixed; left: 0; right: 0; bottom: 9%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .updates .update { padding: 8px 18px; font-size: 14px; border-radius: 8px; transition: transform .18s ease; }
-  .updates .update:not([disabled]):hover { transform: scale(1.04); }
+         -webkit-font-smoothing: antialiased; display: grid; place-items: center; padding: 24px; }
+  .sheet { width: min(820px, 100%); }
+  .hd { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 22px; }
+  .appi { width: 76px; height: 76px; border-radius: 20px; display: grid; place-items: center; margin-bottom: 16px;
+          background: linear-gradient(160deg, #2a2a2d, #161618); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 30px rgba(0,0,0,.4); }
+  .appi img { width: 48px; height: 48px; object-fit: contain; }
+  h1 { margin: 0; font-size: 28px; font-weight: 700; }
+  .hd p { margin: 5px 0 0; color: var(--muted); }
+
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .tile { position: relative; overflow: hidden; border-radius: 18px; min-height: 300px; padding: 22px; display: flex; flex-direction: column;
+          justify-content: flex-end; background: var(--surface); color: inherit; font: inherit; text-align: left; border: 0; cursor: pointer;
+          transition: transform .2s cubic-bezier(.2,.9,.3,1.2), box-shadow .2s ease; }
+  .tile::before { content: ""; position: absolute; inset: 0; }
+  .tile.gfx::before { background: radial-gradient(70% 60% at 30% 30%, rgba(245,197,24,.28), transparent 70%), linear-gradient(160deg, #1d1a10, #0d0c08 70%); }
+  .tile.observer::before { background: radial-gradient(70% 60% at 30% 25%, rgba(48,209,88,.24), transparent 70%), linear-gradient(160deg, #0f1d13, #080c09 70%); }
+  .tile > * { position: relative; }
+  .tile.gfx.last, .tile.gfx:hover, .tile.gfx:focus-visible { box-shadow: 0 0 0 2px var(--gfx); }
+  .tile.observer.last, .tile.observer:hover, .tile.observer:focus-visible { box-shadow: 0 0 0 2px var(--obs); }
+  .tile:hover, .tile:focus-visible { transform: translateY(-2px); outline: none; }
+  .tile:active { transform: none; }
+  .tag { position: absolute; top: 20px; left: 22px; display: none; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+  .tile.last .tag { display: inline-block; }
+  .gfx .tag { background: rgba(245,197,24,.15); color: var(--gfx); }
+  .observer .tag { background: rgba(48,209,88,.15); color: var(--obs); }
+  .ico { width: 48px; height: 48px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 14px; }
+  .gfx .ico { background: var(--gfx); color: var(--on-gfx); }
+  .observer .ico { background: var(--obs); color: var(--on-obs); }
+  .ico svg { width: 24px; height: 24px; }
+  .tile h2 { margin: 0; font: 700 40px/.95 "Barlow Condensed", "Inter", sans-serif; text-transform: uppercase; letter-spacing: .01em; }
+  .tile p { margin: 6px 0 0; color: #c7c7cc; font-size: 13.5px; }
+  .bt { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; }
+  .go { display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; padding: 9px 16px; font-weight: 700; }
+  .gfx .go { background: var(--gfx); color: var(--on-gfx); }
+  .observer .go { background: var(--obs); color: var(--on-obs); }
+  .go svg { width: 16px; height: 16px; }
+  .kbd { color: var(--muted); font-size: 12.5px; }
+  .kbd b { border: 1px solid #48484a; border-radius: 5px; padding: 1px 6px; color: #d1d1d6; font-weight: 600; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+  .grp { background: var(--surface); border-radius: 14px; display: flex; align-items: center; gap: 14px; padding: 14px 16px; min-height: 59px; }
+  .note { color: var(--muted); font-size: 12.5px; padding: 7px 16px 0; }
+  .sw { margin-left: auto; position: relative; width: 51px; height: 31px; flex: none; }
+  .sw input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .sw span { position: absolute; inset: 0; border-radius: 16px; background: #39393d; transition: background .2s; pointer-events: none; }
+  .sw span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
+                    box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: transform .2s; }
+  .sw input:checked + span { background: var(--obs); }
+  .sw input:checked + span::after { transform: translateX(20px); }
+  .sw input:focus-visible + span { box-shadow: 0 0 0 3px rgba(10,132,255,.6); }
+  .upd { align-self: start; }
+  .update { background: none; border: 0; padding: 0; color: var(--blue); font: 500 15px "Inter", system-ui, sans-serif; cursor: pointer; }
+  .update[disabled] { color: var(--muted); cursor: default; }
+  .update.error { color: #ff453a; }
+  .update:not(.check):not([disabled]):not(.error) { color: var(--gfx); font-weight: 700; }
+  .version { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 720px) { .tiles, .two { grid-template-columns: 1fr; } .tile { min-height: 240px; } }
   /* Dark scroll bars (WebView2 otherwise draws the light Windows ones). */
   ::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
   ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
@@ -42,15 +83,39 @@
 </style>
 </head>
 <body>
-  <h1>Please select the appropriate client</h1>
-  <div class="choices">
-    <button class="choice" data-role="gfx">GFX Controller</button>
-    <button class="choice" data-role="observer">Observer Client</button>
+<main class="sheet">
+  <div class="hd">
+    <div class="appi"><img src="assets/app_icon.png" alt=""></div>
+    <h1>League HUD</h1>
+    <p>Choose how this PC takes part in the broadcast.</p>
   </div>
-  <div class="updates">
-    <button id="update" class="update" hidden></button>
-    <span class="version" id="version"></span>
+  <div class="tiles">
+    <button class="tile gfx" data-role="gfx">
+      <span class="tag">Last used</span>
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
+      <h2>GFX Controller</h2>
+      <p>Runs the HUD on this PC. Reads the game, controls graphics and sends them to OBS.</p>
+      <span class="bt"><span class="go">Open controller <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span><span class="kbd">press <b>1</b></span></span>
+    </button>
+    <button class="tile observer" data-role="observer">
+      <span class="tag">Last used</span>
+      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span>
+      <h2>Observer Client</h2>
+      <p>Shows the GFX PC's HUD over the game on this PC. Also used to scan additional information from the POV observer.</p>
+      <span class="bt"><span class="go">Open observer <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span><span class="kbd">press <b>2</b></span></span>
+    </button>
   </div>
+  <div class="two">
+    <div>
+      <label class="grp"><span>Open this role next time</span><span class="sw"><input type="checkbox" id="auto"><span></span></span></label>
+      <div class="note">Skips this screen. Use "Change client" in the HUD to come back here.</div>
+    </div>
+    <div class="grp upd">
+      <button id="update" class="update" hidden></button>
+      <span class="version" id="version"></span>
+    </div>
+  </div>
+</main>
 <script src="update.js"></script>
 <script>
 // Version and update, as in the GFX Controller's top bar.
@@ -61,17 +126,35 @@ async function poll() {
 }
 poll();
 
+const json = { method: "POST", headers: { "Content-Type": "application/json" } };
+const auto = document.getElementById("auto");
+
+// Remembered choice (start.json in the app's folder): mark the last client and the switch.
+fetch("/api/start").then(r => r.json()).then(s => {
+  auto.checked = !!s.auto;
+  const last = document.querySelector(`.tile[data-role="${s.last}"]`);
+  if (last) last.classList.add("last");
+}).catch(() => {});
+auto.onchange = () => fetch("/api/start", { ...json, body: JSON.stringify({ auto: auto.checked }) }).catch(() => {});
+
 // Back on this screen: neither client is running.
-fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"role":null}' }).catch(() => {});
-for (const b of document.querySelectorAll(".choice")) {
-  b.onclick = async () => {
-    const role = b.dataset.role;
-    try {
-      await fetch("/api/role", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) });
-    } catch (e) {}
-    location.href = role === "gfx" ? "/control" : "/observer";
-  };
+fetch("/api/role", { ...json, body: '{"role":null}' }).catch(() => {});
+
+async function choose(role) {
+  try {
+    await Promise.all([
+      fetch("/api/role", { ...json, body: JSON.stringify({ role }) }),
+      fetch("/api/start", { ...json, body: JSON.stringify({ last: role, auto: auto.checked }) }),
+    ]);
+  } catch (e) {}
+  location.href = role === "gfx" ? "/control" : "/observer";
 }
+for (const b of document.querySelectorAll(".tile")) b.onclick = () => choose(b.dataset.role);
+addEventListener("keydown", e => {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+  if (e.key === "1") choose("gfx");
+  else if (e.key === "2") choose("observer");
+});
 </script>
 </body>
 </html>

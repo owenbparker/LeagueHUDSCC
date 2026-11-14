@@ -75,7 +75,7 @@
     header.insertBefore(crumb, header.firstChild);
     // "Change client" and the version / update live in the sidebar's foot.
     const foot = document.getElementById("shell-foot");
-    for (const el of header.querySelectorAll('a[href="/start"], #switch, .version, #update')) foot.appendChild(el);
+    for (const el of header.querySelectorAll('a[href^="/start"], #switch, .version, #update')) foot.appendChild(el);
   }
   const content = document.createElement("div");
   content.id = "shell-content";
