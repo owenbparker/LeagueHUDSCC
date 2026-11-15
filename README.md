@@ -235,3 +235,7 @@ LeagueHUD.py       desktop app entry point; LeagueHUD.spec builds the .exe (pyin
 packaging/         app icon (icon.ico / icon.png)
 .github/workflows/ builds the .exe on Windows for every push
 ```
+
+## Releases
+
+Normal releases (the ones installed apps update to) are built from the `main` branch. Work branches publish test builds (GitHub pre-releases) that installed apps never pick up.
