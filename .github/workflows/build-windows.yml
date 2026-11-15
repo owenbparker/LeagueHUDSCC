@@ -7,6 +7,8 @@
 # owenbparker/playercam_SCC; a copy of its latest release is attached here too.
 #
 # A commit with [no release] in its message builds and tests without publishing.
+# Only pushes to main publish a normal release; other branches publish a
+# test build (pre-release) that installed apps never update to.
 #
 # Every run also leaves the zip on the run's summary page (Actions tab).
 name: Build Windows app
@@ -28,6 +30,11 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # Only main makes a normal (stable) release, the one installed apps update to.
+      # Any other branch publishes a test build: a GitHub pre-release, which the
+      # apps' update check (releases/latest) and the installer never pick up.
+      CHANNEL: ${{ github.ref == 'refs/heads/main' && 'stable' || 'test' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -185,7 +192,8 @@ jobs:
           if ($LASTEXITCODE -eq 0 -and (Test-Path playercam-latest\PlayerCam-windows.zip)) { $cam = Get-ChildItem playercam-latest\* | ForEach-Object { $_.FullName } }
           else { Write-Host "::warning::Couldn't copy Player Cam's latest release; publishing without it" }
           $global:LASTEXITCODE = 0
-          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe SCC-LoL-Companion-module.tgz @cam --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes"
+          $pre = @(); if ($env:CHANNEL -eq 'test') { $pre = @('--prerelease'); $notes = "Test build from ${{ github.ref_name }}: installed apps don't update to it.`n`n" + $notes }
+          gh release create "$env:VERSION" LeagueHUD-windows.zip dist\SCC-LoL-HUD-Setup.exe SCC-LoL-Companion-module.tgz @cam --target "${{ github.sha }}" --title "League HUD $env:VERSION" --notes "$notes" @pre
         env:
           GH_TOKEN: ${{ github.token }}
 

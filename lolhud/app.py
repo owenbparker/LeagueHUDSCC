@@ -1004,6 +1004,8 @@ def make_handler(app):
                     app.updater.check()
                 elif path == "/api/update/install":
                     app.updater.install_in_background()
+                elif path == "/api/update/rollback":
+                    app.updater.rollback_in_background()
                 elif path == "/api/overlay-window":
                     if not app.overlay_window:
                         raise ValueError("The HUD window is only available in the desktop app")
